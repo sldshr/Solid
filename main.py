@@ -1,229 +1,532 @@
-import html
-import random
-
-from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse
-import uvicorn
-
-app = FastAPI(title="Мой первый сайт")
-
-feedbacks = []  # в памяти, при перезапуске обнуляется
-
-CSS = """
-:root { color-scheme: dark; }
-* { box-sizing: border-box; }
-body { margin:0; padding:2rem 1rem 4rem; background:#0f1117; color:#e6e6e6;
-       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-.container { max-width:820px; margin:0 auto; }
-h1 { font-size:1.75rem; margin:0 0 .25rem; }
-h2 { font-size:1.15rem; margin:0 0 1rem; }
-.sub { color:#9aa4b2; margin:0 0 1.5rem; }
-.card { background:#171a21; border:1px solid #262b36; border-radius:12px;
-        padding:1.25rem 1.5rem; margin-bottom:1.25rem; }
-input, select, textarea, button {
-  font:inherit; color:inherit; background:#0f1117; border:1px solid #2f3644;
-  border-radius:8px; padding:.55rem .7rem; width:100%;
-}
-input[type=radio], input[type=range] { width:auto; padding:0; border:none; background:none; }
-input:focus, select:focus, textarea:focus { outline:2px solid #4f9cf9; outline-offset:1px; }
-button { width:auto; cursor:pointer; background:#232936; border-color:#2f3644; }
-button:hover { background:#2b3242; }
-button.primary { background:#4f9cf9; border-color:#4f9cf9; color:#06101f; font-weight:600; }
-button.primary:hover { background:#6badfb; }
-.row { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
-.row > input[type=text] { flex:1 1 200px; width:auto; }
-.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-bottom:.6rem; }
-.ops { display:flex; gap:1.2rem; margin:.4rem 0 1rem; }
-.ops label { display:flex; align-items:center; gap:.35rem; cursor:pointer; }
-form > input, form > textarea, form > select { margin-bottom:.6rem; }
-.chart { background:#0f1117; border-radius:8px; padding:.5rem; }
-.result { margin-top:.9rem; padding:.7rem .9rem; border-radius:8px; font-size:.95rem; }
-.result.ok { background:#10261a; border:1px solid #1f4d31; color:#9ae6b4; }
-.result.err { background:#2a1416; border:1px solid #5a2226; color:#f8a5a5; }
-.muted { color:#6b7280; font-size:.85rem; margin:.9rem 0 0; }
-.range-row { display:flex; align-items:center; gap:1rem; margin-bottom:.6rem; }
-.range-row input[type=range] { flex:1; }
-@media (max-width:600px) { .grid2 { grid-template-columns:1fr; } }
 """
+MiniDiscord — минималистичный мессенджер на FastAPI + WebSocket.
+
+Особенности:
+  • Всё состояние сервера — в оперативке (nickname -> channel).
+  • Сообщения НЕ хранятся на сервере: они копятся в браузере клиента
+    (по каналам) и просто транслируются в реальном времени.
+  • Вход по нику, список каналов, участники, чат.
+
+Запуск:
+  pip install fastapi uvicorn
+  uvicorn main:app --reload
+  Открыть http://127.0.0.1:8000
+"""
+import time
+from typing import Dict, List
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+
+app = FastAPI(title="MiniDiscord")
+
+CHANNELS: List[str] = ["general", "random", "tech", "offtopic"]
+
+# Единственное серверное состояние, живущее в оперативке:
+#   nickname -> {"channel": str}
+users: Dict[str, dict] = {}
 
 
-def make_svg(values, width=760, height=280):
-    if not values:
-        values = [0.0]
-    pad_l, pad_r, pad_t, pad_b = 44, 20, 20, 26
-    inner_w, inner_h = width - pad_l - pad_r, height - pad_t - pad_b
-    mn, mx = min(values), max(values)
-    if mx == mn:
-        mx = mn + 1
-    n = len(values)
-    pts = []
-    for i, v in enumerate(values):
-        x = pad_l + (i * inner_w / (n - 1) if n > 1 else inner_w / 2)
-        y = pad_t + inner_h - (v - mn) / (mx - mn) * inner_h
-        pts.append((x, y))
+class Manager:
+    """Управляет WebSocket-подключениями и рассылкой."""
 
-    polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
-    area = f"{pad_l},{pad_t + inner_h} " + polyline + f" {pad_l + inner_w},{pad_t + inner_h}"
+    def __init__(self) -> None:
+        # ws -> {"nickname": str, "channel": str}
+        self.active: Dict[WebSocket, dict] = {}
 
-    grid = []
-    for k in range(5):
-        gy = pad_t + inner_h * k / 4
-        val = mx - (mx - mn) * k / 4
-        grid.append(f'<line x1="{pad_l}" y1="{gy:.1f}" x2="{pad_l + inner_w}" y2="{gy:.1f}" stroke="#262b36"/>')
-        grid.append(f'<text x="{pad_l - 8}" y="{gy + 4:.1f}" fill="#6b7280" font-size="10" text-anchor="end">{val:.1f}</text>')
+    async def connect(self, ws: WebSocket, nickname: str, channel: str) -> None:
+        await ws.accept()
+        self.active[ws] = {"nickname": nickname, "channel": channel}
+        users[nickname] = {"channel": channel}
+        await self.broadcast_system(channel, f"{nickname} вошёл в чат")
+        await self.broadcast_userlist(channel)
 
-    dots = ""
-    if n <= 60:
-        dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="#4f9cf9"/>' for x, y in pts)
+    async def disconnect(self, ws: WebSocket) -> None:
+        info = self.active.pop(ws, None)
+        if not info:
+            return
+        users.pop(info["nickname"], None)
+        await self.broadcast_system(info["channel"], f"{info['nickname']} покинул чат")
+        await self.broadcast_userlist(info["channel"])
 
-    return (
-        f'<svg viewBox="0 0 {width} {height}" width="100%" style="display:block">'
-        f'<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">'
-        f'<stop offset="0%" stop-color="#4f9cf9" stop-opacity="0.35"/>'
-        f'<stop offset="100%" stop-color="#4f9cf9" stop-opacity="0"/>'
-        f'</linearGradient></defs>'
-        f'{"".join(grid)}'
-        f'<polygon points="{area}" fill="url(#g)"/>'
-        f'<polyline points="{polyline}" fill="none" stroke="#4f9cf9" stroke-width="2"/>'
-        f'{dots}</svg>'
-    )
+    async def broadcast_channel(self, channel: str, payload: dict) -> None:
+        """Шлём всем, кто сейчас в канале, добавляя поле channel
+        (чтобы клиент корректно маршрутизировал сообщения)."""
+        for ws, info in list(self.active.items()):
+            if info["channel"] != channel:
+                continue
+            try:
+                await ws.send_json({**payload, "channel": channel})
+            except Exception:
+                pass
+
+    async def broadcast_system(self, channel: str, text: str) -> None:
+        await self.broadcast_channel(channel, {"type": "system", "text": text})
+
+    async def broadcast_userlist(self, channel: str) -> None:
+        names = [i["nickname"] for i in self.active.values() if i["channel"] == channel]
+        await self.broadcast_channel(channel, {"type": "users", "users": names})
 
 
-def render(name="Гость", rows=50, n1=0.0, n2=0.0, op="+",
-           calc_result=None, calc_error=None, feedback_msg=None):
-    name_safe = html.escape(name) or "Гость"
-    rows = max(10, min(200, int(rows)))
+manager = Manager()
 
-    rnd = random.Random(rows * 7919)
-    vals, v = [], 0.0
-    for _ in range(rows):
-        v += rnd.uniform(-1, 1)
-        vals.append(v)
-    chart = make_svg(vals)
 
-    checked = {k: ("checked" if op == k else "") for k in ["+", "-", "×", "÷"]}
+@app.get("/api/channels")
+async def get_channels() -> List[str]:
+    return CHANNELS
 
-    calc_block = ""
-    if calc_result is not None:
-        calc_block = f'<div class="result ok">Результат: <b>{html.escape(str(calc_result))}</b></div>'
-    elif calc_error:
-        calc_block = f'<div class="result err">Ошибка: {html.escape(calc_error)}</div>'
 
-    fb_block = f'<div class="result ok">{html.escape(feedback_msg)}</div>' if feedback_msg else ""
+@app.get("/api/users")
+async def get_users() -> List[str]:
+    return list(users.keys())
 
-    return f"""<!doctype html>
+
+@app.websocket("/ws")
+async def ws_endpoint(ws: WebSocket, nickname: str = "", channel: str = "general"):
+    nickname = nickname.strip()[:32]
+    if not nickname or nickname in users:
+        await ws.close(code=4000)  # ник занят / пустой
+        return
+    if channel not in CHANNELS:
+        channel = CHANNELS[0]
+
+    await manager.connect(ws, nickname, channel)
+    try:
+        while True:
+            data = await ws.receive_json()
+            mtype = data.get("type")
+
+            if mtype == "message":
+                text = (data.get("text") or "").strip()
+                if not text:
+                    continue
+                await manager.broadcast_channel(
+                    channel,
+                    {
+                        "type": "message",
+                        "user": nickname,
+                        "text": text[:2000],
+                        "ts": time.time(),
+                    },
+                )
+
+            elif mtype == "switch":
+                new_ch = data.get("channel")
+                if new_ch in CHANNELS and new_ch != channel:
+                    old_ch = channel
+                    channel = new_ch
+                    manager.active[ws]["channel"] = new_ch
+                    users[nickname]["channel"] = new_ch
+                    await manager.broadcast_system(old_ch, f"{nickname} покинул чат")
+                    await manager.broadcast_userlist(old_ch)
+                    await manager.broadcast_system(new_ch, f"{nickname} вошёл в чат")
+                    await manager.broadcast_userlist(new_ch)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await manager.disconnect(ws)
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Встроенный клиент (одна страница, тёмная тема в стиле Discord)
+# ──────────────────────────────────────────────────────────────────────
+
+HTML = r"""<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Мой первый сайт</title>
-<style>{CSS}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiniDiscord</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #36393f;
+    color: #dcddde;
+    overflow: hidden;
+  }
+
+  /* ── Login ─────────────────────────────────────────── */
+  #login {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: radial-gradient(circle at 50% 20%, #40444b 0%, #2f3136 70%);
+  }
+  #login h1 { color: #fff; font-size: 40px; letter-spacing: 1px; margin-bottom: 4px; }
+  #login .subtitle { color: #96989d; font-size: 14px; margin-bottom: 16px; }
+  #login input {
+    width: 320px; padding: 12px 16px; font-size: 15px;
+    background: #202225; border: 1px solid #202225; border-radius: 6px;
+    color: #dcddde; outline: none; transition: border-color .15s;
+  }
+  #login input:focus { border-color: #5865f2; }
+  #login button {
+    width: 320px; padding: 12px; font-size: 15px; font-weight: 600;
+    background: #5865f2; color: #fff; border: none; border-radius: 6px;
+    cursor: pointer; transition: background .15s;
+  }
+  #login button:hover { background: #4752c4; }
+  #err { color: #ed4245; min-height: 20px; font-size: 14px; }
+
+  /* ── App layout ────────────────────────────────────── */
+  #app { display: none; height: 100vh; }
+  #app.visible { display: flex; }
+
+  #sidebar {
+    width: 260px; flex-shrink: 0; background: #2f3136;
+    display: flex; flex-direction: column;
+  }
+  #server-name {
+    padding: 16px; font-weight: 700; color: #fff; font-size: 15px;
+    border-bottom: 1px solid #202225; letter-spacing: .3px;
+  }
+  #channels { flex: 1; overflow-y: auto; padding: 8px; }
+  .channel {
+    padding: 8px 12px; border-radius: 4px; cursor: pointer;
+    color: #96989d; font-size: 15px; user-select: none;
+    transition: background .1s, color .1s;
+  }
+  .channel::before { content: "#  "; color: #72767d; }
+  .channel:hover { background: #393c43; color: #dcddde; }
+  .channel.active { background: #393c43; color: #fff; }
+
+  #users-header {
+    padding: 12px 16px 6px; color: #96989d;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+    font-weight: 700; border-top: 1px solid #202225;
+  }
+  #user-list { max-height: 45%; overflow-y: auto; padding: 0 8px 12px; }
+  .user-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px; border-radius: 4px; font-size: 14px;
+  }
+  .user-row:hover { background: #393c43; }
+  .avatar-small {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: #fff; font-size: 12px; flex-shrink: 0;
+  }
+
+  /* ── Main chat ─────────────────────────────────────── */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #header {
+    padding: 14px 20px; border-bottom: 1px solid #202225;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  #channel-name { font-weight: 700; color: #fff; font-size: 16px; }
+  #conn-status { font-size: 12px; color: #72767d; }
+  #conn-status.online { color: #3ba55d; }
+  #conn-status.online::before { content: "●  "; }
+
+  #messages { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .msg {
+    display: flex; gap: 12px; padding: 4px 8px; margin: 0 -8px 4px;
+    border-radius: 4px;
+  }
+  .msg:hover { background: #32353b; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: #fff; font-size: 14px; flex-shrink: 0;
+  }
+  .msg-body { flex: 1; min-width: 0; }
+  .msg-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .msg-user { font-weight: 600; color: #fff; font-size: 15px; }
+  .msg-time { color: #72767d; font-size: 11px; }
+  .msg-text {
+    color: #dcddde; font-size: 15px; line-height: 1.45;
+    word-wrap: break-word; white-space: pre-wrap;
+  }
+  .system {
+    color: #72767d; font-style: italic; font-size: 13px;
+    text-align: center; padding: 6px 0;
+  }
+
+  #input-area { padding: 0 20px 20px; flex-shrink: 0; }
+  #input-wrap {
+    background: #40444b; border-radius: 8px;
+    display: flex; align-items: center; padding: 0 8px;
+  }
+  #msg-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #dcddde; font-size: 15px; padding: 14px 10px;
+    font-family: inherit;
+  }
+  #msg-input::placeholder { color: #72767d; }
+  #send {
+    background: none; border: none; color: #b9bbbe;
+    cursor: pointer; font-size: 20px; padding: 8px 12px;
+    transition: color .15s;
+  }
+  #send:hover { color: #fff; }
+
+  /* scrollbars */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #202225; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
 </head>
 <body>
-<div class="container">
-  <h1>🚀 Мой первый сайт на FastAPI</h1>
-  <p class="sub">Привет, <b>{name_safe}</b>! 👋</p>
 
-  <div class="card">
-    <form method="get" action="/" class="row">
-      <label>Как вас зовут?</label>
-      <input type="text" name="name" value="{name_safe}" placeholder="Гость">
-      <input type="hidden" name="rows" value="{rows}">
-      <button type="submit">OK</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h2>🧮 Калькулятор</h2>
-    <form method="post" action="/calc">
-      <div class="grid2">
-        <input type="number" step="any" name="n1" value="{n1:g}" placeholder="Первое число">
-        <input type="number" step="any" name="n2" value="{n2:g}" placeholder="Второе число">
-      </div>
-      <div class="ops">
-        <label><input type="radio" name="op" value="+" {checked["+"]}> +</label>
-        <label><input type="radio" name="op" value="-" {checked["-"]}> −</label>
-        <label><input type="radio" name="op" value="×" {checked["×"]}> ×</label>
-        <label><input type="radio" name="op" value="÷" {checked["÷"]}> ÷</label>
-      </div>
-      <input type="hidden" name="name" value="{name_safe}">
-      <input type="hidden" name="rows" value="{rows}">
-      <button type="submit" class="primary">Посчитать</button>
-    </form>
-    {calc_block}
-  </div>
-
-  <div class="card">
-    <h2>📊 График</h2>
-    <form method="get" action="/">
-      <div class="range-row">
-        <label>Точек: <b id="rv">{rows}</b></label>
-        <input type="range" name="rows" min="10" max="200" value="{rows}"
-               oninput="document.getElementById('rv').textContent=this.value"
-               onchange="this.form.submit()">
-      </div>
-      <input type="hidden" name="name" value="{name_safe}">
-    </form>
-    <div class="chart">{chart}</div>
-  </div>
-
-  <div class="card">
-    <h2>✉️ Обратная связь</h2>
-    <form method="post" action="/feedback">
-      <input type="email" name="email" placeholder="Email" required>
-      <textarea name="message" rows="3" placeholder="Сообщение" required></textarea>
-      <select name="rating">
-        <option value="5">5 ⭐</option>
-        <option value="4">4 ⭐</option>
-        <option value="3">3 ⭐</option>
-        <option value="2">2 ⭐</option>
-        <option value="1">1 ⭐</option>
-      </select>
-      <input type="hidden" name="name" value="{name_safe}">
-      <input type="hidden" name="rows" value="{rows}">
-      <button type="submit" class="primary">Отправить</button>
-    </form>
-    {fb_block}
-    <p class="muted">Всего сообщений: {len(feedbacks)}</p>
-  </div>
+<!-- Логин -->
+<div id="login">
+  <h1>MiniDiscord</h1>
+  <div class="subtitle">Войдите по нику — сообщения хранятся только у вас в браузере</div>
+  <input id="nick" placeholder="Ваш ник" maxlength="32" autocomplete="off" autofocus>
+  <button id="enter">Войти</button>
+  <div id="err"></div>
 </div>
+
+<!-- Приложение -->
+<div id="app">
+  <aside id="sidebar">
+    <div id="server-name">MiniDiscord</div>
+    <div id="channels"></div>
+    <div id="users-header">В сети</div>
+    <div id="user-list"></div>
+  </aside>
+  <main id="main">
+    <header id="header">
+      <div id="channel-name">#general</div>
+      <div id="conn-status">подключение…</div>
+    </header>
+    <div id="messages"></div>
+    <div id="input-area">
+      <div id="input-wrap">
+        <input id="msg-input" placeholder="Написать сообщение…" maxlength="2000" autocomplete="off">
+        <button id="send" title="Отправить">➤</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ─────────── Состояние клиента ─────────── */
+let nickname = "";
+let currentChannel = "general";
+let channels = [];
+let localMessages = {};   // {channel: [ {type, user, text, ts} ]}
+let ws = null;
+let shouldReconnect = false;
+
+/* ─────────── Утилиты ─────────── */
+function colorFor(name) {
+  const palette = ["#5865f2","#3ba55d","#ed4245","#faa61a",
+                   "#eb459e","#00b0f4","#9b59b6","#e67e22"];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return palette[Math.abs(h) % palette.length];
+}
+function fmtTime(ts) {
+  return new Date(ts * 1000).toLocaleTimeString("ru-RU",
+    { hour: "2-digit", minute: "2-digit" });
+}
+
+/* ─────────── Сборка DOM сообщения ─────────── */
+function buildMessageEl(msg) {
+  if (msg.type === "system") {
+    const d = document.createElement("div");
+    d.className = "system";
+    d.textContent = msg.text;
+    return d;
+  }
+  const el = document.createElement("div");
+  el.className = "msg";
+
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.style.background = colorFor(msg.user);
+  av.textContent = (msg.user || "?")[0].toUpperCase();
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+
+  const head = document.createElement("div");
+  head.className = "msg-head";
+  const u = document.createElement("span");
+  u.className = "msg-user"; u.textContent = msg.user;
+  const t = document.createElement("span");
+  t.className = "msg-time"; t.textContent = fmtTime(msg.ts);
+  head.append(u, t);
+
+  const txt = document.createElement("div");
+  txt.className = "msg-text"; txt.textContent = msg.text;
+
+  body.append(head, txt);
+  el.append(av, body);
+  return el;
+}
+
+function appendMessageEl(msg) {
+  const box = document.getElementById("messages");
+  box.appendChild(buildMessageEl(msg));
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderMessages() {
+  const box = document.getElementById("messages");
+  box.innerHTML = "";
+  const list = localMessages[currentChannel] || [];
+  for (const m of list) box.appendChild(buildMessageEl(m));
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderChannels() {
+  const box = document.getElementById("channels");
+  box.innerHTML = "";
+  for (const ch of channels) {
+    const el = document.createElement("div");
+    el.className = "channel" + (ch === currentChannel ? " active" : "");
+    el.textContent = ch;
+    el.onclick = () => switchChannel(ch);
+    box.appendChild(el);
+  }
+}
+
+function renderUsers(names) {
+  document.getElementById("users-header").textContent =
+    names.length ? `В сети — ${names.length}` : "В сети";
+  const box = document.getElementById("user-list");
+  box.innerHTML = "";
+  for (const n of names) {
+    const row = document.createElement("div");
+    row.className = "user-row";
+    const dot = document.createElement("div");
+    dot.className = "avatar-small";
+    dot.style.background = colorFor(n);
+    dot.textContent = n[0].toUpperCase();
+    const label = document.createElement("span");
+    label.textContent = n + (n === nickname ? " (вы)" : "");
+    row.append(dot, label);
+    box.appendChild(row);
+  }
+}
+
+function setStatus(ok) {
+  const s = document.getElementById("conn-status");
+  if (ok) { s.className = "online"; s.textContent = "в сети"; }
+  else    { s.className = "";       s.textContent = "переподключение…"; }
+}
+
+/* ─────────── Локальное хранилище сообщений ─────────── */
+function pushMessage(channel, msg) {
+  if (!localMessages[channel]) localMessages[channel] = [];
+  localMessages[channel].push(msg);
+  if (channel === currentChannel) appendMessageEl(msg);
+}
+
+/* ─────────── Обработка входящих ─────────── */
+function handleIncoming(data) {
+  const ch = data.channel || currentChannel;
+  if (data.type === "message") {
+    pushMessage(ch, { type: "message", user: data.user, text: data.text, ts: data.ts });
+  } else if (data.type === "system") {
+    pushMessage(ch, { type: "system", text: data.text, ts: Date.now() / 1000 });
+  } else if (data.type === "users") {
+    if (ch === currentChannel) renderUsers(data.users);
+  }
+}
+
+/* ─────────── WebSocket ─────────── */
+function connectWS() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(
+    `${proto}://${location.host}/ws` +
+    `?nickname=${encodeURIComponent(nickname)}&channel=${currentChannel}`
+  );
+
+  ws.onopen = () => {
+    shouldReconnect = true;
+    document.getElementById("login").style.display = "none";
+    document.getElementById("app").classList.add("visible");
+    document.getElementById("channel-name").textContent = "#" + currentChannel;
+    setStatus(true);
+    renderChannels();
+    renderMessages();
+    renderUsers([]);
+    document.getElementById("msg-input").focus();
+  };
+
+  ws.onmessage = (e) => {
+    try { handleIncoming(JSON.parse(e.data)); }
+    catch (err) { console.error(err); }
+  };
+
+  ws.onclose = (e) => {
+    setStatus(false);
+    if (e.code === 4000) {
+      const appVisible = document.getElementById("app").classList.contains("visible");
+      shouldReconnect = false;
+      if (appVisible) {
+        alert("Соединение разорвано: этот ник только что занял другой пользователь.");
+        location.reload();
+      } else {
+        document.getElementById("err").textContent = "Этот ник уже занят";
+      }
+      return;
+    }
+    if (shouldReconnect) setTimeout(connectWS, 2000);
+  };
+}
+
+/* ─────────── Действия пользователя ─────────── */
+async function start() {
+  const nick = document.getElementById("nick").value.trim();
+  if (!nick) { document.getElementById("err").textContent = "Введите ник"; return; }
+
+  try {
+    const r = await fetch("/api/channels");
+    channels = await r.json();
+  } catch {
+    document.getElementById("err").textContent = "Сервер недоступен";
+    return;
+  }
+
+  nickname = nick;
+  connectWS();
+}
+
+function switchChannel(ch) {
+  if (ch === currentChannel) return;
+  currentChannel = ch;
+  document.getElementById("channel-name").textContent = "#" + ch;
+  renderChannels();
+  renderUsers([]);
+  renderMessages();
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "switch", channel: ch }));
+  }
+  document.getElementById("msg-input").focus();
+}
+
+function sendMessage() {
+  const input = document.getElementById("msg-input");
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "message", text }));
+  input.value = "";
+  input.focus();
+}
+
+/* ─────────── Слушатели ─────────── */
+document.getElementById("enter").onclick = start;
+document.getElementById("nick").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") start();
+});
+document.getElementById("send").onclick = sendMessage;
+document.getElementById("msg-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+</script>
 </body>
-</html>"""
-
-
-@app.get("/", response_class=HTMLResponse)
-def index(name: str = "Гость", rows: int = 50):
-    return render(name=name, rows=rows)
-
-
-@app.post("/calc", response_class=HTMLResponse)
-def calc(n1: float = Form(0), n2: float = Form(0), op: str = Form("+"),
-         name: str = Form("Гость"), rows: int = Form(50)):
-    try:
-        if op == "+":
-            r = n1 + n2
-        elif op == "-":
-            r = n1 - n2
-        elif op == "×":
-            r = n1 * n2
-        elif op == "÷":
-            if n2 == 0:
-                raise ZeroDivisionError("деление на ноль")
-            r = n1 / n2
-        else:
-            raise ValueError("неизвестная операция")
-        return render(name=name, rows=rows, n1=n1, n2=n2, op=op, calc_result=f"{r:g}")
-    except Exception as e:
-        return render(name=name, rows=rows, n1=n1, n2=n2, op=op, calc_error=str(e))
-
-
-@app.post("/feedback", response_class=HTMLResponse)
-def feedback(email: str = Form(...), message: str = Form(...), rating: int = Form(5),
-             name: str = Form("Гость"), rows: int = Form(50)):
-    feedbacks.append({"email": email, "message": message, "rating": rating})
-    return render(name=name, rows=rows,
-                  feedback_msg=f"Спасибо, {name}! Сообщение получено. Оценка: {rating} ⭐")
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+</html>
+"""
