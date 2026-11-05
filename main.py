@@ -9,7 +9,7 @@ MiniDiscord — минималистичный мессенджер на FastAPI
 
 Запуск:
   pip install fastapi uvicorn
-  uvicorn main:app --reload
+  python -m uvicorn main:app --reload
   Открыть http://127.0.0.1:8000
 """
 import time
@@ -35,7 +35,6 @@ class Manager:
         self.active: Dict[WebSocket, dict] = {}
 
     async def connect(self, ws: WebSocket, nickname: str, channel: str) -> None:
-        await ws.accept()
         self.active[ws] = {"nickname": nickname, "channel": channel}
         users[nickname] = {"channel": channel}
         await self.broadcast_system(channel, f"{nickname} вошёл в чат")
@@ -71,6 +70,10 @@ class Manager:
 manager = Manager()
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  REST-эндпоинты
+# ──────────────────────────────────────────────────────────────────────
+
 @app.get("/api/channels")
 async def get_channels() -> List[str]:
     return CHANNELS
@@ -81,8 +84,15 @@ async def get_users() -> List[str]:
     return list(users.keys())
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  WebSocket
+# ──────────────────────────────────────────────────────────────────────
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket, nickname: str = "", channel: str = "general"):
+    # ВАЖНО: сначала accept(), потом уже можно закрывать/слать что-либо.
+    await ws.accept()
+
     nickname = nickname.strip()[:32]
     if not nickname or nickname in users:
         await ws.close(code=4000)  # ник занят / пустой
@@ -158,7 +168,7 @@ HTML = r"""<!DOCTYPE html>
     background: radial-gradient(circle at 50% 20%, #40444b 0%, #2f3136 70%);
   }
   #login h1 { color: #fff; font-size: 40px; letter-spacing: 1px; margin-bottom: 4px; }
-  #login .subtitle { color: #96989d; font-size: 14px; margin-bottom: 16px; }
+  #login .subtitle { color: #96989d; font-size: 14px; margin-bottom: 16px; text-align: center; max-width: 340px; }
   #login input {
     width: 320px; padding: 12px 16px; font-size: 15px;
     background: #202225; border: 1px solid #202225; border-radius: 6px;
@@ -482,6 +492,7 @@ async function start() {
 
   try {
     const r = await fetch("/api/channels");
+    if (!r.ok) throw new Error("bad status");
     channels = await r.json();
   } catch {
     document.getElementById("err").textContent = "Сервер недоступен";
@@ -530,3 +541,18 @@ document.getElementById("msg-input").addEventListener("keydown", (e) => {
 </body>
 </html>
 """
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Отдача клиента  ←  вот этого не хватало в прошлый раз
+# ──────────────────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+async def index() -> str:
+    return HTML
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    # Чтобы браузер не спамил 404-ми
+    return HTMLResponse(status_code=204)
