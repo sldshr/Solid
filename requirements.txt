@@ -2,4 +2,5 @@ fastapi[standard]
 uvicorn[standard]
 python-multipart
 supabase
-Pillow
+bcrypt 
+httpx
