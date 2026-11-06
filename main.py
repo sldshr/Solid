@@ -85,11 +85,9 @@ def get_css():
             align-items: flex-start; max-width: 100%; margin-bottom: 20px;
         }
         
-        /* Футер */
         .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; }
         .footer a { color: #000; border-bottom: 2px solid #000; }
 
-        /* Логин/Регистрация */
         .auth-wrapper { display: flex; gap: 20px; flex-direction: column; }
         .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; }
         .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; }
@@ -115,7 +113,6 @@ def get_css():
         .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 18px; font-weight: bold; }
         .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
 
-        /* Дашборд */
         .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
         .sidebar h2 { color: white; text-align: center; font-size: 28px; margin: 10px 0; }
@@ -128,7 +125,7 @@ def get_css():
         .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
         .edit-btn:hover { background: #1a82e2; }
         
-        .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; } /* min-width: 0 предотвращает съезжание */
+        .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
         
         .create-post-box { background: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; }
         .create-post-box textarea { height: 120px; font-size: 18px; padding: 10px; }
@@ -136,7 +133,6 @@ def get_css():
         .posts-area { background: black; padding: 20px; min-height: 300px; display: flex; flex-direction: column; gap: 10px; }
         .posts-area h2 { color: white; font-size: 28px; margin: 0 0 10px 0; text-align: center;}
         
-        /* Посты */
         .post-wrapper { position: relative; }
         .post-item { background: #a9a9a9; padding: 15px; font-size: 18px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
@@ -149,13 +145,11 @@ def get_css():
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
 
-        /* Языки */
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
         .lang-btn { background: #a9a9a9; border: 2px solid black; color: black; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold;}
         .lang-btn.active { background: black; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px;}
 
-        /* Адаптив */
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -187,13 +181,13 @@ def auth_html(lang: str):
             const eyeOffSvg = `{SVG_EYE_OFF}`;
             function togglePassword(inputId, btn) {{
                 const input = document.getElementById(inputId);
-                if (input.type === "password") {
+                if (input.type === "password") {{
                     input.type = "text";
                     btn.innerHTML = eyeOffSvg;
-                } else {
+                }} else {{
                     input.type = "password";
                     btn.innerHTML = eyeSvg;
-                }
+                }}
             }}
         </script>
     </head>
@@ -261,33 +255,39 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
     
     html_out = ""
     for post in posts_list:
-        pinned_class = "pinned" if post['is_pinned'] else ""
-        safe_text = html.escape(post['content']).replace('\n', '<br>')
+        post_id = post.get('id', '')
+        is_pinned = post.get('is_pinned', False)
+        content = html.escape(post.get('content', '')).replace('\n', '<br>')
         post_date = format_date(post.get('created_at', ''))
+        
+        pinned_class = "pinned" if is_pinned else ""
         
         actions = ""
         if show_actions and viewer_is_owner:
-            pin_text = t('unpin', lang) if post['is_pinned'] else t('pin', lang)
-            actions = f"""
+            pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
+            delete_text = t('delete', lang)
+            confirm_text = t('confirm_delete', lang)
+            
+            actions = f'''
             <div class="post-actions">
-                <form action="/pin_post/{post['id']}" method="post" style="margin:0;">
+                <form action="/pin_post/{post_id}" method="post" style="margin:0;">
                     <button type="submit" class="action-btn pin-btn">{pin_text}</button>
                 </form>
-                <form action="/delete_post/{post['id']}" method="post" style="margin:0;" onsubmit="return confirm('{t('confirm_delete', lang)}');">
-                    <button type="submit" class="action-btn">{t('delete', lang)}</button>
+                <form action="/delete_post/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('{confirm_text}');">
+                    <button type="submit" class="action-btn">{delete_text}</button>
                 </form>
             </div>
-            """
+            '''
             
-        html_out += f"""
+        html_out += f'''
         <div class="post-wrapper">
             {actions}
             <div class="post-item {pinned_class}">
-                <div class="post-content">{safe_text}</div>
+                <div class="post-content">{content}</div>
                 <div class="post-date">{post_date}</div>
             </div>
         </div>
-        """
+        '''
     return html_out
 
 def get_avatar_html(user_data):
@@ -300,6 +300,9 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=True, viewer_is_owner=True)
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
+    
+    # Выносим f-строку из f-строки, чтобы избежать SyntaxError
+    desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
     return f"""
     <!DOCTYPE html>
@@ -321,7 +324,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
                 <div class="info-card">
                     <b>Nickname:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a>
                 </div>
-                {f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''}
+                {desc_block}
                 <div class="info-card">
                     <b>{t('total_posts', lang)}:</b><br>{len(posts)}
                 </div>
@@ -363,6 +366,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
 def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
+    
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
@@ -416,6 +420,9 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
     
+    # Выносим f-строку из f-строки
+    desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
+    
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
@@ -436,7 +443,7 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
                 <div class="info-card">
                     <b>Nickname:</b><br>{html.escape(nickname)}
                 </div>
-                {f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''}
+                {desc_block}
                 <div class="info-card">
                     <b>{t('total_posts', lang)}:</b><br>{len(posts)}
                 </div>
@@ -487,11 +494,14 @@ def register(
     username: str = Form(...), nickname: str = Form(...), password: str = Form(...),
     re_pass: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")
 ):
-    if not captcha: return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
-    if password != re_pass: return HTMLResponse(f"<script>alert('{t('alert_pass_mismatch', lang)}'); window.history.back();</script>")
+    if not captcha: 
+        return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
+    if password != re_pass: 
+        return HTMLResponse(f"<script>alert('{t('alert_pass_mismatch', lang)}'); window.history.back();</script>")
     
     res = supabase.table('users').select('nickname').eq('nickname', nickname).execute()
-    if res.data: return HTMLResponse(f"<script>alert('{t('alert_nick_taken', lang)}'); window.history.back();</script>")
+    if res.data: 
+        return HTMLResponse(f"<script>alert('{t('alert_nick_taken', lang)}'); window.history.back();</script>")
     
     try:
         supabase.table('users').insert({
@@ -507,7 +517,9 @@ def register(
 
 @app.post("/login")
 def login(nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")):
-    if not captcha: return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
+    if not captcha: 
+        return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
+    
     res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     user = res.data[0] if res.data else None
     
@@ -515,11 +527,13 @@ def login(nickname: str = Form(...), password: str = Form(...), captcha: str = F
         response = RedirectResponse(url="/dashboard", status_code=303)
         response.set_cookie(key="nickname", value=nickname, httponly=True)
         return response
+    
     return HTMLResponse(f"<script>alert('{t('alert_bad_login', lang)}'); window.history.back();</script>")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse(url="/", status_code=303)
+    
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     if not user_res.data: return RedirectResponse(url="/", status_code=303)
     
@@ -529,8 +543,10 @@ def dashboard(nickname: str = Cookie(None), lang: str = Cookie("ru")):
 @app.get("/dashboard/edit", response_class=HTMLResponse)
 def edit_profile_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse(url="/", status_code=303)
+    
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     if not user_res.data: return RedirectResponse(url="/", status_code=303)
+    
     return edit_profile_html(nickname, user_res.data[0], lang)
 
 @app.post("/dashboard/edit")
@@ -540,7 +556,8 @@ async def edit_profile_action(
     nickname: str = Cookie(None), lang: str = Cookie("ru")
 ):
     if not nickname: return RedirectResponse(url="/", status_code=303)
-    if len(description) > 300: return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
+    if len(description) > 300: 
+        return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
 
     update_data = {"username": username, "description": description}
 
@@ -550,17 +567,14 @@ async def edit_profile_action(
             ext = avatar.filename.split(".")[-1]
             file_path = f"{nickname}.{ext}"
             
-            # Загрузка в Supabase Storage (бакет avatars)
             supabase.storage.from_("avatars").upload(
                 path=file_path, file=file_bytes,
                 file_options={"content-type": avatar.content_type, "upsert": "true"}
             )
-            # Получение публичной ссылки
             public_url = supabase.storage.from_("avatars").get_public_url(file_path)
             update_data["avatar_url"] = public_url
         except Exception as e:
             print(f"Upload error: {e}")
-            # Игнорируем ошибку загрузки, чтобы не крашить сохранение текста
 
     supabase.table('users').update(update_data).eq('nickname', nickname).execute()
     return RedirectResponse(url="/dashboard", status_code=303)
@@ -595,7 +609,8 @@ def logout():
 @app.get("/{nickname}", response_class=HTMLResponse)
 def public_profile(nickname: str, lang: str = Cookie("ru")):
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
-    if not user_res.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
+    if not user_res.data: 
+        return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
     
     posts_res = supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
     return public_profile_html(nickname, user_res.data[0], posts_res.data, lang)
