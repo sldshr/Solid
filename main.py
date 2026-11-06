@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Form, Cookie
+from fastapi import FastAPI, Form, Cookie, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 from supabase import create_client, Client
 import uvicorn
 import html
@@ -7,6 +8,13 @@ import hashlib
 from datetime import datetime
 
 app = FastAPI()
+
+# --- ОБРАБОТЧИК ОШИБОК ВАЛИДАЦИИ (чтобы не было сырого JSON) ---
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    lang = request.cookies.get("lang", "ru")
+    error_msg = "Заполните все обязательные поля!" if lang == "ru" else "Please fill all required fields!"
+    return HTMLResponse(content=auth_html(lang, error_msg), status_code=422)
 
 # --- НАСТРОЙКИ SUPABASE ---
 SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
@@ -208,7 +216,6 @@ def get_css():
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* --- Адаптация под мобильные --- */
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -225,7 +232,6 @@ def get_css():
     </style>
     """
 
-# --- JS ---
 def get_js_logic(lang):
     return f"""
     <script>
@@ -683,7 +689,8 @@ def index(nickname: str = Cookie(None), lang: str = Cookie("ru")):
 def privacy_page(lang: str = Cookie("ru")):
     return privacy_html(lang)
 
-@app.post("/register")
+# ОБРАТИТЕ ВНИМАНИЕ НА response_class=HTMLResponse
+@app.post("/register", response_class=HTMLResponse)
 def register(
     username: str = Form(...), nickname: str = Form(...), password: str = Form(...),
     re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), lang: str = Cookie("ru")
@@ -711,7 +718,8 @@ def register(
     response.set_cookie(key="nickname", value=nickname, httponly=True)
     return response
 
-@app.post("/login")
+# ОБРАТИТЕ ВНИМАНИЕ НА response_class=HTMLResponse
+@app.post("/login", response_class=HTMLResponse)
 def login(nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")):
     if not captcha: 
         return auth_html(lang, t('alert_captcha', lang))
@@ -745,7 +753,7 @@ def edit_profile_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     
     return edit_profile_html(nickname, user_res.data[0], lang)
 
-@app.post("/dashboard/edit")
+@app.post("/dashboard/edit", response_class=HTMLResponse)
 def edit_profile_action(
     username: str = Form(...), description: str = Form(""),
     nickname: str = Cookie(None), lang: str = Cookie("ru")
@@ -801,7 +809,7 @@ def bugreport_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     
     return bugreport_html(username, reports, lang)
 
-@app.post("/bugreport")
+@app.post("/bugreport", response_class=HTMLResponse)
 def bugreport_submit(
     name: str = Form(...), content: str = Form(...),
     nickname: str = Cookie(None), lang: str = Cookie("ru")
