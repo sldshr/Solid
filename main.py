@@ -6,8 +6,9 @@ import uvicorn
 import html
 import bcrypt
 import secrets
-from datetime import datetime
-import hashlib
+import asyncio
+from datetime import datetime, timezone
+import uuid
 
 app = FastAPI()
 
@@ -16,6 +17,11 @@ SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 
 supabase: AsyncClient = None
+
+# --- ОПЕРАТИВНАЯ ПАМЯТЬ (КЭШ) ---
+pending_posts = {}    # Посты в процессе записи в БД
+deleted_posts = set() # ID удаленных постов (в процессе удаления)
+pinned_posts = {}     # ID постов с измененным статусом закрепления
 
 @app.on_event("startup")
 async def startup_event():
@@ -30,6 +36,7 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     try:
         if len(hashed) == 64:
+            import hashlib
             if hashlib.sha256(password.encode()).hexdigest() == hashed:
                 return True
         return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
@@ -47,6 +54,33 @@ def validate_csrf(request: Request, csrf_token: str = Form(...)):
     if not cookie_token or cookie_token != csrf_token:
         raise HTTPException(status_code=403, detail="CSRF Token Validation Failed")
 
+# --- ФОНОВЫЕ ЗАДАЧИ ДЛЯ БД ---
+async def sync_create_post(post_data: dict):
+    try:
+        await supabase.table('posts').insert(post_data).execute()
+    except Exception as e:
+        print(f"DB Create Error: {e}")
+    finally:
+        # Стираем из оперативки, когда точно записали в БД
+        pending_posts.pop(post_data["id"], None)
+
+async def sync_delete_post(post_id: str):
+    try:
+        await supabase.table('posts').delete().eq('id', post_id).execute()
+    except Exception as e:
+        print(f"DB Delete Error: {e}")
+    finally:
+        deleted_posts.discard(post_id)
+
+async def sync_pin_post(post_id: str, is_pinned: bool):
+    try:
+        await supabase.table('posts').update({"is_pinned": is_pinned}).eq('id', post_id).execute()
+    except Exception as e:
+        print(f"DB Pin Error: {e}")
+    finally:
+        pinned_posts.pop(post_id, None)
+
+# --- ОБРАБОТЧИК ОШИБОК ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     lang = request.cookies.get("lang", "ru")
@@ -63,8 +97,8 @@ LOCALES = {
         "reg": "Регистрация", "login": "Вход", "username": "юзернейм", "nickname": "никнейм",
         "password": "пароль", "re_pass": "повтор пароля", "captcha": "Я не робот",
         "register_btn": "Зарегистрироваться!", "login_btn": "Войти", "profile": "ПРОФИЛЬ",
-        "total_posts": "Всего постов", "logout": "Выйти", "edit_profile": "Редактировать",
-        "save_changes": "Сохранить", "description": "Описание", 
+        "total_posts": "Всего постов", "logout": "Выйти", "edit_profile": "Редактировать профиль",
+        "save_changes": "Сохранить изменения", "description": "Описание", 
         "desc_placeholder": "Расскажите о себе (до 300 символов)...",
         "create_post_btn": "Создать пост", "create_post_placeholder": "Напишите что-нибудь...",
         "my_posts": "МОИ ПОСТЫ", "user_posts": "ПОСТЫ ПОЛЬЗОВАТЕЛЯ", "no_posts": "Постов пока нет...",
@@ -87,8 +121,8 @@ LOCALES = {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
         "password": "password", "re_pass": "re enter pass", "captcha": "I am not a robot",
         "register_btn": "Register!", "login_btn": "Login", "profile": "PROFILE",
-        "total_posts": "Total posts", "logout": "Logout", "edit_profile": "Edit",
-        "save_changes": "Save", "description": "Description", 
+        "total_posts": "Total posts", "logout": "Logout", "edit_profile": "Edit Profile",
+        "save_changes": "Save changes", "description": "Description", 
         "desc_placeholder": "Tell about yourself (max 300 chars)...",
         "create_post_btn": "Create post", "create_post_placeholder": "Write something...",
         "my_posts": "MY POSTS", "user_posts": "USER POSTS", "no_posts": "No posts yet...",
@@ -121,175 +155,87 @@ def format_date(iso_str: str) -> str:
         return iso_str[:10]
 
 # --- SVG ИКОНКИ ---
-SVG_EYE = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
-SVG_EYE_OFF = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
-
-SVG_LOGIN = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path></svg>"""
-SVG_REGISTER = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>"""
-
-SVG_EDIT = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>"""
-SVG_LOGOUT = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>"""
-SVG_SAVE = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>"""
-
-SVG_PLUS = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
-SVG_TRASH = """<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>"""
-SVG_PIN = """<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.65V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.65a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>"""
-SVG_UNPIN = """<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.65V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.65a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path><line x1="2" y1="2" x2="22" y2="22" stroke="red"></line></svg>"""
-
-SVG_BACK = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
-SVG_BUG = """<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"></rect><path d="M19 10h2"></path><path d="M3 10h2"></path><path d="M19 14h2"></path><path d="M3 14h2"></path><path d="M19 18h2"></path><path d="M3 18h2"></path><path d="M12 2v4"></path><path d="M8 2v4"></path><path d="M16 2v4"></path></svg>"""
+SVG_EYE = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
+SVG_EYE_OFF = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 
 # --- CSS ---
 def get_css():
     return """
     <style>
         * { box-sizing: border-box; }
-        body {
-            font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;
-            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
         a { color: black; text-decoration: none; font-weight: bold; }
         a:hover { text-decoration: underline; }
         
-        .container {
-            background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; 
-            align-items: flex-start; max-width: 100%; margin-bottom: 20px;
-        }
-        
-        /* Подвал */
-        .footer { 
-            text-align: center; font-size: 16px; font-weight: bold; color: #555; 
-            width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px;
-        }
+        .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
+        .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
         .footer a { color: #000; border-bottom: 2px solid #000; }
-        .footer-links { font-size: 14px; color: #777; display: flex; justify-content: center; gap: 15px; align-items: center;}
-        .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; display: flex; align-items: center; gap: 5px;}
+        .footer-links { font-size: 14px; color: #777; }
+        .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
 
-        /* Формы */
         .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
         .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
         .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
         .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
-        
         .input-group { position: relative; display: flex; align-items: center; width: 100%; }
         
-        input[type="text"], input[type="password"], textarea, select {
-            background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px;
-            font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none;
-            border-radius: 0;
-        }
+        input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
         textarea { text-align: left; resize: vertical; }
+        button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
+        button:hover, .btn:hover { background-color: #8c8c8c; }
         
-        /* КНОПКИ И ГРАДИЕНТЫ */
-        button, .btn {
-            background: linear-gradient(180deg, #c0c0c0 0%, #a9a9a9 100%);
-            border: 1px solid #888;
-            padding: 12px; font-size: 18px;
-            font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer;
-            color: black; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 8px;
-            transition: all 0.15s ease-in-out;
-            border-radius: 3px;
-        }
-        button:hover, .btn:hover { 
-            background: linear-gradient(180deg, #d0d0d0 0%, #b9b9b9 100%);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-        button:active, .btn:active {
-            background: linear-gradient(180deg, #a0a0a0 0%, #909090 100%);
-            transform: translateY(1px);
-        }
-
-        /* Цветные градиенты для кнопок */
-        .btn-primary { background: linear-gradient(180deg, #5cb0ff 0%, #4da6ff 100%); color: white; border-color: #1a82e2; }
-        .btn-primary:hover { background: linear-gradient(180deg, #6cbfff 0%, #5cb0ff 100%); }
-        
-        .btn-danger { background: linear-gradient(180deg, #ff6666 0%, #ff4d4d 100%); color: white; border-color: #cc0000; }
-        .btn-danger:hover { background: linear-gradient(180deg, #ff7777 0%, #ff6666 100%); }
-        
-        .btn-warning { background: linear-gradient(180deg, #f6d365 0%, #f1c40f 100%); color: black; border-color: #d4a300; }
-        .btn-warning:hover { background: linear-gradient(180deg, #f8dd7c 0%, #f6d365 100%); }
-
-        .btn-success { background: linear-gradient(180deg, #54e88e 0%, #2ecc71 100%); color: white; border-color: #27ae60; }
-        .btn-success:hover { background: linear-gradient(180deg, #65f09c 0%, #54e88e 100%); }
-
-        .eye-btn { 
-            position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; 
-            width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; 
-            box-shadow: none;
-        }
-        .eye-btn:hover { box-shadow: none; background: transparent; }
-
+        .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
         .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
         
-        .captcha-container { 
-            background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; 
-            gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;
-            border: 1px solid #888;
-        }
+        .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
         .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
         .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
 
-        /* Дашборд */
         .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
         .sidebar h2 { color: white; text-align: center; font-size: 28px; margin: 10px 0; }
         
         .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
+        .logout-btn { margin-top: 10px; background: #ff4d4d; }
+        .logout-btn:hover { background: #cc0000; }
+        .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
+        .edit-btn:hover { background: #1a82e2; }
         
         .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
         
-        .create-post-box { background: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc;}
+        .create-post-box { background: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; }
         .create-post-box textarea { height: 120px; font-size: 18px; padding: 10px; }
         
-        .posts-area { background: black; padding: 20px; min-height: 300px; display: flex; flex-direction: column; gap: 10px; border: 2px solid #ccc;}
+        .posts-area { background: black; padding: 20px; min-height: 300px; display: flex; flex-direction: column; gap: 10px; }
         .posts-area h2 { color: white; font-size: 28px; margin: 0 0 10px 0; text-align: center;}
         
-        .post-wrapper { position: relative; }
+        .post-wrapper { position: relative; transition: opacity 0.3s ease; }
         .post-item { background: #a9a9a9; padding: 15px; font-size: 18px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         .post-content { margin-bottom: 10px; }
         .post-date { font-size: 12px; color: #555; text-align: right; border-top: 1px solid #888; padding-top: 5px; }
         
-        /* Кнопки действий с постами */
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
         .post-wrapper:hover .post-actions { opacity: 1; }
-        .action-btn { 
-            background: black; color: white; border: 1px solid #444; padding: 5px 8px; font-size: 14px; 
-            cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;
-            display: flex; align-items: center; gap: 4px;
-        }
-        .action-btn:hover { background: #333; }
-        .action-btn.pin-btn:hover { background: #4da6ff; border-color: #4da6ff;}
-        .action-btn.del-btn:hover { background: #ff4d4d; border-color: #ff4d4d;}
+        .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 14px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
+        .action-btn:hover { background: #ff4d4d; }
+        .action-btn.pin-btn:hover { background: #4da6ff; }
 
         .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
         .status-Принято, .status-Accepted { background: #4da6ff; }
-        .status-В-работе, .status-In-Progress { background: #f1c40f; color: black; }
+        .status-В-работе, .status-In-Progress { background: #f1c40f; }
         .status-Исправлено, .status-Fixed { background: #2ecc71; }
         .status-Отклонено, .status-Rejected { background: #e74c3c; }
 
-        /* Языки */
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-        .lang-btn { 
-            background: #222; border: 2px solid #555; color: #aaa; padding: 8px 15px; width: auto; 
-            font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; border-radius: 3px;
-        }
-        .lang-btn:hover { background: #444; color: white; border-color: #777; }
-        .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; box-shadow: 0 0 10px rgba(77, 166, 255, 0.4);}
-        
+        .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
+        .lang-btn:hover { background: #a9a9a9; color: black; }
+        .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
         
         .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; }
 
         .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
-
-        #overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7); z-index: 9999; flex-direction: column;
-            justify-content: center; align-items: center;
-        }
-        .spinner { border: 8px solid #fff; border-top: 8px solid transparent; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -307,42 +253,18 @@ def get_css():
     </style>
     """
 
+# --- JS CLIENT-REALTIME (OPTIMISTIC UI) ---
 def get_js_logic(lang, csrf_token):
     return f"""
     <script>
         const csrfToken = "{csrf_token}";
-        function showOverlay() {{ document.getElementById('overlay').style.display = 'flex'; }}
-        function hideOverlay() {{ document.getElementById('overlay').style.display = 'none'; }}
-
-        async function handleCreatePost(event) {{
-            event.preventDefault();
-            showOverlay();
-            const formData = new FormData(event.target);
-            try {{
-                const res = await fetch('/create_post', {{ method: 'POST', body: formData, headers: {{ 'X-CSRF-Token': csrfToken }} }});
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                window.location.reload();
-            }} catch (e) {{ alert("Error: " + e.message); hideOverlay(); }}
-        }}
-
-        async function handleDeletePost(postId) {{
-            if (!confirm("{t('confirm_delete', lang)}")) return;
-            showOverlay();
-            try {{
-                const res = await fetch('/delete_post/' + postId, {{ method: 'POST', headers: {{ 'X-CSRF-Token': csrfToken }} }});
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                window.location.reload();
-            }} catch (e) {{ alert("Error: " + e.message); hideOverlay(); }}
-        }}
-
-        async function handlePinPost(postId) {{
-            showOverlay();
-            try {{
-                const res = await fetch('/pin_post/' + postId, {{ method: 'POST', headers: {{ 'X-CSRF-Token': csrfToken }} }});
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                window.location.reload();
-            }} catch (e) {{ alert("Error: " + e.message); hideOverlay(); }}
-        }}
+        const texts = {{
+            delete: "{t('delete', lang)}",
+            pin: "{t('pin', lang)}",
+            unpin: "{t('unpin', lang)}",
+            confirm: "{t('confirm_delete', lang)}",
+            noPosts: "{t('no_posts', lang)}"
+        }};
 
         function togglePassword(inputId, btn) {{
             const input = document.getElementById(inputId);
@@ -358,11 +280,126 @@ def get_js_logic(lang, csrf_token):
         function updateCounter(el) {{
             document.getElementById('char-count').innerText = el.value.length + ' / 300';
         }}
+
+        // Мгновенное создание поста
+        async function handleCreatePost(event) {{
+            event.preventDefault();
+            const form = event.target;
+            const content = form.querySelector('textarea').value.trim();
+            if (!content) return;
+
+            const postId = crypto.randomUUID();
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', {{hour: '2-digit', minute:'2-digit'}});
+            
+            const postsArea = document.querySelector('.posts-area');
+            const emptyMsg = postsArea.querySelector('.post-item:not(.post-wrapper)');
+            if (emptyMsg) emptyMsg.remove();
+
+            // Создаем DOM элемент моментально
+            const wrapper = document.createElement('div');
+            wrapper.className = 'post-wrapper';
+            wrapper.id = 'post-' + postId;
+            wrapper.innerHTML = `
+                <div class="post-actions">
+                    <button onclick="handlePinPost('${{postId}}', this)" class="action-btn pin-btn">${{texts.pin}}</button>
+                    <button onclick="handleDeletePost('${{postId}}', this)" class="action-btn">${{texts.delete}}</button>
+                </div>
+                <div class="post-item">
+                    <div class="post-content">${{content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}}</div>
+                    <div class="post-date">${{dateStr}}</div>
+                </div>
+            `;
+            
+            // Вставляем в начало (или после закрепленных)
+            postsArea.insertBefore(wrapper, postsArea.children[1]);
+            form.reset();
+
+            // Отправляем на сервер в фоне
+            const formData = new FormData(form);
+            formData.append('content', content);
+            formData.append('client_id', postId);
+
+            try {{
+                const res = await fetch('/create_post', {{ 
+                    method: 'POST', 
+                    body: formData,
+                    headers: {{ 'X-CSRF-Token': csrfToken }}
+                }});
+                if (!res.ok) throw new Error("Server Error");
+            }} catch (e) {{
+                // Если ошибка, удаляем пост из UI
+                wrapper.remove();
+                alert("Failed to save post: " + e.message);
+                if (postsArea.querySelectorAll('.post-wrapper').length === 0) {{
+                    postsArea.innerHTML += `<div class='post-item'>${{texts.noPosts}}</div>`;
+                }}
+            }}
+        }}
+
+        // Мгновенное удаление
+        async function handleDeletePost(postId, btn) {{
+            if (!confirm(texts.confirm)) return;
+            const wrapper = document.getElementById('post-' + postId);
+            const originalHTML = wrapper.innerHTML;
+            
+            // Мгновенно скрываем
+            wrapper.style.opacity = '0';
+            setTimeout(() => wrapper.style.display = 'none', 300);
+
+            try {{
+                const res = await fetch('/delete_post/' + postId, {{ 
+                    method: 'POST',
+                    headers: {{ 'X-CSRF-Token': csrfToken }}
+                }});
+                if (!res.ok) throw new Error("Server Error");
+                wrapper.remove();
+            }} catch (e) {{
+                // Возвращаем обратно при ошибке
+                wrapper.style.opacity = '1';
+                wrapper.style.display = 'block';
+                alert("Failed to delete: " + e.message);
+            }}
+        }}
+
+        // Мгновенное закрепление
+        async function handlePinPost(postId, btn) {{
+            const wrapper = document.getElementById('post-' + postId);
+            const postItem = wrapper.querySelector('.post-item');
+            const isPinned = postItem.classList.contains('pinned');
+            
+            // Меняем UI моментально
+            if (isPinned) {{
+                postItem.classList.remove('pinned');
+                btn.innerText = texts.pin;
+            }} else {{
+                postItem.classList.add('pinned');
+                btn.innerText = texts.unpin;
+                // Перемещаем вверх
+                const postsArea = document.querySelector('.posts-area');
+                postsArea.insertBefore(wrapper, postsArea.children[1]);
+            }}
+
+            try {{
+                const res = await fetch('/pin_post/' + postId, {{ 
+                    method: 'POST',
+                    headers: {{ 'X-CSRF-Token': csrfToken }}
+                }});
+                if (!res.ok) throw new Error("Server Error");
+            }} catch (e) {{
+                // Откат при ошибке
+                if (isPinned) {{
+                    postItem.classList.add('pinned');
+                    btn.innerText = texts.unpin;
+                }} else {{
+                    postItem.classList.remove('pinned');
+                    btn.innerText = texts.pin;
+                }}
+                alert("Failed to pin: " + e.message);
+            }}
+        }}
     </script>
     """
-
-def get_overlay_html():
-    return """<div id="overlay"><div class="spinner"></div></div>"""
 
 def get_footer(lang):
     return f"""
@@ -370,22 +407,19 @@ def get_footer(lang):
         <div>{t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
         <div class="footer-links">
             <a href="/privacy">{t('privacy_title', lang)}</a> | 
-            <a href="/bugreport">{SVG_BUG} {t('bugreport_title', lang)}</a>
+            <a href="/bugreport">{t('bugreport_title', lang)}</a>
         </div>
     </div>
     """
 
 # --- HTML ГЕНЕРАТОРЫ ---
-
 def auth_html(lang: str, error_msg: str = "", csrf_token: str = ""):
     error_block = f'<div class="error-msg">{error_msg}</div>' if error_msg else '<div class="error-msg"></div>'
-    
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('login', lang)} / {t('reg', lang)}</title>
         {get_css()}
         {get_js_logic(lang, csrf_token)}
@@ -407,18 +441,15 @@ def auth_html(lang: str, error_msg: str = "", csrf_token: str = ""):
                             <input type="password" name="re_pass" id="reg-repass" placeholder="{t('re_pass', lang)}" required>
                             <button type="button" class="eye-btn" onclick="togglePassword('reg-repass', this)">{SVG_EYE}</button>
                         </div>
-                        <label class="captcha-container">
-                            <input type="checkbox" name="captcha" required> {t('captcha', lang)}
-                        </label>
-                        <label class="captcha-container" style="background: #999; margin-top:2px;">
+                        <label class="captcha-container"><input type="checkbox" name="captcha" required> {t('captcha', lang)}</label>
+                        <label class="captcha-container" style="background: #8c8c8c; margin-top:2px;">
                             <input type="checkbox" name="privacy" required> 
                             <span>{t('privacy_agree', lang)} <a href="/privacy" target="_blank" class="privacy-link">{t('privacy_link', lang)}</a></span>
                         </label>
-                        <button type="submit" class="btn-success">{SVG_REGISTER} {t('register_btn', lang)}</button>
+                        <button type="submit">{t('register_btn', lang)}</button>
                     </form>
                 </div>
             </div>
-
             <div class="auth-wrapper">
                 <div class="auth-wrapper-inner">
                     <div class="form-box">
@@ -429,10 +460,8 @@ def auth_html(lang: str, error_msg: str = "", csrf_token: str = ""):
                                 <input type="password" name="password" id="log-pass" placeholder="{t('password', lang)}" required>
                                 <button type="button" class="eye-btn" onclick="togglePassword('log-pass', this)">{SVG_EYE}</button>
                             </div>
-                            <label class="captcha-container">
-                                <input type="checkbox" name="captcha" required> {t('captcha', lang)}
-                            </label>
-                            <button type="submit" class="btn-primary">{SVG_LOGIN} {t('login_btn', lang)}</button>
+                            <label class="captcha-container"><input type="checkbox" name="captcha" required> {t('captcha', lang)}</label>
+                            <button type="submit">{t('login_btn', lang)}</button>
                         </form>
                     </div>
                     <div class="label-text">{t('login', lang)}</div>
@@ -447,7 +476,6 @@ def auth_html(lang: str, error_msg: str = "", csrf_token: str = ""):
             </div>
         </div>
         {get_footer(lang)}
-        {get_overlay_html()}
     </body>
     </html>
     """
@@ -465,19 +493,18 @@ def render_posts(posts_list, lang, csrf_token, show_actions=False):
         
         pinned_class = "pinned" if is_pinned else ""
         pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
-        pin_icon = SVG_UNPIN if is_pinned else SVG_PIN
         
         actions = ""
         if show_actions:
             actions = f'''
             <div class="post-actions">
-                <button onclick="handlePinPost('{post_id}')" class="action-btn pin-btn">{pin_icon} {pin_text}</button>
-                <button onclick="handleDeletePost('{post_id}')" class="action-btn del-btn">{SVG_TRASH} {t('delete', lang)}</button>
+                <button onclick="handlePinPost('{post_id}', this)" class="action-btn pin-btn">{pin_text}</button>
+                <button onclick="handleDeletePost('{post_id}', this)" class="action-btn">{t('delete', lang)}</button>
             </div>
             '''
             
         html_out += f'''
-        <div class="post-wrapper">
+        <div class="post-wrapper" id="post-{post_id}">
             {actions}
             <div class="post-item {pinned_class}">
                 <div class="post-content">{content}</div>
@@ -486,6 +513,24 @@ def render_posts(posts_list, lang, csrf_token, show_actions=False):
         </div>
         '''
     return html_out
+
+def merge_memory_posts(db_posts, nickname):
+    # 1. Убираем удаленные
+    filtered = [p for p in db_posts if p['id'] not in deleted_posts]
+    
+    # 2. Применяем закрепления из памяти
+    for p in filtered:
+        if p['id'] in pinned_posts:
+            p['is_pinned'] = pinned_posts[p['id']]
+            
+    # 3. Добавляем те, что еще не успели записаться в БД
+    for p_id, p_data in pending_posts.items():
+        if p_data['user_nickname'] == nickname:
+            filtered.append(p_data)
+            
+    # 4. Сортируем: сначала закрепленные, потом по дате (новые сверху)
+    filtered.sort(key=lambda x: (not x['is_pinned'], x['created_at']), reverse=True)
+    return filtered
 
 def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str, csrf_token: str):
     posts_html = render_posts(posts, lang, csrf_token, show_actions=True)
@@ -496,8 +541,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str, 
     <!DOCTYPE html>
     <html lang="{lang}">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('profile', lang)}</title>
         {get_css()}
         {get_js_logic(lang, csrf_token)}
@@ -510,26 +554,22 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str, 
                 <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a></div>
                 {desc_block}
                 <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(posts)}</div>
-                
-                <a href="/dashboard/edit" class="btn btn-primary">{SVG_EDIT} {t('edit_profile', lang)}</a>
+                <a href="/dashboard/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
                 <form action="/logout" method="get" style="margin: 0; width: 100%;">
-                    <button type="submit" class="btn-danger">{SVG_LOGOUT} {t('logout', lang)}</button>
+                    <button type="submit" class="logout-btn">{t('logout', lang)}</button>
                 </form>
-                
                 <div class="lang-switch">
                     <a href="/set_lang/ru?next=/dashboard" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                     <a href="/set_lang/en?next=/dashboard" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
                 </div>
             </div>
-
             <div class="main-content">
                 <div class="create-post-box">
                     <form id="create-form" onsubmit="handleCreatePost(event)">
                         <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500" style="margin-bottom: 5px;"></textarea>
-                        <button type="submit" class="btn-success">{SVG_PLUS} {t('create_post_btn', lang)}</button>
+                        <button type="submit">{t('create_post_btn', lang)}</button>
                     </form>
                 </div>
-
                 <div class="posts-area">
                     <h2>{t('my_posts', lang)}</h2>
                     {posts_html}
@@ -537,20 +577,17 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str, 
             </div>
         </div>
         {get_footer(lang)}
-        {get_overlay_html()}
     </body>
     </html>
     """
 
 def edit_profile_html(user_nickname: str, user_data: dict, lang: str, csrf_token: str):
     desc = user_data.get('description', '')
-    
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('edit_profile', lang)}</title>
         {get_css()}
         {get_js_logic(lang, csrf_token)}
@@ -562,18 +599,14 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str, csrf_token
                     <h2>{t('edit_profile', lang)}</h2>
                     <form action="/dashboard/edit" method="post" style="display: flex; flex-direction: column; gap: 10px;">
                         <input type="hidden" name="csrf_token" value="{csrf_token}">
-                        
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('username_label', lang)}</div>
                         <input type="text" name="username" value="{html.escape(user_data['username'])}" required style="background: #a9a9a9; padding: 12px; font-size: 18px;">
-                        
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('description', lang)}</div>
                         <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="updateCounter(this)" style="background: #a9a9a9; height: 150px; padding: 12px; font-size: 18px;">{html.escape(desc)}</textarea>
                         <div id="char-count" style="color: white; text-align: right; font-size: 14px;">{len(desc)} / 300</div>
-                        
-                        <button type="submit" class="btn-primary" style="margin-top: 10px;">{SVG_SAVE} {t('save_changes', lang)}</button>
-                        <a href="/dashboard" class="btn" style="background: linear-gradient(180deg, #999 0%, #777 100%); color: white; border-color: #555;">{SVG_BACK} {t('cancel', lang)}</a>
+                        <button type="submit" style="background: #4da6ff; color: white; margin-top: 10px;">{t('save_changes', lang)}</button>
+                        <a href="/dashboard" class="btn" style="background: #a9a9a9;">{t('cancel', lang)}</a>
                     </form>
-                    
                     <div class="lang-switch" style="margin-top: 20px;">
                         <a href="/set_lang/ru?next=/dashboard/edit" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                         <a href="/set_lang/en?next=/dashboard/edit" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
@@ -582,7 +615,6 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str, csrf_token
             </div>
         </div>
         {get_footer(lang)}
-        {get_overlay_html()}
     </body>
     </html>
     """
@@ -591,13 +623,11 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str, 
     posts_html = render_posts(posts, lang, csrf_token, show_actions=False)
     desc = user_data.get('description', '')
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
-    
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('profile', lang)} {html.escape(nickname)}</title>
         {get_css()}
         {get_js_logic(lang, csrf_token)}
@@ -610,14 +640,12 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str, 
                 <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{html.escape(nickname)}</div>
                 {desc_block}
                 <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(posts)}</div>
-                
                 <div class="lang-switch">
                     <a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                     <a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
                 </div>
-                <a href="/" class="btn" style="margin-top: auto;">{SVG_BACK} {t('back_home', lang)}</a>
+                <a href="/" class="btn" style="margin-top: auto; background: #a9a9a9;">{t('back_home', lang)}</a>
             </div>
-
             <div class="main-content">
                 <div class="posts-area" style="min-height: 500px;">
                     <h2>{t('user_posts', lang)}</h2>
@@ -626,7 +654,6 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str, 
             </div>
         </div>
         {get_footer(lang)}
-        {get_overlay_html()}
     </body>
     </html>
     """
@@ -651,13 +678,11 @@ def bugreport_html(username: str, reports: list, lang: str, csrf_token: str):
                 <div class="post-date">{date_str}</div>
             </div>
             """
-            
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('bugreport_title', lang)}</title>
         {get_css()}
         {get_js_logic(lang, csrf_token)}
@@ -665,7 +690,6 @@ def bugreport_html(username: str, reports: list, lang: str, csrf_token: str):
     <body>
         <div class="dashboard-container">
             <div class="sidebar" style="display: none;"></div>
-            
             <div class="main-content" style="max-width: 800px; margin: 0 auto;">
                 <div class="create-post-box">
                     <h2 style="color: white; text-align: center; margin: 10px 0;">{t('bugreport_title', lang)}</h2>
@@ -673,17 +697,14 @@ def bugreport_html(username: str, reports: list, lang: str, csrf_token: str):
                         <input type="hidden" name="csrf_token" value="{csrf_token}">
                         <input type="text" name="name" value="{username}" placeholder="{t('bugreport_name', lang)}" required style="background: #a9a9a9; padding: 12px; margin-bottom: 5px;">
                         <textarea name="content" placeholder="{t('bugreport_desc', lang)}" required style="background: #a9a9a9; height: 150px; padding: 12px; margin-bottom: 5px;"></textarea>
-                        <button type="submit" class="btn-warning">{SVG_BUG} {t('bugreport_send', lang)}</button>
+                        <button type="submit" style="background: #f1c40f; color: black;">{t('bugreport_send', lang)}</button>
                     </form>
                 </div>
-
                 <div class="posts-area">
                     <h2>{t('bugreport_my', lang)}</h2>
                     {reports_html}
                 </div>
-                
-                <a href="/dashboard" class="btn" style="background: linear-gradient(180deg, #999 0%, #777 100%); color: white; border-color: #555; margin-top: 10px;">{SVG_BACK} {t('cancel', lang)}</a>
-                
+                <a href="/dashboard" class="btn" style="background: #a9a9a9; margin-top: 10px;">{t('cancel', lang)}</a>
                 <div class="lang-switch" style="margin-top: 20px;">
                     <a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                     <a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
@@ -691,7 +712,6 @@ def bugreport_html(username: str, reports: list, lang: str, csrf_token: str):
             </div>
         </div>
         {get_footer(lang)}
-        {get_overlay_html()}
     </body>
     </html>
     """
@@ -701,8 +721,7 @@ def privacy_html(lang: str, csrf_token: str):
     <!DOCTYPE html>
     <html lang="{lang}">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('privacy_title', lang)}</title>
         {get_css()}
     </head>
@@ -711,11 +730,8 @@ def privacy_html(lang: str, csrf_token: str):
             <div class="main-content" style="max-width: 800px;">
                 <div class="posts-area">
                     <h2 style="color: white; text-align: center; margin-bottom: 20px;">{t('privacy_title', lang)}</h2>
-                    <div class="privacy-content">
-                        {t('privacy_text', lang)}
-                    </div>
-                    <a href="/" class="btn" style="margin-top: 20px;">{SVG_BACK} {t('back_home', lang)}</a>
-                    
+                    <div class="privacy-content">{t('privacy_text', lang)}</div>
+                    <a href="/" class="btn" style="background: #a9a9a9; margin-top: 20px;">{t('back_home', lang)}</a>
                     <div class="lang-switch" style="margin-top: 20px;">
                         <a href="/set_lang/ru?next=/privacy" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                         <a href="/set_lang/en?next=/privacy" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
@@ -729,7 +745,6 @@ def privacy_html(lang: str, csrf_token: str):
     """
 
 # --- МАРШРУТЫ ---
-
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, next: str = "/"):
     if lang not in ["ru", "en"]: lang = "ru"
@@ -740,12 +755,9 @@ async def set_lang(lang: str, next: str = "/"):
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     token = get_csrf_token(request)
-    
     if nickname:
         res = await supabase.table('users').select('nickname').eq('nickname', nickname).execute()
-        if res.data:
-            return RedirectResponse(url="/dashboard", status_code=303)
-            
+        if res.data: return RedirectResponse(url="/dashboard", status_code=303)
     response = HTMLResponse(content=auth_html(lang, "", token))
     response.set_cookie(key="csrf_token", value=token, httponly=True, samesite="lax")
     return response
@@ -756,10 +768,9 @@ async def privacy_page(request: Request, lang: str = Cookie("ru")):
 
 @app.post("/register", response_class=HTMLResponse)
 async def register(
-    request: Request, response: Response,
-    username: str = Form(...), nickname: str = Form(...), password: str = Form(...),
-    re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), 
-    lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+    request: Request, response: Response, username: str = Form(...), nickname: str = Form(...), 
+    password: str = Form(...), re_pass: str = Form(...), captcha: str = Form(None), 
+    privacy: str = Form(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
 ):
     token = get_csrf_token(request)
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
@@ -770,9 +781,7 @@ async def register(
     if res.data: return auth_html(lang, t('alert_nick_taken', lang), token)
     
     try:
-        await supabase.table('users').insert({
-            "username": username, "nickname": nickname, "password": hash_password(password), "description": ""
-        }).execute()
+        await supabase.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute()
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
     
@@ -782,9 +791,8 @@ async def register(
 
 @app.post("/login", response_class=HTMLResponse)
 async def login(
-    request: Request, response: Response,
-    nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), 
-    lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+    request: Request, response: Response, nickname: str = Form(...), password: str = Form(...), 
+    captcha: str = Form(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
 ):
     token = get_csrf_token(request)
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
@@ -795,11 +803,9 @@ async def login(
     if user and verify_password(password, user["password"]):
         if len(user["password"]) == 64:
             await supabase.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute()
-            
         response = RedirectResponse(url="/dashboard", status_code=303)
         response.set_cookie(key="nickname", value=nickname, httponly=True, samesite="lax")
         return response
-    
     return auth_html(lang, t('alert_bad_login', lang), token)
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -809,37 +815,16 @@ async def dashboard(request: Request, nickname: str = Cookie(None), lang: str = 
     user_res = await supabase.table('users').select('username, description').eq('nickname', nickname).execute()
     if not user_res.data: return RedirectResponse(url="/", status_code=303)
     
-    posts_res = await supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
-    return dashboard_html(nickname, user_res.data[0], posts_res.data, lang, get_csrf_token(request))
-
-@app.get("/dashboard/edit", response_class=HTMLResponse)
-async def edit_profile_page(request: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
-    if not nickname: return RedirectResponse(url="/", status_code=303)
+    posts_res = await supabase.table('posts').select('*').eq('user_nickname', nickname).execute()
+    # Склеиваем БД с оперативкой (Client-Realtime Cache)
+    posts = merge_memory_posts(posts_res.data, nickname)
     
-    user_res = await supabase.table('users').select('username, description').eq('nickname', nickname).execute()
-    if not user_res.data: return RedirectResponse(url="/", status_code=303)
-    
-    return edit_profile_html(nickname, user_res.data[0], lang, get_csrf_token(request))
+    return dashboard_html(nickname, user_res.data[0], posts, lang, get_csrf_token(request))
 
-@app.post("/dashboard/edit", response_class=HTMLResponse)
-async def edit_profile_action(
-    request: Request, response: Response,
-    username: str = Form(...), description: str = Form(""),
-    nickname: str = Cookie(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
-):
-    if not nickname: return RedirectResponse(url="/", status_code=303)
-    if len(description) > 300: 
-        return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
-
-    await supabase.table('users').update({
-        "username": username, "description": description
-    }).eq('nickname', nickname).execute()
-    
-    return RedirectResponse(url="/dashboard", status_code=303)
-
+# --- AJAX РОУТЫ С ФОНОВОЙ ЗАПИСЬЮ В БД ---
 @app.post("/create_post")
 async def create_post(
-    content: str = Form(...), nickname: str = Cookie(None), request: Request = None
+    request: Request, content: str = Form(...), client_id: str = Form(None), nickname: str = Cookie(None)
 ):
     if request.headers.get("X-CSRF-Token") != request.cookies.get("csrf_token"):
         return JSONResponse({"status": "error", "msg": "CSRF failed"}, status_code=403)
@@ -847,59 +832,95 @@ async def create_post(
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
     if not content.strip(): return JSONResponse({"status": "error", "msg": "Empty content"}, status_code=400)
     
-    res = await supabase.table('posts').insert({
-        "user_nickname": nickname, "content": content.strip(), "is_pinned": False
-    }).execute()
+    # Генерируем ID на сервере, если клиент не прислал (для оптимистичного UI)
+    post_id = client_id if client_id else str(uuid.uuid4())
+    now_iso = datetime.now(timezone.utc).isoformat()
     
-    post_id = res.data[0]['id'] if res.data else ""
+    post_data = {
+        "id": post_id, "user_nickname": nickname, "content": content.strip(), 
+        "is_pinned": False, "created_at": now_iso
+    }
+    
+    # Сохраняем в оперативку
+    pending_posts[post_id] = post_data
+    
+    # Запускаем фоновую запись в Supabase
+    asyncio.create_task(sync_create_post(post_data))
+    
     return JSONResponse({"status": "ok", "id": post_id})
 
 @app.post("/delete_post/{post_id}")
 async def delete_post(post_id: str, nickname: str = Cookie(None), request: Request = None):
     if request.headers.get("X-CSRF-Token") != request.cookies.get("csrf_token"):
         return JSONResponse({"status": "error", "msg": "CSRF failed"}, status_code=403)
-    
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
-    await supabase.table('posts').delete().eq('id', post_id).eq('user_nickname', nickname).execute()
+    
+    # Добавляем в оперативку (скрываем из UI при след. запросе)
+    deleted_posts.add(post_id)
+    
+    # Фоновое удаление
+    asyncio.create_task(sync_delete_post(post_id))
+    
     return JSONResponse({"status": "ok"})
 
 @app.post("/pin_post/{post_id}")
 async def pin_post(post_id: str, nickname: str = Cookie(None), request: Request = None):
     if request.headers.get("X-CSRF-Token") != request.cookies.get("csrf_token"):
         return JSONResponse({"status": "error", "msg": "CSRF failed"}, status_code=403)
-    
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
-    res = await supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
-    if res.data:
-        await supabase.table('posts').update({"is_pinned": not res.data[0]['is_pinned']}).eq('id', post_id).eq('user_nickname', nickname).execute()
+    
+    # Получаем текущий статус (из кэша или БД)
+    current_status = pinned_posts.get(post_id)
+    if current_status is None:
+        res = await supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
+        if res.data:
+            current_status = res.data[0]['is_pinned']
+            
+    new_status = not current_status if current_status is not None else False
+    
+    # Сохраняем в оперативку
+    pinned_posts[post_id] = new_status
+    
+    # Фоновое обновление
+    asyncio.create_task(sync_pin_post(post_id, new_status))
+    
     return JSONResponse({"status": "ok"})
+
+@app.get("/dashboard/edit", response_class=HTMLResponse)
+async def edit_profile_page(request: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if not nickname: return RedirectResponse(url="/", status_code=303)
+    user_res = await supabase.table('users').select('username, description').eq('nickname', nickname).execute()
+    if not user_res.data: return RedirectResponse(url="/", status_code=303)
+    return edit_profile_html(nickname, user_res.data[0], lang, get_csrf_token(request))
+
+@app.post("/dashboard/edit", response_class=HTMLResponse)
+async def edit_profile_action(
+    request: Request, response: Response, username: str = Form(...), description: str = Form(""),
+    nickname: str = Cookie(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+):
+    if not nickname: return RedirectResponse(url="/", status_code=303)
+    if len(description) > 300: return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
+    await supabase.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute()
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.get("/bugreport", response_class=HTMLResponse)
 async def bugreport_page(request: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     username = ""
     reports = []
-    
     if nickname:
         res = await supabase.table('users').select('username').eq('nickname', nickname).execute()
         if res.data: username = res.data[0]['username']
-        
         rep_res = await supabase.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
         reports = rep_res.data
-    
     return bugreport_html(username, reports, lang, get_csrf_token(request))
 
 @app.post("/bugreport", response_class=HTMLResponse)
 async def bugreport_submit(
-    request: Request, response: Response,
-    name: str = Form(...), content: str = Form(...),
+    request: Request, response: Response, name: str = Form(...), content: str = Form(...),
     nickname: str = Cookie(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
 ):
-    data = {
-        "name": name, "content": content,
-        "status": "Принято" if lang == "ru" else "Accepted"
-    }
+    data = {"name": name, "content": content, "status": "Принято" if lang == "ru" else "Accepted"}
     if nickname: data["user_nickname"] = nickname
-        
     await supabase.table('bug_reports').insert(data).execute()
     return RedirectResponse(url="/bugreport", status_code=303)
 
@@ -912,11 +933,12 @@ async def logout():
 @app.get("/{nickname}", response_class=HTMLResponse)
 async def public_profile(nickname: str, request: Request, lang: str = Cookie("ru")):
     user_res = await supabase.table('users').select('username, description').eq('nickname', nickname).execute()
-    if not user_res.data: 
-        return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
+    if not user_res.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
     
-    posts_res = await supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
-    return public_profile_html(nickname, user_res.data[0], posts_res.data, lang, get_csrf_token(request))
+    posts_res = await supabase.table('posts').select('*').eq('user_nickname', nickname).execute()
+    posts = merge_memory_posts(posts_res.data, nickname)
+    
+    return public_profile_html(nickname, user_res.data[0], posts, lang, get_csrf_token(request))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
