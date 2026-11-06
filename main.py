@@ -9,7 +9,6 @@ from datetime import datetime
 
 app = FastAPI()
 
-# --- ОБРАБОТЧИК ОШИБОК ВАЛИДАЦИИ (чтобы не было сырого JSON) ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     lang = request.cookies.get("lang", "ru")
@@ -42,11 +41,11 @@ LOCALES = {
         "bugreport_title": "Баг-репорт", "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы",
         "bugreport_send": "Отправить", "bugreport_my": "Мои заявки",
         "status_accepted": "Принято", "status_working": "В работе", "status_fixed": "Исправлено", "status_rejected": "Отклонено",
-        "privacy_title": "Политика конфиденциальности",
-        "privacy_text": "1. Сбор информации. Мы собираем только те данные, которые вы добровольно предоставляете при регистрации (имя пользователя, никнейм).<br><br>2. Использование данных. Ваши данные используются исключительно для обеспечения работы сайта и аутентификации.<br><br>3. Безопасность. Мы принимаем необходимые меры для защиты ваших данных от несанкционированного доступа.<br><br>4. Cookies. Сайт использует cookies для сохранения сессии входа и выбранного языка интерфейса.<br><br>5. Ваши права. Вы можете в любой момент изменить или удалить свои данные в профиле.",
-        "privacy_agree": "Я согласен с",
-        "privacy_link": "Политикой конфиденциальности",
-        "alert_privacy": "Вы должны принять политику конфиденциальности!"
+        "privacy_title": "Политика конфиденциальности", "privacy_agree": "Я согласен с",
+        "privacy_link": "Политикой конфиденциальности", "alert_privacy": "Вы должны принять политику конфиденциальности!",
+        "home": "Главная", "feed": "ОБЩАЯ ЛЕНТА", "post_type": "Тип поста", 
+        "type_general": "В общую ленту", "type_profile": "Только на мою страницу",
+        "nav_home": "Лента", "nav_profile": "Мой профиль"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -67,11 +66,11 @@ LOCALES = {
         "bugreport_title": "Bug Report", "bugreport_name": "Your Name", "bugreport_desc": "Issue Description",
         "bugreport_send": "Send", "bugreport_my": "My Reports",
         "status_accepted": "Accepted", "status_working": "In Progress", "status_fixed": "Fixed", "status_rejected": "Rejected",
-        "privacy_title": "Privacy Policy",
-        "privacy_text": "1. Information Collection. We only collect data you voluntarily provide during registration (username, nickname).<br><br>2. Data Usage. Your data is used solely to ensure the site's operation and authentication.<br><br>3. Security. We take necessary measures to protect your data from unauthorized access.<br><br>4. Cookies. The site uses cookies to maintain your login session and chosen interface language.<br><br>5. Your Rights. You can change or delete your data in your profile at any time.",
-        "privacy_agree": "I agree to the",
-        "privacy_link": "Privacy Policy",
-        "alert_privacy": "You must accept the Privacy Policy!"
+        "privacy_title": "Privacy Policy", "privacy_agree": "I agree to the",
+        "privacy_link": "Privacy Policy", "alert_privacy": "You must accept the Privacy Policy!",
+        "home": "Home", "feed": "GLOBAL FEED", "post_type": "Post Type", 
+        "type_general": "To global feed", "type_profile": "Only my profile",
+        "nav_home": "Feed", "nav_profile": "My Profile"
     }
 }
 
@@ -99,44 +98,52 @@ def get_css():
     <style>
         * { box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;
+            font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 15px;
             display: flex; flex-direction: column; align-items: center; min-height: 100vh;
         }
         a { color: black; text-decoration: none; font-weight: bold; }
         a:hover { text-decoration: underline; }
         
+        /* Навигация */
+        .navbar { display: flex; gap: 15px; margin-bottom: 20px; width: 100%; max-width: 1200px; justify-content: center; }
+        .nav-link { background: black; color: white; padding: 10px 20px; border-radius: 5px; font-size: 18px; }
+        .nav-link:hover { background: #333; text-decoration: none; }
+        .nav-link.active { background: #4da6ff; }
+
         .container {
-            background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; 
-            align-items: flex-start; max-width: 100%; margin-bottom: 20px;
+            background: white; padding: 20px; border: 10px solid #e0e0e0; display: flex; gap: 30px; 
+            align-items: flex-start; max-width: 1200px; width: 100%; margin-bottom: 20px; border-radius: 10px;
         }
         
         /* Подвал */
         .footer { 
             text-align: center; font-size: 16px; font-weight: bold; color: #555; 
-            width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px;
+            width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 10px;
         }
         .footer a { color: #000; border-bottom: 2px solid #000; }
-        .footer-links { font-size: 14px; color: #777; }
+        .footer-links { font-size: 14px; color: #777; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
         .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
 
         /* Формы */
         .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
         .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
-        .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
+        .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%; border-radius: 5px;}
         .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
         
         .input-group { position: relative; display: flex; align-items: center; width: 100%; }
         
         input[type="text"], input[type="password"], textarea, select {
-            background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px;
-            font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none;
+            background-color: #a9a9a9; border: none; padding: 12px; font-size: 18px;
+            font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; border-radius: 3px;
         }
         textarea { text-align: left; resize: vertical; }
+        select { text-align: left; cursor: pointer; }
         
         button, .btn {
-            background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px;
+            background-color: #a9a9a9; border: none; padding: 12px; font-size: 18px;
             font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer;
-            color: black; font-weight: bold; display: inline-block; border: 1px solid transparent;
+            color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; border-radius: 3px;
+            transition: background 0.2s;
         }
         button:hover, .btn:hover { background-color: #8c8c8c; }
         
@@ -149,42 +156,48 @@ def get_css():
         .captcha-container { 
             background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; 
             gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;
+            border-radius: 3px;
         }
         .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
         .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
 
         /* Дашборд */
         .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
-        .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
-        .sidebar h2 { color: white; text-align: center; font-size: 28px; margin: 10px 0; }
+        .sidebar { background: black; padding: 15px; width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; border-radius: 10px; }
+        .sidebar h2 { color: white; text-align: center; font-size: 26px; margin: 0 0 10px 0; }
         
-        .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
-        .logout-btn { margin-top: 10px; background: #ff4d4d; }
+        .info-card { background: #a9a9a9; padding: 15px; font-size: 16px; text-align: center; word-wrap: break-word; white-space: pre-wrap; border-radius: 5px; }
+        .logout-btn { margin-top: 10px; background: #ff4d4d; color: white; }
         .logout-btn:hover { background: #cc0000; }
-        .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
+        .edit-btn { background: #4da6ff; color: white;}
         .edit-btn:hover { background: #1a82e2; }
         
         .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
         
-        .create-post-box { background: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; }
-        .create-post-box textarea { height: 120px; font-size: 18px; padding: 10px; }
+        .create-post-box { background: black; padding: 15px; display: flex; flex-direction: column; gap: 10px; border-radius: 10px; }
+        .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; }
+        .post-controls { display: flex; gap: 10px; }
+        .post-controls select { flex: 1; }
+        .post-controls button { flex: 1; }
         
-        .posts-area { background: black; padding: 20px; min-height: 300px; display: flex; flex-direction: column; gap: 10px; }
-        .posts-area h2 { color: white; font-size: 28px; margin: 0 0 10px 0; text-align: center;}
+        .posts-area { background: black; padding: 20px; min-height: 300px; display: flex; flex-direction: column; gap: 15px; border-radius: 10px; }
+        .posts-area h2 { color: white; font-size: 26px; margin: 0 0 10px 0; text-align: center;}
         
-        .post-wrapper { position: relative; }
-        .post-item { background: #a9a9a9; padding: 15px; font-size: 18px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column;}
+        /* Посты */
+        .post-wrapper { position: relative; background: #a9a9a9; border-radius: 5px; overflow: hidden; }
+        .post-item { padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-        .post-content { margin-bottom: 10px; }
-        .post-date { font-size: 12px; color: #555; text-align: right; border-top: 1px solid #888; padding-top: 5px; }
+        .post-header { display: flex; justify-content: space-between; font-size: 14px; color: #333; margin-bottom: 10px; font-weight: bold; border-bottom: 1px solid #888; padding-bottom: 5px; }
+        .post-content { margin-bottom: 10px; line-height: 1.4; }
+        .post-footer { font-size: 12px; color: #555; text-align: right; }
         
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
         .post-wrapper:hover .post-actions { opacity: 1; }
-        .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 14px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
+        .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: bold;}
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
 
-        .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
+        .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
         .status-Принято, .status-Accepted { background: #4da6ff; }
         .status-В-работе, .status-In-Progress { background: #f1c40f; }
         .status-Исправлено, .status-Fixed { background: #2ecc71; }
@@ -192,16 +205,15 @@ def get_css():
 
         /* Языки */
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-        .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
+        .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 6px 12px; width: auto; font-size: 14px; font-weight: bold; cursor: pointer; transition: all 0.2s; border-radius: 3px;}
         .lang-btn:hover { background: #a9a9a9; color: black; }
         .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
         
-        /* Политика конфиденциальности */
-        .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; }
+        .privacy-content { background: white; color: black; padding: 20px; font-size: 16px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 5px; }
 
         .error-msg {
-            color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right;
+            color: #ff4d4d; font-weight: bold; font-size: 16px; text-align: right;
             width: 100%; margin-top: 10px; min-height: 20px;
         }
 
@@ -216,18 +228,20 @@ def get_css():
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* Мобильная адаптация */
         @media (max-width: 768px) {
             body { padding: 10px; }
-            .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
+            .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; }
             .auth-wrapper { width: 100%; }
             .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
-            .label-text { font-size: 28px; text-align: center; margin: 10px 0 0 0; order: -1; }
+            .label-text { font-size: 26px; text-align: center; margin: 10px 0 0 0; order: -1; }
             .dashboard-container { flex-direction: column; }
             .sidebar { width: 100%; }
             .posts-area { padding: 10px; }
-            .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
+            .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0; padding: 0 15px 15px 15px;}
             .error-msg { text-align: center; }
             .login-lang-wrapper { justify-content: center; }
+            .navbar { flex-direction: column; gap: 5px; text-align: center; }
         }
     </style>
     """
@@ -235,12 +249,8 @@ def get_css():
 def get_js_logic(lang):
     return f"""
     <script>
-        function showOverlay() {{
-            document.getElementById('overlay').style.display = 'flex';
-        }}
-        function hideOverlay() {{
-            document.getElementById('overlay').style.display = 'none';
-        }}
+        function showOverlay() {{ document.getElementById('overlay').style.display = 'flex'; }}
+        function hideOverlay() {{ document.getElementById('overlay').style.display = 'none'; }}
 
         async function handleCreatePost(event) {{
             event.preventDefault();
@@ -250,7 +260,7 @@ def get_js_logic(lang):
             try {{
                 const res = await fetch('/create_post', {{ method: 'POST', body: formData }});
                 if (!res.ok) throw new Error("HTTP " + res.status);
-                window.location.reload();
+                window.location.reload(); // Перезагрузка для обновления ленты
             }} catch (e) {{
                 alert("Error: " + e.message);
                 hideOverlay();
@@ -263,7 +273,8 @@ def get_js_logic(lang):
             try {{
                 const res = await fetch('/delete_post/' + postId, {{ method: 'POST' }});
                 if (!res.ok) throw new Error("HTTP " + res.status);
-                window.location.reload();
+                document.getElementById('post-' + postId).remove();
+                hideOverlay();
             }} catch (e) {{
                 alert("Error: " + e.message);
                 hideOverlay();
@@ -275,7 +286,7 @@ def get_js_logic(lang):
             try {{
                 const res = await fetch('/pin_post/' + postId, {{ method: 'POST' }});
                 if (!res.ok) throw new Error("HTTP " + res.status);
-                window.location.reload();
+                window.location.reload(); // Перезагрузка для сортировки
             }} catch (e) {{
                 alert("Error: " + e.message);
                 hideOverlay();
@@ -284,13 +295,8 @@ def get_js_logic(lang):
 
         function togglePassword(inputId, btn) {{
             const input = document.getElementById(inputId);
-            if (input.type === "password") {{
-                input.type = "text";
-                btn.innerHTML = `{SVG_EYE_OFF}`;
-            }} else {{
-                input.type = "password";
-                btn.innerHTML = `{SVG_EYE}`;
-            }}
+            if (input.type === "password") {{ input.type = "text"; btn.innerHTML = `{SVG_EYE_OFF}`; }}
+            else {{ input.type = "password"; btn.innerHTML = `{SVG_EYE}`; }}
         }}
 
         function updateCounter(el) {{
@@ -300,18 +306,27 @@ def get_js_logic(lang):
     """
 
 def get_overlay_html():
-    return """
-    <div id="overlay">
-        <div class="spinner"></div>
+    return """<div id="overlay"><div class="spinner"></div></div>"""
+
+def get_navbar(lang, current_page):
+    home_class = "active" if current_page == "home" else ""
+    dash_class = "active" if current_page == "dashboard" else ""
+    
+    return f"""
+    <div class="navbar">
+        <a href="/home" class="nav-link {home_class}">{t('nav_home', lang)}</a>
+        <a href="/dashboard" class="nav-link {dash_class}">{t('nav_profile', lang)}</a>
     </div>
     """
 
-# --- ФУТЕР ---
 def get_footer(lang):
     return f"""
     <div class="footer">
         <div>{t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
-        <div class="footer-links"><a href="/privacy">{t('privacy_title', lang)}</a></div>
+        <div class="footer-links">
+            <a href="/privacy">{t('privacy_title', lang)}</a>
+            <a href="/bugreport">{t('bugreport_title', lang)}</a>
+        </div>
     </div>
     """
 
@@ -384,14 +399,13 @@ def auth_html(lang: str, error_msg: str = ""):
                 {error_block}
             </div>
         </div>
-
         {get_footer(lang)}
         {get_overlay_html()}
     </body>
     </html>
     """
 
-def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
+def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False, feed_mode=False):
     if not posts_list:
         return f"<div class='post-item'>{t('no_posts', lang)}</div>"
     
@@ -399,34 +413,49 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
     for post in posts_list:
         post_id = post.get('id', '')
         is_pinned = post.get('is_pinned', False)
+        post_type = post.get('post_type', 'general')
         content = html.escape(post.get('content', '')).replace('\n', '<br>')
         post_date = format_date(post.get('created_at', ''))
         
         pinned_class = "pinned" if is_pinned else ""
-        pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
         
+        # Заголовок поста (для ленты или свой профиль)
+        header_html = ""
+        if feed_mode:
+            user_info = post.get('users', {})
+            u_name = user_info.get('username', 'Unknown')
+            nick = post.get('user_nickname', 'Unknown')
+            header_html = f"<div class='post-header'><span>{html.escape(u_name)}</span> <span><a href='/{nick}'>@{html.escape(nick)}</a></span></div>"
+            
         actions = ""
         if show_actions and viewer_is_owner:
+            # Закреплять можно только если это пост в профиле
+            pin_btn = ""
+            if post_type == 'profile':
+                pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
+                pin_btn = f'<button onclick="handlePinPost(\'{post_id}\')" class="action-btn pin-btn">{pin_text}</button>'
+                
             actions = f'''
             <div class="post-actions">
-                <button onclick="handlePinPost('{post_id}')" class="action-btn pin-btn">{pin_text}</button>
+                {pin_btn}
                 <button onclick="handleDeletePost('{post_id}')" class="action-btn">{t('delete', lang)}</button>
             </div>
             '''
             
         html_out += f'''
-        <div class="post-wrapper">
+        <div class="post-wrapper" id="post-{post_id}">
             {actions}
             <div class="post-item {pinned_class}">
+                {header_html}
                 <div class="post-content">{content}</div>
-                <div class="post-date">{post_date}</div>
+                <div class="post-footer">{post_date}</div>
             </div>
         </div>
         '''
     return html_out
 
 def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
-    posts_html = render_posts(posts, lang, show_actions=True, viewer_is_owner=True)
+    posts_html = render_posts(posts, lang, show_actions=True, viewer_is_owner=True, feed_mode=False)
     desc = user_data.get('description', '')
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
@@ -441,6 +470,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
         {get_js_logic(lang)}
     </head>
     <body>
+        {get_navbar(lang, "dashboard")}
         <div class="dashboard-container">
             <div class="sidebar">
                 <h2>{t('profile', lang)}</h2>
@@ -450,10 +480,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
                 <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(posts)}</div>
                 
                 <a href="/dashboard/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
-                <a href="/bugreport" class="btn" style="background: #f1c40f; color: black;">{t('bugreport_title', lang)}</a>
-                <form action="/logout" method="get" style="margin: 0; width: 100%;">
-                    <button type="submit" class="logout-btn">{t('logout', lang)}</button>
-                </form>
+                <a href="/logout" class="btn logout-btn">{t('logout', lang)}</a>
                 
                 <div class="lang-switch">
                     <a href="/set_lang/ru?next=/dashboard" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
@@ -463,9 +490,15 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
 
             <div class="main-content">
                 <div class="create-post-box">
-                    <form id="create-form" onsubmit="handleCreatePost(event)">
-                        <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500" style="margin-bottom: 5px;"></textarea>
-                        <button type="submit">{t('create_post_btn', lang)}</button>
+                    <form onsubmit="handleCreatePost(event)">
+                        <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500" style="margin-bottom: 10px;"></textarea>
+                        <div class="post-controls">
+                            <select name="post_type">
+                                <option value="profile">{t('type_profile', lang)}</option>
+                                <option value="general">{t('type_general', lang)}</option>
+                            </select>
+                            <button type="submit">{t('create_post_btn', lang)}</button>
+                        </div>
                     </form>
                 </div>
 
@@ -475,7 +508,39 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
                 </div>
             </div>
         </div>
-        
+        {get_footer(lang)}
+        {get_overlay_html()}
+    </body>
+    </html>
+    """
+
+def home_html(posts: list, lang: str):
+    posts_html = render_posts(posts, lang, show_actions=False, feed_mode=True)
+    
+    return f"""
+    <!DOCTYPE html>
+    <html lang="{lang}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{t('feed', lang)}</title>
+        {get_css()}
+        {get_js_logic(lang)}
+    </head>
+    <body>
+        {get_navbar(lang, "home")}
+        <div class="dashboard-container" style="justify-content: center;">
+            <div class="main-content" style="max-width: 800px;">
+                <div class="posts-area" style="min-height: 500px;">
+                    <h2>{t('feed', lang)}</h2>
+                    {posts_html}
+                </div>
+                <div class="lang-switch">
+                    <a href="/set_lang/ru?next=/home" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
+                    <a href="/set_lang/en?next=/home" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
+                </div>
+            </div>
+        </div>
         {get_footer(lang)}
         {get_overlay_html()}
     </body>
@@ -496,23 +561,22 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
         {get_js_logic(lang)}
     </head>
     <body>
+        {get_navbar(lang, "dashboard")}
         <div class="dashboard-container" style="justify-content: center;">
             <div class="main-content" style="max-width: 600px;">
                 <div class="posts-area">
                     <h2>{t('edit_profile', lang)}</h2>
                     <form action="/dashboard/edit" method="post" style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="color: white; font-size: 16px;">{t('username_label', lang)}</div>
+                        <input type="text" name="username" value="{html.escape(user_data['username'])}" required>
                         
-                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('username_label', lang)}</div>
-                        <input type="text" name="username" value="{html.escape(user_data['username'])}" required style="background: #a9a9a9; padding: 12px; font-size: 18px;">
-                        
-                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('description', lang)}</div>
-                        <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="updateCounter(this)" style="background: #a9a9a9; height: 150px; padding: 12px; font-size: 18px;">{html.escape(desc)}</textarea>
+                        <div style="color: white; font-size: 16px;">{t('description', lang)}</div>
+                        <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="updateCounter(this)" style="height: 120px;">{html.escape(desc)}</textarea>
                         <div id="char-count" style="color: white; text-align: right; font-size: 14px;">{len(desc)} / 300</div>
                         
                         <button type="submit" style="background: #4da6ff; color: white; margin-top: 10px;">{t('save_changes', lang)}</button>
-                        <a href="/dashboard" class="btn" style="background: #a9a9a9;">{t('cancel', lang)}</a>
+                        <a href="/dashboard" class="btn">{t('cancel', lang)}</a>
                     </form>
-                    
                     <div class="lang-switch" style="margin-top: 20px;">
                         <a href="/set_lang/ru?next=/dashboard/edit" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                         <a href="/set_lang/en?next=/dashboard/edit" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
@@ -527,7 +591,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
     """
 
 def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
-    posts_html = render_posts(posts, lang, show_actions=False)
+    posts_html = render_posts(posts, lang, show_actions=False, feed_mode=False)
     desc = user_data.get('description', '')
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
@@ -554,7 +618,7 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
                     <a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                     <a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
                 </div>
-                <a href="/" class="btn" style="margin-top: auto; background: #a9a9a9;">{t('back_home', lang)}</a>
+                <a href="/home" class="btn" style="margin-top: auto;">{t('back_home', lang)}</a>
             </div>
 
             <div class="main-content">
@@ -564,7 +628,6 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
                 </div>
             </div>
         </div>
-
         {get_footer(lang)}
         {get_overlay_html()}
     </body>
@@ -578,17 +641,14 @@ def bugreport_html(username: str, reports: list, lang: str):
     else:
         for r in reports:
             status_class = f"status-{r.get('status', 'Принято').replace(' ', '-')}"
-            status_text = r.get('status', 'Принято')
-            date_str = format_date(r.get('created_at', ''))
-            content = html.escape(r.get('content', ''))
             reports_html += f"""
-            <div class="post-item" style="border-left-color: transparent;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <b>{t('bugreport_title', lang)}</b>
-                    <span class="status-badge {status_class}">{status_text}</span>
+            <div class="post-item">
+                <div class="post-header">
+                    <span>{t('bugreport_title', lang)}</span>
+                    <span class="status-badge {status_class}">{r.get('status', 'Принято')}</span>
                 </div>
-                <div class="post-content">{content}</div>
-                <div class="post-date">{date_str}</div>
+                <div class="post-content">{html.escape(r.get('content', ''))}</div>
+                <div class="post-footer">{format_date(r.get('created_at', ''))}</div>
             </div>
             """
             
@@ -603,15 +663,14 @@ def bugreport_html(username: str, reports: list, lang: str):
         {get_js_logic(lang)}
     </head>
     <body>
-        <div class="dashboard-container">
-            <div class="sidebar" style="display: none;"></div>
-            
-            <div class="main-content" style="max-width: 800px; margin: 0 auto;">
+        {get_navbar(lang, "")}
+        <div class="dashboard-container" style="justify-content: center;">
+            <div class="main-content" style="max-width: 800px;">
                 <div class="create-post-box">
-                    <h2 style="color: white; text-align: center; margin: 10px 0;">{t('bugreport_title', lang)}</h2>
-                    <form action="/bugreport" method="post" style="display: flex; flex-direction: column; gap: 5px;">
-                        <input type="text" name="name" value="{username}" placeholder="{t('bugreport_name', lang)}" required style="background: #a9a9a9; padding: 12px; margin-bottom: 5px;">
-                        <textarea name="content" placeholder="{t('bugreport_desc', lang)}" required style="background: #a9a9a9; height: 150px; padding: 12px; margin-bottom: 5px;"></textarea>
+                    <h2 style="color: white; text-align: center; margin: 0 0 10px 0;">{t('bugreport_title', lang)}</h2>
+                    <form action="/bugreport" method="post" style="display: flex; flex-direction: column; gap: 10px;">
+                        <input type="text" name="name" value="{username}" placeholder="{t('bugreport_name', lang)}" required>
+                        <textarea name="content" placeholder="{t('bugreport_desc', lang)}" required style="height: 120px;"></textarea>
                         <button type="submit" style="background: #f1c40f; color: black;">{t('bugreport_send', lang)}</button>
                     </form>
                 </div>
@@ -621,15 +680,13 @@ def bugreport_html(username: str, reports: list, lang: str):
                     {reports_html}
                 </div>
                 
-                <a href="/dashboard" class="btn" style="background: #a9a9a9; margin-top: 10px;">{t('cancel', lang)}</a>
-                
+                <a href="/home" class="btn" style="margin-top: 10px;">{t('back_home', lang)}</a>
                 <div class="lang-switch" style="margin-top: 20px;">
                     <a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                     <a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
                 </div>
             </div>
         </div>
-
         {get_footer(lang)}
         {get_overlay_html()}
     </body>
@@ -651,11 +708,8 @@ def privacy_html(lang: str):
             <div class="main-content" style="max-width: 800px;">
                 <div class="posts-area">
                     <h2 style="color: white; text-align: center; margin-bottom: 20px;">{t('privacy_title', lang)}</h2>
-                    <div class="privacy-content">
-                        {t('privacy_text', lang)}
-                    </div>
-                    <a href="/" class="btn" style="background: #a9a9a9; margin-top: 20px;">{t('back_home', lang)}</a>
-                    
+                    <div class="privacy-content">{t('privacy_text', lang)}</div>
+                    <a href="/" class="btn" style="margin-top: 20px;">{t('back_home', lang)}</a>
                     <div class="lang-switch" style="margin-top: 20px;">
                         <a href="/set_lang/ru?next=/privacy" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                         <a href="/set_lang/en?next=/privacy" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
@@ -681,58 +735,57 @@ def set_lang(lang: str, next: str = "/"):
 def index(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if nickname:
         res = supabase.table('users').select('nickname').eq('nickname', nickname).execute()
-        if res.data:
-            return RedirectResponse(url="/dashboard", status_code=303)
+        if res.data: return RedirectResponse(url="/home", status_code=303)
     return auth_html(lang)
 
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy_page(lang: str = Cookie("ru")):
     return privacy_html(lang)
 
-# ОБРАТИТЕ ВНИМАНИЕ НА response_class=HTMLResponse
 @app.post("/register", response_class=HTMLResponse)
 def register(
     username: str = Form(...), nickname: str = Form(...), password: str = Form(...),
     re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), lang: str = Cookie("ru")
 ):
-    if not captcha: 
-        return auth_html(lang, t('alert_captcha', lang))
-    if not privacy: 
-        return auth_html(lang, t('alert_privacy', lang))
-    if password != re_pass: 
-        return auth_html(lang, t('alert_pass_mismatch', lang))
+    if not captcha: return auth_html(lang, t('alert_captcha', lang))
+    if not privacy: return auth_html(lang, t('alert_privacy', lang))
+    if password != re_pass: return auth_html(lang, t('alert_pass_mismatch', lang))
     
     res = supabase.table('users').select('nickname').eq('nickname', nickname).execute()
-    if res.data: 
-        return auth_html(lang, t('alert_nick_taken', lang))
+    if res.data: return auth_html(lang, t('alert_nick_taken', lang))
     
     try:
         supabase.table('users').insert({
-            "username": username, "nickname": nickname, "password": hash_password(password),
-            "description": ""
+            "username": username, "nickname": nickname, "password": hash_password(password), "description": ""
         }).execute()
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}")
     
-    response = RedirectResponse(url="/dashboard", status_code=303)
+    response = RedirectResponse(url="/home", status_code=303)
     response.set_cookie(key="nickname", value=nickname, httponly=True)
     return response
 
-# ОБРАТИТЕ ВНИМАНИЕ НА response_class=HTMLResponse
 @app.post("/login", response_class=HTMLResponse)
 def login(nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")):
-    if not captcha: 
-        return auth_html(lang, t('alert_captcha', lang))
+    if not captcha: return auth_html(lang, t('alert_captcha', lang))
     
     res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     user = res.data[0] if res.data else None
     
     if user and user["password"] == hash_password(password):
-        response = RedirectResponse(url="/dashboard", status_code=303)
+        response = RedirectResponse(url="/home", status_code=303)
         response.set_cookie(key="nickname", value=nickname, httponly=True)
         return response
     
     return auth_html(lang, t('alert_bad_login', lang))
+
+@app.get("/home", response_class=HTMLResponse)
+def home_feed(nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if not nickname: return RedirectResponse(url="/", status_code=303)
+    
+    # Получаем только общие посты и присоединяем инфу о пользователе
+    posts_res = supabase.table('posts').select('*, users!posts_user_nickname_fkey(username)').eq('post_type', 'general').order('created_at', desc=True).execute()
+    return home_html(posts_res.data, lang)
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(nickname: str = Cookie(None), lang: str = Cookie("ru")):
@@ -747,10 +800,8 @@ def dashboard(nickname: str = Cookie(None), lang: str = Cookie("ru")):
 @app.get("/dashboard/edit", response_class=HTMLResponse)
 def edit_profile_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse(url="/", status_code=303)
-    
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     if not user_res.data: return RedirectResponse(url="/", status_code=303)
-    
     return edit_profile_html(nickname, user_res.data[0], lang)
 
 @app.post("/dashboard/edit", response_class=HTMLResponse)
@@ -759,26 +810,19 @@ def edit_profile_action(
     nickname: str = Cookie(None), lang: str = Cookie("ru")
 ):
     if not nickname: return RedirectResponse(url="/", status_code=303)
-    if len(description) > 300: 
-        return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
+    if len(description) > 300: return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
 
-    supabase.table('users').update({
-        "username": username, "description": description
-    }).eq('nickname', nickname).execute()
-    
+    supabase.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute()
     return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/create_post")
-def create_post(content: str = Form(...), nickname: str = Cookie(None)):
+def create_post(content: str = Form(...), post_type: str = Form("general"), nickname: str = Cookie(None)):
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
-    if not content.strip(): return JSONResponse({"status": "error", "msg": "Empty content"}, status_code=400)
     
-    res = supabase.table('posts').insert({
-        "user_nickname": nickname, "content": content.strip(), "is_pinned": False
+    supabase.table('posts').insert({
+        "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "post_type": post_type
     }).execute()
-    
-    post_id = res.data[0]['id'] if res.data else ""
-    return JSONResponse({"status": "ok", "id": post_id})
+    return JSONResponse({"status": "ok"})
 
 @app.post("/delete_post/{post_id}")
 def delete_post(post_id: str, nickname: str = Cookie(None)):
@@ -789,39 +833,30 @@ def delete_post(post_id: str, nickname: str = Cookie(None)):
 @app.post("/pin_post/{post_id}")
 def pin_post(post_id: str, nickname: str = Cookie(None)):
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
-    res = supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
-    if res.data:
-        supabase.table('posts').update({"is_pinned": not res.data[0]['is_pinned']}).eq('id', post_id).eq('user_nickname', nickname).execute()
-    return JSONResponse({"status": "ok"})
+    
+    # Проверка: можно закреплять только посты типа 'profile'
+    res = supabase.table('posts').select('is_pinned, post_type').eq('id', post_id).eq('user_nickname', nickname).execute()
+    if res.data and res.data[0]['post_type'] == 'profile':
+        supabase.table('posts').update({"is_pinned": not res.data[0]['is_pinned']}).eq('id', post_id).execute()
+        return JSONResponse({"status": "ok"})
+    
+    return JSONResponse({"status": "error", "msg": "Cannot pin general posts"}, status_code=400)
 
 @app.get("/bugreport", response_class=HTMLResponse)
 def bugreport_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     username = ""
     reports = []
-    
     if nickname:
         res = supabase.table('users').select('username').eq('nickname', nickname).execute()
-        if res.data:
-            username = res.data[0]['username']
-            
+        if res.data: username = res.data[0]['username']
         rep_res = supabase.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
         reports = rep_res.data
-    
     return bugreport_html(username, reports, lang)
 
 @app.post("/bugreport", response_class=HTMLResponse)
-def bugreport_submit(
-    name: str = Form(...), content: str = Form(...),
-    nickname: str = Cookie(None), lang: str = Cookie("ru")
-):
-    data = {
-        "name": name,
-        "content": content,
-        "status": "Принято" if lang == "ru" else "Accepted"
-    }
-    if nickname:
-        data["user_nickname"] = nickname
-        
+def bugreport_submit(name: str = Form(...), content: str = Form(...), nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    data = {"name": name, "content": content, "status": "Принято" if lang == "ru" else "Accepted"}
+    if nickname: data["user_nickname"] = nickname
     supabase.table('bug_reports').insert(data).execute()
     return RedirectResponse(url="/bugreport", status_code=303)
 
@@ -834,9 +869,9 @@ def logout():
 @app.get("/{nickname}", response_class=HTMLResponse)
 def public_profile(nickname: str, lang: str = Cookie("ru")):
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
-    if not user_res.data: 
-        return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
+    if not user_res.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
     
+    # На странице профиля видны ВСЕ посты пользователя (и общие, и профильные)
     posts_res = supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
     return public_profile_html(nickname, user_res.data[0], posts_res.data, lang)
 
