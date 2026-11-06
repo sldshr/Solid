@@ -33,7 +33,12 @@ LOCALES = {
         "username_label": "Имя пользователя", "nickname_label": "Никнейм",
         "bugreport_title": "Баг-репорт", "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы",
         "bugreport_send": "Отправить", "bugreport_my": "Мои заявки",
-        "status_accepted": "Принято", "status_working": "В работе", "status_fixed": "Исправлено", "status_rejected": "Отклонено"
+        "status_accepted": "Принято", "status_working": "В работе", "status_fixed": "Исправлено", "status_rejected": "Отклонено",
+        "privacy_title": "Политика конфиденциальности",
+        "privacy_text": "1. Сбор информации. Мы собираем только те данные, которые вы добровольно предоставляете при регистрации (имя пользователя, никнейм).<br><br>2. Использование данных. Ваши данные используются исключительно для обеспечения работы сайта и аутентификации.<br><br>3. Безопасность. Мы принимаем необходимые меры для защиты ваших данных от несанкционированного доступа.<br><br>4. Cookies. Сайт использует cookies для сохранения сессии входа и выбранного языка интерфейса.<br><br>5. Ваши права. Вы можете в любой момент изменить или удалить свои данные в профиле.",
+        "privacy_agree": "Я согласен с",
+        "privacy_link": "Политикой конфиденциальности",
+        "alert_privacy": "Вы должны принять политику конфиденциальности!"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -53,7 +58,12 @@ LOCALES = {
         "username_label": "Username", "nickname_label": "Nickname",
         "bugreport_title": "Bug Report", "bugreport_name": "Your Name", "bugreport_desc": "Issue Description",
         "bugreport_send": "Send", "bugreport_my": "My Reports",
-        "status_accepted": "Accepted", "status_working": "In Progress", "status_fixed": "Fixed", "status_rejected": "Rejected"
+        "status_accepted": "Accepted", "status_working": "In Progress", "status_fixed": "Fixed", "status_rejected": "Rejected",
+        "privacy_title": "Privacy Policy",
+        "privacy_text": "1. Information Collection. We only collect data you voluntarily provide during registration (username, nickname).<br><br>2. Data Usage. Your data is used solely to ensure the site's operation and authentication.<br><br>3. Security. We take necessary measures to protect your data from unauthorized access.<br><br>4. Cookies. The site uses cookies to maintain your login session and chosen interface language.<br><br>5. Your Rights. You can change or delete your data in your profile at any time.",
+        "privacy_agree": "I agree to the",
+        "privacy_link": "Privacy Policy",
+        "alert_privacy": "You must accept the Privacy Policy!"
     }
 }
 
@@ -117,8 +127,9 @@ def get_css():
         .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
         .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
         
-        .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 18px; font-weight: bold; }
-        .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+        .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
+        .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
+        .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
 
         .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -161,8 +172,10 @@ def get_css():
         .lang-btn:hover { background: #a9a9a9; color: black; }
         .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
+        
+        /* Белая страница для политики конфиденциальности */
+        .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; }
 
-        /* Красный текст ошибки */
         .error-msg {
             color: #ff4d4d;
             font-weight: bold;
@@ -170,7 +183,7 @@ def get_css():
             text-align: right;
             width: 100%;
             margin-top: 10px;
-            min-height: 20px; /* Чтобы не прыгала верстка */
+            min-height: 20px;
         }
 
         #overlay {
@@ -200,7 +213,7 @@ def get_css():
     </style>
     """
 
-# --- JS (AJAX, БЕЗ ЛОГОВ) ---
+# --- JS ---
 def get_js_logic(lang):
     return f"""
     <script>
@@ -309,6 +322,10 @@ def auth_html(lang: str, error_msg: str = ""):
                         </div>
                         <label class="captcha-container">
                             <input type="checkbox" name="captcha" required> {t('captcha', lang)}
+                        </label>
+                        <label class="captcha-container" style="background: #8c8c8c; margin-top:2px;">
+                            <input type="checkbox" name="privacy" required> 
+                            <span>{t('privacy_agree', lang)} <a href="/privacy" target="_blank" class="privacy-link">{t('privacy_link', lang)}</a></span>
                         </label>
                         <button type="submit">{t('register_btn', lang)}</button>
                     </form>
@@ -475,6 +492,11 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
                         <button type="submit" style="background: #4da6ff; color: white; margin-top: 10px;">{t('save_changes', lang)}</button>
                         <a href="/dashboard" class="btn" style="background: #a9a9a9;">{t('cancel', lang)}</a>
                     </form>
+                    
+                    <div class="lang-switch" style="margin-top: 20px;">
+                        <a href="/set_lang/ru?next=/dashboard/edit" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
+                        <a href="/set_lang/en?next=/dashboard/edit" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -586,6 +608,11 @@ def bugreport_html(username: str, reports: list, lang: str):
                 </div>
                 
                 <a href="/dashboard" class="btn" style="background: #a9a9a9; margin-top: 10px;">{t('cancel', lang)}</a>
+                
+                <div class="lang-switch" style="margin-top: 20px;">
+                    <a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
+                    <a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
+                </div>
             </div>
         </div>
 
@@ -594,6 +621,41 @@ def bugreport_html(username: str, reports: list, lang: str):
             {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
         </div>
         {get_overlay_html()}
+    </body>
+    </html>
+    """
+
+def privacy_html(lang: str):
+    return f"""
+    <!DOCTYPE html>
+    <html lang="{lang}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{t('privacy_title', lang)}</title>
+        {get_css()}
+    </head>
+    <body>
+        <div class="dashboard-container" style="justify-content: center;">
+            <div class="main-content" style="max-width: 800px;">
+                <div class="posts-area">
+                    <h2 style="color: white; text-align: center; margin-bottom: 20px;">{t('privacy_title', lang)}</h2>
+                    <div class="privacy-content">
+                        {t('privacy_text', lang)}
+                    </div>
+                    <a href="/" class="btn" style="background: #a9a9a9; margin-top: 20px;">{t('back_home', lang)}</a>
+                    
+                    <div class="lang-switch" style="margin-top: 20px;">
+                        <a href="/set_lang/ru?next=/privacy" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
+                        <a href="/set_lang/en?next=/privacy" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="footer">
+            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
+            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
+        </div>
     </body>
     </html>
     """
@@ -615,13 +677,19 @@ def index(nickname: str = Cookie(None), lang: str = Cookie("ru")):
             return RedirectResponse(url="/dashboard", status_code=303)
     return auth_html(lang)
 
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page(lang: str = Cookie("ru")):
+    return privacy_html(lang)
+
 @app.post("/register")
 def register(
     username: str = Form(...), nickname: str = Form(...), password: str = Form(...),
-    re_pass: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")
+    re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), lang: str = Cookie("ru")
 ):
     if not captcha: 
         return auth_html(lang, t('alert_captcha', lang))
+    if not privacy: 
+        return auth_html(lang, t('alert_privacy', lang))
     if password != re_pass: 
         return auth_html(lang, t('alert_pass_mismatch', lang))
     
