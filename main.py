@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, Cookie, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from supabase import create_client, Client
 import uvicorn
 import html
@@ -13,7 +13,7 @@ SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- СЛОВАРИ ПЕРЕВОДА (i18n) ---
+# --- ПЕРЕВОДЫ (i18n) ---
 LOCALES = {
     "ru": {
         "reg": "Регистрация", "login": "Вход", "username": "юзернейм", "nickname": "никнейм",
@@ -29,7 +29,12 @@ LOCALES = {
         "user_not_found": "Пользователь не найден.", "alert_captcha": "Подтвердите, что вы не робот!",
         "alert_pass_mismatch": "Пароли не совпадают!", "alert_nick_taken": "Такой никнейм уже занят!",
         "alert_bad_login": "Неверный никнейм или пароль!", "alert_desc_long": "Описание не должно превышать 300 символов!",
-        "link_profile": "(Ссылка)", "avatar": "Аватарка", "cancel": "Отмена"
+        "link_profile": "(Ссылка)", "avatar": "Аватарка", "cancel": "Отмена",
+        "username_label": "Имя пользователя", "nickname_label": "Никнейм",
+        "loading_init": "Инициализация...", "loading_send": "Отправка запроса...",
+        "loading_wait": "Ожидание ответа БД...", "loading_ok": "Успешно!",
+        "loading_err": "Ошибка:", "loading_reload": "Перезагрузка страницы...",
+        "post_created": "Пост создан", "post_deleted": "Пост удален"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -45,7 +50,12 @@ LOCALES = {
         "user_not_found": "User not found.", "alert_captcha": "Please confirm you are not a robot!",
         "alert_pass_mismatch": "Passwords do not match!", "alert_nick_taken": "Nickname is already taken!",
         "alert_bad_login": "Invalid nickname or password!", "alert_desc_long": "Description must not exceed 300 characters!",
-        "link_profile": "(Link)", "avatar": "Avatar", "cancel": "Cancel"
+        "link_profile": "(Link)", "avatar": "Avatar", "cancel": "Cancel",
+        "username_label": "Username", "nickname_label": "Nickname",
+        "loading_init": "Initializing...", "loading_send": "Sending request...",
+        "loading_wait": "Waiting for DB response...", "loading_ok": "Success!",
+        "loading_err": "Error:", "loading_reload": "Reloading page...",
+        "post_created": "Post created", "post_deleted": "Post deleted"
     }
 }
 
@@ -68,7 +78,7 @@ def format_date(iso_str: str) -> str:
 SVG_EYE = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
 SVG_EYE_OFF = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 
-# --- CSS СТИЛИ ---
+# --- CSS ---
 def get_css():
     return """
     <style>
@@ -145,10 +155,39 @@ def get_css():
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
 
+        /* Улучшенные кнопки языков */
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-        .lang-btn { background: #a9a9a9; border: 2px solid black; color: black; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold;}
-        .lang-btn.active { background: black; color: white; }
-        .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px;}
+        .lang-btn { 
+            background: transparent; 
+            border: 2px solid #a9a9a9; 
+            color: #a9a9a9; 
+            padding: 8px 15px; 
+            width: auto; 
+            font-size: 16px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: all 0.2s;
+        }
+        .lang-btn:hover { background: #a9a9a9; color: black; }
+        .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
+        .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
+
+        /* Оверлей загрузки */
+        #overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); z-index: 9999; flex-direction: column;
+            justify-content: center; align-items: center; color: #00ff00; font-family: monospace;
+        }
+        .spinner {
+            border: 8px solid #333; border-top: 8px solid #00ff00; border-radius: 50%;
+            width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #log-box {
+            text-align: left; width: 80%; max-width: 500px; height: 150px; overflow-y: auto;
+            background: #111; padding: 15px; border: 1px solid #333; white-space: pre-wrap;
+            font-size: 14px; line-height: 1.4;
+        }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -165,7 +204,101 @@ def get_css():
     </style>
     """
 
-# --- HTML ШАБЛОНЫ ---
+# --- JS ДЛЯ AJAX И ЛОГОВ ---
+def get_js_logic(lang):
+    return f"""
+    <script>
+        const msgInit = "{t('loading_init', lang)}";
+        const msgSend = "{t('loading_send', lang)}";
+        const msgWait = "{t('loading_wait', lang)}";
+        const msgOk = "{t('loading_ok', lang)}";
+        const msgErr = "{t('loading_err', lang)}";
+        const msgReload = "{t('loading_reload', lang)}";
+
+        function log(text, isError = false) {{
+            const box = document.getElementById('log-box');
+            const color = isError ? '#ff4d4d' : '#00ff00';
+            box.innerHTML += `<span style="color: ${{color}}">> ${{text}}</span><br>`;
+            box.scrollTop = box.scrollHeight;
+        }}
+
+        function showOverlay() {{
+            document.getElementById('overlay').style.display = 'flex';
+            document.getElementById('log-box').innerHTML = '';
+        }}
+
+        async function handleCreatePost(event) {{
+            event.preventDefault();
+            showOverlay();
+            log(msgInit);
+            
+            const form = event.target;
+            const formData = new FormData(form);
+            
+            try {{
+                log(msgSend + " POST /create_post");
+                const res = await fetch('/create_post', {{ method: 'POST', body: formData }});
+                log(msgWait);
+                
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                
+                const data = await res.json();
+                log(msgOk + " ID: " + data.id);
+                log(msgReload);
+                setTimeout(() => window.location.reload(), 800);
+            }} catch (e) {{
+                log(msgErr + " " + e.message, true);
+                setTimeout(() => document.getElementById('overlay').style.display = 'none', 3000);
+            }}
+        }}
+
+        async function handleDeletePost(postId, btn) {{
+            if (!confirm("{t('confirm_delete', lang)}")) return;
+            showOverlay();
+            log(msgInit);
+            
+            try {{
+                log(msgSend + " POST /delete_post/" + postId);
+                const res = await fetch('/delete_post/' + postId, {{ method: 'POST' }});
+                log(msgWait);
+                
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                
+                log(msgOk + " " + "{t('post_deleted', lang)}");
+                log(msgReload);
+                setTimeout(() => window.location.reload(), 800);
+            }} catch (e) {{
+                log(msgErr + " " + e.message, true);
+                setTimeout(() => document.getElementById('overlay').style.display = 'none', 3000);
+            }}
+        }}
+
+        function togglePassword(inputId, btn) {{
+            const input = document.getElementById(inputId);
+            if (input.type === "password") {{
+                input.type = "text";
+                btn.innerHTML = `{SVG_EYE_OFF}`;
+            }} else {{
+                input.type = "password";
+                btn.innerHTML = `{SVG_EYE}`;
+            }}
+        }}
+
+        function updateCounter(el) {{
+            document.getElementById('char-count').innerText = el.value.length + ' / 300';
+        }}
+    </script>
+    """
+
+def get_overlay_html():
+    return """
+    <div id="overlay">
+        <div class="spinner"></div>
+        <div id="log-box"></div>
+    </div>
+    """
+
+# --- HTML ГЕНЕРАТОРЫ ---
 
 def auth_html(lang: str):
     return f"""
@@ -176,20 +309,7 @@ def auth_html(lang: str):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('login', lang)} / {t('reg', lang)}</title>
         {get_css()}
-        <script>
-            const eyeSvg = `{SVG_EYE}`;
-            const eyeOffSvg = `{SVG_EYE_OFF}`;
-            function togglePassword(inputId, btn) {{
-                const input = document.getElementById(inputId);
-                if (input.type === "password") {{
-                    input.type = "text";
-                    btn.innerHTML = eyeOffSvg;
-                }} else {{
-                    input.type = "password";
-                    btn.innerHTML = eyeSvg;
-                }}
-            }}
-        </script>
+        {get_js_logic(lang)}
     </head>
     <body>
         <div class="container">
@@ -245,6 +365,7 @@ def auth_html(lang: str):
             {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
             {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
         </div>
+        {get_overlay_html()}
     </body>
     </html>
     """
@@ -261,21 +382,14 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
         post_date = format_date(post.get('created_at', ''))
         
         pinned_class = "pinned" if is_pinned else ""
+        pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
         
         actions = ""
         if show_actions and viewer_is_owner:
-            pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
-            delete_text = t('delete', lang)
-            confirm_text = t('confirm_delete', lang)
-            
             actions = f'''
             <div class="post-actions">
-                <form action="/pin_post/{post_id}" method="post" style="margin:0;">
-                    <button type="submit" class="action-btn pin-btn">{pin_text}</button>
-                </form>
-                <form action="/delete_post/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('{confirm_text}');">
-                    <button type="submit" class="action-btn">{delete_text}</button>
-                </form>
+                <button onclick="handlePinPost('{post_id}')" class="action-btn pin-btn">{pin_text}</button>
+                <button onclick="handleDeletePost('{post_id}')" class="action-btn">{t('delete', lang)}</button>
             </div>
             '''
             
@@ -301,8 +415,29 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
     
-    # Выносим f-строку из f-строки, чтобы избежать SyntaxError
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
+    
+    # Добавляем JS для закрепления постов (чтобы не делать форму)
+    js_pin = f"""
+    <script>
+        async function handlePinPost(postId) {{
+            showOverlay();
+            log(msgInit);
+            try {{
+                log(msgSend + " POST /pin_post/" + postId);
+                const res = await fetch('/pin_post/' + postId, {{ method: 'POST' }});
+                log(msgWait);
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                log(msgOk + " Pinned status toggled");
+                log(msgReload);
+                setTimeout(() => window.location.reload(), 800);
+            }} catch (e) {{
+                log(msgErr + " " + e.message, true);
+                setTimeout(() => document.getElementById('overlay').style.display = 'none', 3000);
+            }}
+        }}
+    </script>
+    """
     
     return f"""
     <!DOCTYPE html>
@@ -312,6 +447,8 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('profile', lang)}</title>
         {get_css()}
+        {get_js_logic(lang)}
+        {js_pin}
     </head>
     <body>
         <div class="dashboard-container">
@@ -319,10 +456,10 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
                 <h2>{t('profile', lang)}</h2>
                 {avatar_html}
                 <div class="info-card">
-                    <b>Username:</b><br>{html.escape(user_data['username'])}
+                    <b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}
                 </div>
                 <div class="info-card">
-                    <b>Nickname:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a>
+                    <b>{t('nickname_label', lang)}:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a>
                 </div>
                 {desc_block}
                 <div class="info-card">
@@ -342,8 +479,8 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
 
             <div class="main-content">
                 <div class="create-post-box">
-                    <form action="/create_post" method="post" style="display: flex; flex-direction: column; gap: 5px;">
-                        <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500"></textarea>
+                    <form id="create-form" onsubmit="handleCreatePost(event)">
+                        <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500" style="margin-bottom: 5px;"></textarea>
                         <button type="submit">{t('create_post_btn', lang)}</button>
                     </form>
                 </div>
@@ -359,6 +496,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
             {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
             {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
         </div>
+        {get_overlay_html()}
     </body>
     </html>
     """
@@ -375,11 +513,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('edit_profile', lang)}</title>
         {get_css()}
-        <script>
-            function updateCounter(el) {{
-                document.getElementById('char-count').innerText = el.value.length + ' / 300';
-            }}
-        </script>
+        {get_js_logic(lang)}
     </head>
     <body>
         <div class="dashboard-container" style="justify-content: center;">
@@ -393,7 +527,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('avatar', lang)}</div>
                         <input type="file" name="avatar" accept="image/*" style="background: #a9a9a9; padding: 10px; font-size: 16px;">
                         
-                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">Username</div>
+                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('username_label', lang)}</div>
                         <input type="text" name="username" value="{html.escape(user_data['username'])}" required style="background: #a9a9a9; padding: 12px; font-size: 18px;">
                         
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('description', lang)}</div>
@@ -411,6 +545,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
             {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
             {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
         </div>
+        {get_overlay_html()}
     </body>
     </html>
     """
@@ -420,7 +555,6 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
     
-    # Выносим f-строку из f-строки
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
     return f"""
@@ -431,6 +565,7 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{t('profile', lang)} {html.escape(nickname)}</title>
         {get_css()}
+        {get_js_logic(lang)}
     </head>
     <body>
         <div class="dashboard-container">
@@ -438,10 +573,10 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
                 <h2>{t('profile', lang)}</h2>
                 {avatar_html}
                 <div class="info-card">
-                    <b>Username:</b><br>{html.escape(user_data['username'])}
+                    <b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}
                 </div>
                 <div class="info-card">
-                    <b>Nickname:</b><br>{html.escape(nickname)}
+                    <b>{t('nickname_label', lang)}:</b><br>{html.escape(nickname)}
                 </div>
                 {desc_block}
                 <div class="info-card">
@@ -468,6 +603,7 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
             {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
             {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
         </div>
+        {get_overlay_html()}
     </body>
     </html>
     """
@@ -579,26 +715,35 @@ async def edit_profile_action(
     supabase.table('users').update(update_data).eq('nickname', nickname).execute()
     return RedirectResponse(url="/dashboard", status_code=303)
 
+# --- AJAX МАРШРУТЫ (ВОЗВРАЩАЮТ JSON, А НЕ REDIRECT) ---
 @app.post("/create_post")
 def create_post(content: str = Form(...), nickname: str = Cookie(None)):
-    if not nickname: return RedirectResponse(url="/", status_code=303)
-    if content.strip():
-        supabase.table('posts').insert({"user_nickname": nickname, "content": content.strip(), "is_pinned": False}).execute()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
+    if not content.strip(): return JSONResponse({"status": "error", "msg": "Empty content"}, status_code=400)
+    
+    res = supabase.table('posts').insert({
+        "user_nickname": nickname, "content": content.strip(), "is_pinned": False
+    }).execute()
+    
+    post_id = res.data[0]['id'] if res.data else ""
+    return JSONResponse({"status": "ok", "id": post_id})
 
 @app.post("/delete_post/{post_id}")
 def delete_post(post_id: str, nickname: str = Cookie(None)):
-    if not nickname: return RedirectResponse(url="/", status_code=303)
+    if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
+    
     supabase.table('posts').delete().eq('id', post_id).eq('user_nickname', nickname).execute()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return JSONResponse({"status": "ok"})
 
 @app.post("/pin_post/{post_id}")
 def pin_post(post_id: str, nickname: str = Cookie(None)):
-    if not nickname: return RedirectResponse(url="/", status_code=303)
+    if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
+    
     res = supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
     if res.data:
         supabase.table('posts').update({"is_pinned": not res.data[0]['is_pinned']}).eq('id', post_id).eq('user_nickname', nickname).execute()
-    return RedirectResponse(url="/dashboard", status_code=303)
+    
+    return JSONResponse({"status": "ok"})
 
 @app.get("/logout")
 def logout():
