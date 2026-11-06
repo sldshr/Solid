@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, Depends
+from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from supabase import create_async_client, AsyncClient
@@ -35,7 +35,7 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     try:
-        if len(hashed) == 64:
+        if len(hashed) == 64: # Совместимость со старым SHA-256
             import hashlib
             if hashlib.sha256(password.encode()).hexdigest() == hashed:
                 return True
@@ -49,10 +49,16 @@ def get_csrf_token(request: Request) -> str:
         token = secrets.token_hex(32)
     return token
 
-def validate_csrf(request: Request, csrf_token: str = Form(...)):
+def check_csrf(request: Request, form_token: str) -> bool:
     cookie_token = request.cookies.get("csrf_token")
-    if not cookie_token or cookie_token != csrf_token:
-        raise HTTPException(status_code=403, detail="CSRF Token Validation Failed")
+    header_token = request.headers.get("X-CSRF-Token")
+    if not cookie_token:
+        return False
+    return cookie_token == form_token or cookie_token == header_token
+
+def set_csrf_cookie(response: Response, token: str, request: Request):
+    if not request.cookies.get("csrf_token"):
+        response.set_cookie(key="csrf_token", value=token, httponly=True, samesite="lax")
 
 # --- ФОНОВЫЕ ЗАДАЧИ ДЛЯ БД ---
 async def sync_create_post(post_data: dict):
@@ -61,7 +67,6 @@ async def sync_create_post(post_data: dict):
     except Exception as e:
         print(f"DB Create Error: {e}")
     finally:
-        # Стираем из оперативки, когда точно записали в БД
         pending_posts.pop(post_data["id"], None)
 
 async def sync_delete_post(post_id: str):
@@ -87,8 +92,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     error_msg = "Заполните все обязательные поля!" if lang == "ru" else "Please fill all required fields!"
     token = get_csrf_token(request)
     response = HTMLResponse(content=auth_html(lang, error_msg, token), status_code=422)
-    if not request.cookies.get("csrf_token"):
-        response.set_cookie(key="csrf_token", value=token, httponly=True, samesite="lax")
+    set_csrf_cookie(response, token, request)
     return response
 
 # --- ПЕРЕВОДЫ ---
@@ -281,7 +285,6 @@ def get_js_logic(lang, csrf_token):
             document.getElementById('char-count').innerText = el.value.length + ' / 300';
         }}
 
-        // Мгновенное создание поста
         async function handleCreatePost(event) {{
             event.preventDefault();
             const form = event.target;
@@ -296,7 +299,6 @@ def get_js_logic(lang, csrf_token):
             const emptyMsg = postsArea.querySelector('.post-item:not(.post-wrapper)');
             if (emptyMsg) emptyMsg.remove();
 
-            // Создаем DOM элемент моментально
             const wrapper = document.createElement('div');
             wrapper.className = 'post-wrapper';
             wrapper.id = 'post-' + postId;
@@ -311,24 +313,22 @@ def get_js_logic(lang, csrf_token):
                 </div>
             `;
             
-            // Вставляем в начало (или после закрепленных)
             postsArea.insertBefore(wrapper, postsArea.children[1]);
             form.reset();
 
-            // Отправляем на сервер в фоне
             const formData = new FormData(form);
             formData.append('content', content);
             formData.append('client_id', postId);
+            formData.append('csrf_token', csrfToken); // <--- Добавлена передача CSRF в тело
 
             try {{
                 const res = await fetch('/create_post', {{ 
                     method: 'POST', 
                     body: formData,
-                    headers: {{ 'X-CSRF-Token': csrfToken }}
+                    headers: {{ 'X-CSRF-Token': csrfToken }} // <--- И в заголовок
                 }});
                 if (!res.ok) throw new Error("Server Error");
             }} catch (e) {{
-                // Если ошибка, удаляем пост из UI
                 wrapper.remove();
                 alert("Failed to save post: " + e.message);
                 if (postsArea.querySelectorAll('.post-wrapper').length === 0) {{
@@ -337,57 +337,57 @@ def get_js_logic(lang, csrf_token):
             }}
         }}
 
-        // Мгновенное удаление
         async function handleDeletePost(postId, btn) {{
             if (!confirm(texts.confirm)) return;
             const wrapper = document.getElementById('post-' + postId);
-            const originalHTML = wrapper.innerHTML;
             
-            // Мгновенно скрываем
             wrapper.style.opacity = '0';
             setTimeout(() => wrapper.style.display = 'none', 300);
+
+            const formData = new FormData();
+            formData.append('csrf_token', csrfToken);
 
             try {{
                 const res = await fetch('/delete_post/' + postId, {{ 
                     method: 'POST',
+                    body: formData,
                     headers: {{ 'X-CSRF-Token': csrfToken }}
                 }});
                 if (!res.ok) throw new Error("Server Error");
                 wrapper.remove();
             }} catch (e) {{
-                // Возвращаем обратно при ошибке
                 wrapper.style.opacity = '1';
                 wrapper.style.display = 'block';
                 alert("Failed to delete: " + e.message);
             }}
         }}
 
-        // Мгновенное закрепление
         async function handlePinPost(postId, btn) {{
             const wrapper = document.getElementById('post-' + postId);
             const postItem = wrapper.querySelector('.post-item');
             const isPinned = postItem.classList.contains('pinned');
             
-            // Меняем UI моментально
             if (isPinned) {{
                 postItem.classList.remove('pinned');
                 btn.innerText = texts.pin;
             }} else {{
                 postItem.classList.add('pinned');
                 btn.innerText = texts.unpin;
-                // Перемещаем вверх
                 const postsArea = document.querySelector('.posts-area');
                 postsArea.insertBefore(wrapper, postsArea.children[1]);
             }}
 
+            const formData = new FormData();
+            formData.append('csrf_token', csrfToken);
+
             try {{
                 const res = await fetch('/pin_post/' + postId, {{ 
                     method: 'POST',
+                    body: formData,
                     headers: {{ 'X-CSRF-Token': csrfToken }}
                 }});
                 if (!res.ok) throw new Error("Server Error");
             }} catch (e) {{
-                // Откат при ошибке
                 if (isPinned) {{
                     postItem.classList.add('pinned');
                     btn.innerText = texts.unpin;
@@ -515,20 +515,13 @@ def render_posts(posts_list, lang, csrf_token, show_actions=False):
     return html_out
 
 def merge_memory_posts(db_posts, nickname):
-    # 1. Убираем удаленные
     filtered = [p for p in db_posts if p['id'] not in deleted_posts]
-    
-    # 2. Применяем закрепления из памяти
     for p in filtered:
         if p['id'] in pinned_posts:
             p['is_pinned'] = pinned_posts[p['id']]
-            
-    # 3. Добавляем те, что еще не успели записаться в БД
     for p_id, p_data in pending_posts.items():
         if p_data['user_nickname'] == nickname:
             filtered.append(p_data)
-            
-    # 4. Сортируем: сначала закрепленные, потом по дате (новые сверху)
     filtered.sort(key=lambda x: (not x['is_pinned'], x['created_at']), reverse=True)
     return filtered
 
@@ -759,20 +752,26 @@ async def index(request: Request, nickname: str = Cookie(None), lang: str = Cook
         res = await supabase.table('users').select('nickname').eq('nickname', nickname).execute()
         if res.data: return RedirectResponse(url="/dashboard", status_code=303)
     response = HTMLResponse(content=auth_html(lang, "", token))
-    response.set_cookie(key="csrf_token", value=token, httponly=True, samesite="lax")
+    set_csrf_cookie(response, token, request)
     return response
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy_page(request: Request, lang: str = Cookie("ru")):
-    return privacy_html(lang, get_csrf_token(request))
+    token = get_csrf_token(request)
+    response = HTMLResponse(content=privacy_html(lang, token))
+    set_csrf_cookie(response, token, request)
+    return response
 
 @app.post("/register", response_class=HTMLResponse)
 async def register(
     request: Request, response: Response, username: str = Form(...), nickname: str = Form(...), 
     password: str = Form(...), re_pass: str = Form(...), captcha: str = Form(None), 
-    privacy: str = Form(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+    privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")
 ):
     token = get_csrf_token(request)
+    if not check_csrf(request, csrf_token):
+        return auth_html(lang, "CSRF Error", token)
+
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
     if password != re_pass: return auth_html(lang, t('alert_pass_mismatch', lang), token)
@@ -792,9 +791,12 @@ async def register(
 @app.post("/login", response_class=HTMLResponse)
 async def login(
     request: Request, response: Response, nickname: str = Form(...), password: str = Form(...), 
-    captcha: str = Form(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+    captcha: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")
 ):
     token = get_csrf_token(request)
+    if not check_csrf(request, csrf_token):
+        return auth_html(lang, "CSRF Error", token)
+
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     
     res = await supabase.table('users').select('password').eq('nickname', nickname).execute()
@@ -816,23 +818,24 @@ async def dashboard(request: Request, nickname: str = Cookie(None), lang: str = 
     if not user_res.data: return RedirectResponse(url="/", status_code=303)
     
     posts_res = await supabase.table('posts').select('*').eq('user_nickname', nickname).execute()
-    # Склеиваем БД с оперативкой (Client-Realtime Cache)
     posts = merge_memory_posts(posts_res.data, nickname)
     
-    return dashboard_html(nickname, user_res.data[0], posts, lang, get_csrf_token(request))
+    token = get_csrf_token(request)
+    response = HTMLResponse(content=dashboard_html(nickname, user_res.data[0], posts, lang, token))
+    set_csrf_cookie(response, token, request)
+    return response
 
 # --- AJAX РОУТЫ С ФОНОВОЙ ЗАПИСЬЮ В БД ---
 @app.post("/create_post")
 async def create_post(
-    request: Request, content: str = Form(...), client_id: str = Form(None), nickname: str = Cookie(None)
+    request: Request, content: str = Form(...), client_id: str = Form(None), 
+    csrf_token: str = Form(None), nickname: str = Cookie(None)
 ):
-    if request.headers.get("X-CSRF-Token") != request.cookies.get("csrf_token"):
+    if not check_csrf(request, csrf_token):
         return JSONResponse({"status": "error", "msg": "CSRF failed"}, status_code=403)
-    
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
     if not content.strip(): return JSONResponse({"status": "error", "msg": "Empty content"}, status_code=400)
     
-    # Генерируем ID на сервере, если клиент не прислал (для оптимистичного UI)
     post_id = client_id if client_id else str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
     
@@ -841,47 +844,35 @@ async def create_post(
         "is_pinned": False, "created_at": now_iso
     }
     
-    # Сохраняем в оперативку
     pending_posts[post_id] = post_data
-    
-    # Запускаем фоновую запись в Supabase
     asyncio.create_task(sync_create_post(post_data))
     
     return JSONResponse({"status": "ok", "id": post_id})
 
 @app.post("/delete_post/{post_id}")
-async def delete_post(post_id: str, nickname: str = Cookie(None), request: Request = None):
-    if request.headers.get("X-CSRF-Token") != request.cookies.get("csrf_token"):
+async def delete_post(post_id: str, request: Request, csrf_token: str = Form(None), nickname: str = Cookie(None)):
+    if not check_csrf(request, csrf_token):
         return JSONResponse({"status": "error", "msg": "CSRF failed"}, status_code=403)
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
     
-    # Добавляем в оперативку (скрываем из UI при след. запросе)
     deleted_posts.add(post_id)
-    
-    # Фоновое удаление
     asyncio.create_task(sync_delete_post(post_id))
     
     return JSONResponse({"status": "ok"})
 
 @app.post("/pin_post/{post_id}")
-async def pin_post(post_id: str, nickname: str = Cookie(None), request: Request = None):
-    if request.headers.get("X-CSRF-Token") != request.cookies.get("csrf_token"):
+async def pin_post(post_id: str, request: Request, csrf_token: str = Form(None), nickname: str = Cookie(None)):
+    if not check_csrf(request, csrf_token):
         return JSONResponse({"status": "error", "msg": "CSRF failed"}, status_code=403)
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
     
-    # Получаем текущий статус (из кэша или БД)
     current_status = pinned_posts.get(post_id)
     if current_status is None:
         res = await supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
-        if res.data:
-            current_status = res.data[0]['is_pinned']
+        if res.data: current_status = res.data[0]['is_pinned']
             
     new_status = not current_status if current_status is not None else False
-    
-    # Сохраняем в оперативку
     pinned_posts[post_id] = new_status
-    
-    # Фоновое обновление
     asyncio.create_task(sync_pin_post(post_id, new_status))
     
     return JSONResponse({"status": "ok"})
@@ -891,15 +882,22 @@ async def edit_profile_page(request: Request, nickname: str = Cookie(None), lang
     if not nickname: return RedirectResponse(url="/", status_code=303)
     user_res = await supabase.table('users').select('username, description').eq('nickname', nickname).execute()
     if not user_res.data: return RedirectResponse(url="/", status_code=303)
-    return edit_profile_html(nickname, user_res.data[0], lang, get_csrf_token(request))
+    token = get_csrf_token(request)
+    response = HTMLResponse(content=edit_profile_html(nickname, user_res.data[0], lang, token))
+    set_csrf_cookie(response, token, request)
+    return response
 
 @app.post("/dashboard/edit", response_class=HTMLResponse)
 async def edit_profile_action(
     request: Request, response: Response, username: str = Form(...), description: str = Form(""),
-    nickname: str = Cookie(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+    csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")
 ):
+    token = get_csrf_token(request)
+    if not check_csrf(request, csrf_token):
+        return HTMLResponse(f"<script>alert('CSRF Error'); window.history.back();</script>")
     if not nickname: return RedirectResponse(url="/", status_code=303)
     if len(description) > 300: return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
+    
     await supabase.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute()
     return RedirectResponse(url="/dashboard", status_code=303)
 
@@ -912,13 +910,19 @@ async def bugreport_page(request: Request, nickname: str = Cookie(None), lang: s
         if res.data: username = res.data[0]['username']
         rep_res = await supabase.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
         reports = rep_res.data
-    return bugreport_html(username, reports, lang, get_csrf_token(request))
+    token = get_csrf_token(request)
+    response = HTMLResponse(content=bugreport_html(username, reports, lang, token))
+    set_csrf_cookie(response, token, request)
+    return response
 
 @app.post("/bugreport", response_class=HTMLResponse)
 async def bugreport_submit(
     request: Request, response: Response, name: str = Form(...), content: str = Form(...),
-    nickname: str = Cookie(None), lang: str = Cookie("ru"), csrf_token: str = Depends(validate_csrf)
+    csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")
 ):
+    if not check_csrf(request, csrf_token):
+        return HTMLResponse(f"<script>alert('CSRF Error'); window.history.back();</script>")
+
     data = {"name": name, "content": content, "status": "Принято" if lang == "ru" else "Accepted"}
     if nickname: data["user_nickname"] = nickname
     await supabase.table('bug_reports').insert(data).execute()
@@ -938,7 +942,10 @@ async def public_profile(nickname: str, request: Request, lang: str = Cookie("ru
     posts_res = await supabase.table('posts').select('*').eq('user_nickname', nickname).execute()
     posts = merge_memory_posts(posts_res.data, nickname)
     
-    return public_profile_html(nickname, user_res.data[0], posts, lang, get_csrf_token(request))
+    token = get_csrf_token(request)
+    response = HTMLResponse(content=public_profile_html(nickname, user_res.data[0], posts, lang, token))
+    set_csrf_cookie(response, token, request)
+    return response
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
