@@ -1,558 +1,519 @@
-"""
-MiniDiscord — минималистичный мессенджер на FastAPI + WebSocket.
+import uvicorn
+from fastapi import FastAPI, Request, Form, Depends, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse
+from jinja2 import Template
+from typing import Optional
 
-Особенности:
-  • Всё состояние сервера — в оперативке (nickname -> channel).
-  • Сообщения НЕ хранятся на сервере: они копятся в браузере клиента
-    (по каналам) и просто транслируются в реальном времени.
-  • Вход по нику, список каналов, участники, чат.
+app = FastAPI()
 
-Запуск:
-  pip install fastapi uvicorn
-  python -m uvicorn main:app --reload
-  Открыть http://127.0.0.1:8000
-"""
-import time
-from typing import Dict, List
+# ================= БАЗА ДАННЫХ В ОПЕРАТИВКЕ =================
+# { "email": {"name": "...", "surname": "...", "password": "...", "status": "..."} }
+users_db = {}
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+# ================= ШАБЛОНЫ =================
 
-app = FastAPI(title="MiniDiscord")
-
-CHANNELS: List[str] = ["general", "random", "tech", "offtopic"]
-
-# Единственное серверное состояние, живущее в оперативке:
-#   nickname -> {"channel": str}
-users: Dict[str, dict] = {}
-
-
-class Manager:
-    """Управляет WebSocket-подключениями и рассылкой."""
-
-    def __init__(self) -> None:
-        # ws -> {"nickname": str, "channel": str}
-        self.active: Dict[WebSocket, dict] = {}
-
-    async def connect(self, ws: WebSocket, nickname: str, channel: str) -> None:
-        self.active[ws] = {"nickname": nickname, "channel": channel}
-        users[nickname] = {"channel": channel}
-        await self.broadcast_system(channel, f"{nickname} вошёл в чат")
-        await self.broadcast_userlist(channel)
-
-    async def disconnect(self, ws: WebSocket) -> None:
-        info = self.active.pop(ws, None)
-        if not info:
-            return
-        users.pop(info["nickname"], None)
-        await self.broadcast_system(info["channel"], f"{info['nickname']} покинул чат")
-        await self.broadcast_userlist(info["channel"])
-
-    async def broadcast_channel(self, channel: str, payload: dict) -> None:
-        """Шлём всем, кто сейчас в канале, добавляя поле channel
-        (чтобы клиент корректно маршрутизировал сообщения)."""
-        for ws, info in list(self.active.items()):
-            if info["channel"] != channel:
-                continue
-            try:
-                await ws.send_json({**payload, "channel": channel})
-            except Exception:
-                pass
-
-    async def broadcast_system(self, channel: str, text: str) -> None:
-        await self.broadcast_channel(channel, {"type": "system", "text": text})
-
-    async def broadcast_userlist(self, channel: str) -> None:
-        names = [i["nickname"] for i in self.active.values() if i["channel"] == channel]
-        await self.broadcast_channel(channel, {"type": "users", "users": names})
-
-
-manager = Manager()
-
-
-# ──────────────────────────────────────────────────────────────────────
-#  REST-эндпоинты
-# ──────────────────────────────────────────────────────────────────────
-
-@app.get("/api/channels")
-async def get_channels() -> List[str]:
-    return CHANNELS
-
-
-@app.get("/api/users")
-async def get_users() -> List[str]:
-    return list(users.keys())
-
-
-# ──────────────────────────────────────────────────────────────────────
-#  WebSocket
-# ──────────────────────────────────────────────────────────────────────
-
-@app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket, nickname: str = "", channel: str = "general"):
-    # ВАЖНО: сначала accept(), потом уже можно закрывать/слать что-либо.
-    await ws.accept()
-
-    nickname = nickname.strip()[:32]
-    if not nickname or nickname in users:
-        await ws.close(code=4000)  # ник занят / пустой
-        return
-    if channel not in CHANNELS:
-        channel = CHANNELS[0]
-
-    await manager.connect(ws, nickname, channel)
-    try:
-        while True:
-            data = await ws.receive_json()
-            mtype = data.get("type")
-
-            if mtype == "message":
-                text = (data.get("text") or "").strip()
-                if not text:
-                    continue
-                await manager.broadcast_channel(
-                    channel,
-                    {
-                        "type": "message",
-                        "user": nickname,
-                        "text": text[:2000],
-                        "ts": time.time(),
-                    },
-                )
-
-            elif mtype == "switch":
-                new_ch = data.get("channel")
-                if new_ch in CHANNELS and new_ch != channel:
-                    old_ch = channel
-                    channel = new_ch
-                    manager.active[ws]["channel"] = new_ch
-                    users[nickname]["channel"] = new_ch
-                    await manager.broadcast_system(old_ch, f"{nickname} покинул чат")
-                    await manager.broadcast_userlist(old_ch)
-                    await manager.broadcast_system(new_ch, f"{nickname} вошёл в чат")
-                    await manager.broadcast_userlist(new_ch)
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await manager.disconnect(ws)
-
-
-# ──────────────────────────────────────────────────────────────────────
-#  Встроенный клиент (одна страница, тёмная тема в стиле Discord)
-# ──────────────────────────────────────────────────────────────────────
-
-HTML = r"""<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MiniDiscord</title>
+BASE_CSS = """
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background: #36393f;
-    color: #dcddde;
-    overflow: hidden;
-  }
-
-  /* ── Login ─────────────────────────────────────────── */
-  #login {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    background: radial-gradient(circle at 50% 20%, #40444b 0%, #2f3136 70%);
-  }
-  #login h1 { color: #fff; font-size: 40px; letter-spacing: 1px; margin-bottom: 4px; }
-  #login .subtitle { color: #96989d; font-size: 14px; margin-bottom: 16px; text-align: center; max-width: 340px; }
-  #login input {
-    width: 320px; padding: 12px 16px; font-size: 15px;
-    background: #202225; border: 1px solid #202225; border-radius: 6px;
-    color: #dcddde; outline: none; transition: border-color .15s;
-  }
-  #login input:focus { border-color: #5865f2; }
-  #login button {
-    width: 320px; padding: 12px; font-size: 15px; font-weight: 600;
-    background: #5865f2; color: #fff; border: none; border-radius: 6px;
-    cursor: pointer; transition: background .15s;
-  }
-  #login button:hover { background: #4752c4; }
-  #err { color: #ed4245; min-height: 20px; font-size: 14px; }
-
-  /* ── App layout ────────────────────────────────────── */
-  #app { display: none; height: 100vh; }
-  #app.visible { display: flex; }
-
-  #sidebar {
-    width: 260px; flex-shrink: 0; background: #2f3136;
-    display: flex; flex-direction: column;
-  }
-  #server-name {
-    padding: 16px; font-weight: 700; color: #fff; font-size: 15px;
-    border-bottom: 1px solid #202225; letter-spacing: .3px;
-  }
-  #channels { flex: 1; overflow-y: auto; padding: 8px; }
-  .channel {
-    padding: 8px 12px; border-radius: 4px; cursor: pointer;
-    color: #96989d; font-size: 15px; user-select: none;
-    transition: background .1s, color .1s;
-  }
-  .channel::before { content: "#  "; color: #72767d; }
-  .channel:hover { background: #393c43; color: #dcddde; }
-  .channel.active { background: #393c43; color: #fff; }
-
-  #users-header {
-    padding: 12px 16px 6px; color: #96989d;
-    font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
-    font-weight: 700; border-top: 1px solid #202225;
-  }
-  #user-list { max-height: 45%; overflow-y: auto; padding: 0 8px 12px; }
-  .user-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 8px; border-radius: 4px; font-size: 14px;
-  }
-  .user-row:hover { background: #393c43; }
-  .avatar-small {
-    width: 28px; height: 28px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; color: #fff; font-size: 12px; flex-shrink: 0;
-  }
-
-  /* ── Main chat ─────────────────────────────────────── */
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #header {
-    padding: 14px 20px; border-bottom: 1px solid #202225;
-    display: flex; align-items: center; justify-content: space-between;
-    flex-shrink: 0;
-  }
-  #channel-name { font-weight: 700; color: #fff; font-size: 16px; }
-  #conn-status { font-size: 12px; color: #72767d; }
-  #conn-status.online { color: #3ba55d; }
-  #conn-status.online::before { content: "●  "; }
-
-  #messages { flex: 1; overflow-y: auto; padding: 16px 20px; }
-  .msg {
-    display: flex; gap: 12px; padding: 4px 8px; margin: 0 -8px 4px;
-    border-radius: 4px;
-  }
-  .msg:hover { background: #32353b; }
-  .avatar {
-    width: 40px; height: 40px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; color: #fff; font-size: 14px; flex-shrink: 0;
-  }
-  .msg-body { flex: 1; min-width: 0; }
-  .msg-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
-  .msg-user { font-weight: 600; color: #fff; font-size: 15px; }
-  .msg-time { color: #72767d; font-size: 11px; }
-  .msg-text {
-    color: #dcddde; font-size: 15px; line-height: 1.45;
-    word-wrap: break-word; white-space: pre-wrap;
-  }
-  .system {
-    color: #72767d; font-style: italic; font-size: 13px;
-    text-align: center; padding: 6px 0;
-  }
-
-  #input-area { padding: 0 20px 20px; flex-shrink: 0; }
-  #input-wrap {
-    background: #40444b; border-radius: 8px;
-    display: flex; align-items: center; padding: 0 8px;
-  }
-  #msg-input {
-    flex: 1; background: transparent; border: none; outline: none;
-    color: #dcddde; font-size: 15px; padding: 14px 10px;
-    font-family: inherit;
-  }
-  #msg-input::placeholder { color: #72767d; }
-  #send {
-    background: none; border: none; color: #b9bbbe;
-    cursor: pointer; font-size: 20px; padding: 8px 12px;
-    transition: color .15s;
-  }
-  #send:hover { color: #fff; }
-
-  /* scrollbars */
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-thumb { background: #202225; border-radius: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-</style>
-</head>
-<body>
-
-<!-- Логин -->
-<div id="login">
-  <h1>MiniDiscord</h1>
-  <div class="subtitle">Войдите по нику — сообщения хранятся только у вас в браузере</div>
-  <input id="nick" placeholder="Ваш ник" maxlength="32" autocomplete="off" autofocus>
-  <button id="enter">Войти</button>
-  <div id="err"></div>
-</div>
-
-<!-- Приложение -->
-<div id="app">
-  <aside id="sidebar">
-    <div id="server-name">MiniDiscord</div>
-    <div id="channels"></div>
-    <div id="users-header">В сети</div>
-    <div id="user-list"></div>
-  </aside>
-  <main id="main">
-    <header id="header">
-      <div id="channel-name">#general</div>
-      <div id="conn-status">подключение…</div>
-    </header>
-    <div id="messages"></div>
-    <div id="input-area">
-      <div id="input-wrap">
-        <input id="msg-input" placeholder="Написать сообщение…" maxlength="2000" autocomplete="off">
-        <button id="send" title="Отправить">➤</button>
-      </div>
-    </div>
-  </main>
-</div>
-
-<script>
-/* ─────────── Состояние клиента ─────────── */
-let nickname = "";
-let currentChannel = "general";
-let channels = [];
-let localMessages = {};   // {channel: [ {type, user, text, ts} ]}
-let ws = null;
-let shouldReconnect = false;
-
-/* ─────────── Утилиты ─────────── */
-function colorFor(name) {
-  const palette = ["#5865f2","#3ba55d","#ed4245","#faa61a",
-                   "#eb459e","#00b0f4","#9b59b6","#e67e22"];
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
-  return palette[Math.abs(h) % palette.length];
-}
-function fmtTime(ts) {
-  return new Date(ts * 1000).toLocaleTimeString("ru-RU",
-    { hour: "2-digit", minute: "2-digit" });
-}
-
-/* ─────────── Сборка DOM сообщения ─────────── */
-function buildMessageEl(msg) {
-  if (msg.type === "system") {
-    const d = document.createElement("div");
-    d.className = "system";
-    d.textContent = msg.text;
-    return d;
-  }
-  const el = document.createElement("div");
-  el.className = "msg";
-
-  const av = document.createElement("div");
-  av.className = "avatar";
-  av.style.background = colorFor(msg.user);
-  av.textContent = (msg.user || "?")[0].toUpperCase();
-
-  const body = document.createElement("div");
-  body.className = "msg-body";
-
-  const head = document.createElement("div");
-  head.className = "msg-head";
-  const u = document.createElement("span");
-  u.className = "msg-user"; u.textContent = msg.user;
-  const t = document.createElement("span");
-  t.className = "msg-time"; t.textContent = fmtTime(msg.ts);
-  head.append(u, t);
-
-  const txt = document.createElement("div");
-  txt.className = "msg-text"; txt.textContent = msg.text;
-
-  body.append(head, txt);
-  el.append(av, body);
-  return el;
-}
-
-function appendMessageEl(msg) {
-  const box = document.getElementById("messages");
-  box.appendChild(buildMessageEl(msg));
-  box.scrollTop = box.scrollHeight;
-}
-
-function renderMessages() {
-  const box = document.getElementById("messages");
-  box.innerHTML = "";
-  const list = localMessages[currentChannel] || [];
-  for (const m of list) box.appendChild(buildMessageEl(m));
-  box.scrollTop = box.scrollHeight;
-}
-
-function renderChannels() {
-  const box = document.getElementById("channels");
-  box.innerHTML = "";
-  for (const ch of channels) {
-    const el = document.createElement("div");
-    el.className = "channel" + (ch === currentChannel ? " active" : "");
-    el.textContent = ch;
-    el.onclick = () => switchChannel(ch);
-    box.appendChild(el);
-  }
-}
-
-function renderUsers(names) {
-  document.getElementById("users-header").textContent =
-    names.length ? `В сети — ${names.length}` : "В сети";
-  const box = document.getElementById("user-list");
-  box.innerHTML = "";
-  for (const n of names) {
-    const row = document.createElement("div");
-    row.className = "user-row";
-    const dot = document.createElement("div");
-    dot.className = "avatar-small";
-    dot.style.background = colorFor(n);
-    dot.textContent = n[0].toUpperCase();
-    const label = document.createElement("span");
-    label.textContent = n + (n === nickname ? " (вы)" : "");
-    row.append(dot, label);
-    box.appendChild(row);
-  }
-}
-
-function setStatus(ok) {
-  const s = document.getElementById("conn-status");
-  if (ok) { s.className = "online"; s.textContent = "в сети"; }
-  else    { s.className = "";       s.textContent = "переподключение…"; }
-}
-
-/* ─────────── Локальное хранилище сообщений ─────────── */
-function pushMessage(channel, msg) {
-  if (!localMessages[channel]) localMessages[channel] = [];
-  localMessages[channel].push(msg);
-  if (channel === currentChannel) appendMessageEl(msg);
-}
-
-/* ─────────── Обработка входящих ─────────── */
-function handleIncoming(data) {
-  const ch = data.channel || currentChannel;
-  if (data.type === "message") {
-    pushMessage(ch, { type: "message", user: data.user, text: data.text, ts: data.ts });
-  } else if (data.type === "system") {
-    pushMessage(ch, { type: "system", text: data.text, ts: Date.now() / 1000 });
-  } else if (data.type === "users") {
-    if (ch === currentChannel) renderUsers(data.users);
-  }
-}
-
-/* ─────────── WebSocket ─────────── */
-function connectWS() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(
-    `${proto}://${location.host}/ws` +
-    `?nickname=${encodeURIComponent(nickname)}&channel=${currentChannel}`
-  );
-
-  ws.onopen = () => {
-    shouldReconnect = true;
-    document.getElementById("login").style.display = "none";
-    document.getElementById("app").classList.add("visible");
-    document.getElementById("channel-name").textContent = "#" + currentChannel;
-    setStatus(true);
-    renderChannels();
-    renderMessages();
-    renderUsers([]);
-    document.getElementById("msg-input").focus();
-  };
-
-  ws.onmessage = (e) => {
-    try { handleIncoming(JSON.parse(e.data)); }
-    catch (err) { console.error(err); }
-  };
-
-  ws.onclose = (e) => {
-    setStatus(false);
-    if (e.code === 4000) {
-      const appVisible = document.getElementById("app").classList.contains("visible");
-      shouldReconnect = false;
-      if (appVisible) {
-        alert("Соединение разорвано: этот ник только что занял другой пользователь.");
-        location.reload();
-      } else {
-        document.getElementById("err").textContent = "Этот ник уже занят";
-      }
-      return;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        background-color: #f0f0f0;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+        font-size: 11px;
+        color: #000;
+        line-height: 1.4;
+        -webkit-font-smoothing: antialiased;
     }
-    if (shouldReconnect) setTimeout(connectWS, 2000);
-  };
-}
+    a { color: #2b587a; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul { list-style-position: inside; }
 
-/* ─────────── Действия пользователя ─────────── */
-async function start() {
-  const nick = document.getElementById("nick").value.trim();
-  if (!nick) { document.getElementById("err").textContent = "Введите ник"; return; }
+    /* ===== ШАПКА ===== */
+    .header {
+        background: #4e545a;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+    }
+    .header-logo {
+        display: flex; align-items: center; color: #fff;
+        font-size: 20px; font-weight: bold; letter-spacing: -0.5px;
+        text-decoration: none;
+    }
+    .header-logo:hover { text-decoration: none; }
+    .header-logo svg { width: 24px; height: 24px; margin-right: 8px; }
+    .header-nav { display: flex; gap: 20px; }
+    .header-nav a { color: #fff; font-size: 12px; text-decoration: none; }
+    .header-nav a:hover { text-decoration: underline; }
 
-  try {
-    const r = await fetch("/api/channels");
-    if (!r.ok) throw new Error("bad status");
-    channels = await r.json();
-  } catch {
-    document.getElementById("err").textContent = "Сервер недоступен";
-    return;
-  }
+    /* ===== ОСНОВНОЙ БЛОК ===== */
+    .main-box {
+        display: flex; background: #fff;
+        border: 1px solid #ccc; border-top: none;
+        min-height: 340px;
+    }
+    .left-col {
+        width: 250px; border-right: 1px solid #ccc;
+        padding: 15px; flex-shrink: 0;
+    }
+    .right-col { flex: 1; display: flex; flex-direction: column; }
 
-  nickname = nick;
-  connectWS();
-}
+    /* ===== ФОРМЫ ===== */
+    .form-group { margin-bottom: 8px; }
+    .form-group label { display: block; color: #666; margin-bottom: 3px; font-size: 11px; }
+    .form-group input[type="text"], .form-group input[type="password"], .form-group input[type="email"], .form-group input[type="date"] {
+        width: 100%; height: 24px; border: 1px solid #999; padding: 0 5px;
+        font-family: inherit; font-size: 11px; outline: none;
+    }
+    .btn {
+        display: block; width: 100%; height: 26px;
+        background: linear-gradient(180deg, #a8a8a8 0%, #7a7a7a 100%);
+        border: 1px solid #666; color: #fff; font-family: inherit; font-size: 11px;
+        font-weight: bold; text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+        cursor: pointer; margin-bottom: 10px; border-radius: 2px;
+    }
+    .btn:hover { background: linear-gradient(180deg, #b8b8b8 0%, #8a8a8a 100%); }
+    .btn:active { background: #7a7a7a; box-shadow: inset 0 2px 3px rgba(0,0,0,0.3); }
+    .btn-inline { display: inline-block; width: auto; padding: 0 15px; margin: 0 5px; }
 
-function switchChannel(ch) {
-  if (ch === currentChannel) return;
-  currentChannel = ch;
-  document.getElementById("channel-name").textContent = "#" + ch;
-  renderChannels();
-  renderUsers([]);
-  renderMessages();
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "switch", channel: ch }));
-  }
-  document.getElementById("msg-input").focus();
-}
+    /* ===== РЕГИСТРАЦИЯ (Контент) ===== */
+    .welcome-banner { background: #fdf5d0; border-bottom: 1px solid #e3d9a7; padding: 6px 15px; font-weight: bold; font-size: 11px; }
+    .welcome-content { padding: 15px; font-size: 11px; line-height: 1.6; }
+    .welcome-content p { margin-bottom: 10px; }
+    
+    .reg-title { font-size: 16px; font-weight: bold; color: #2b587a; margin-bottom: 15px; border-bottom: 1px solid #e3e3e3; padding-bottom: 5px; }
+    .reg-header-text { display: flex; align-items: flex-start; margin-bottom: 15px; }
+    .reg-icon { width: 32px; height: 32px; background: #4e545a; border-radius: 4px; margin-right: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .reg-icon svg { width: 20px; height: 20px; fill: #fff; }
+    
+    .reg-section-title { font-weight: bold; color: #2b587a; margin: 15px 0 10px 0; border-bottom: 1px solid #e3e3e3; padding-bottom: 3px; }
+    
+    .reg-form-row { display: flex; align-items: center; margin-bottom: 8px; }
+    .reg-form-row label { width: 140px; text-align: right; margin-right: 10px; color: #666; font-size: 11px; }
+    .reg-form-row input[type="text"], .reg-form-row input[type="email"], .reg-form-row input[type="password"], .reg-form-row input[type="date"], .reg-form-row select {
+        width: 250px; height: 24px; border: 1px solid #ccc; padding: 0 5px; font-family: inherit; font-size: 11px;
+    }
+    .reg-form-row input:focus, .reg-form-row select:focus { border-color: #999; }
+    
+    .captcha-box { width: 120px; height: 40px; background: #333; display: flex; align-items: center; justify-content: center; margin-right: 10px; overflow: hidden; position: relative; }
+    .captcha-text { color: #ff3333; font-family: 'Courier New', Courier, monospace; font-weight: bold; font-size: 20px; transform: scaleY(1.5) rotate(-5deg); text-shadow: 1px 1px 0 #000; }
+    
+    /* ===== ПОДВАЛ ===== */
+    .footer { text-align: center; padding: 20px 0 40px 0; color: #666; font-size: 11px; line-height: 1.7; }
+    .footer a { color: #2b587a; }
+    .footer-langs { margin: 5px 0 10px 0; display: flex; justify-content: center; align-items: center; gap: 5px; }
+    .flag { display: inline-block; width: 16px; height: 11px; border: 1px solid #ccc; }
+    .flag-ru { background: linear-gradient(to bottom, #fff 33%, #0039a6 33%, #0039a6 66%, #d52b1e 66%); }
+    .flag-by { background: linear-gradient(to bottom, #c8313e 33%, #fff 33%, #fff 66%, #c8313e 66%); }
+    .flag-ua { background: linear-gradient(to bottom, #0057b7 50%, #ffd700 50%); }
+    .footer-debian { margin-top: 10px; display: flex; justify-content: center; align-items: center; gap: 5px; color: #d70a53; font-weight: bold; font-size: 16px; }
 
-function sendMessage() {
-  const input = document.getElementById("msg-input");
-  const text = input.value.trim();
-  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ type: "message", text }));
-  input.value = "";
-  input.focus();
-}
-
-/* ─────────── Слушатели ─────────── */
-document.getElementById("enter").onclick = start;
-document.getElementById("nick").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") start();
-});
-document.getElementById("send").onclick = sendMessage;
-document.getElementById("msg-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-</script>
-</body>
-</html>
+    /* ===== ЛИЧНЫЙ КАБИНЕТ ===== */
+    .vk-container { width: 800px; margin: 15px auto; display: flex; gap: 15px; }
+    .vk-sidebar { width: 200px; flex-shrink: 0; }
+    .vk-profile-card { background: #fff; border: 1px solid #d3d9de; padding: 10px; margin-bottom: 10px; }
+    .vk-avatar { width: 100%; height: 180px; background: #a9bacd; border: 1px solid #b2c1d2; margin-bottom: 10px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='35' r='16' fill='%23fff' fill-opacity='0.7'/%3E%3Cellipse cx='50' cy='96' rx='32' ry='31' fill='%23fff' fill-opacity='0.7'/%3E%3C/svg%3E");
+        background-size: cover; background-position: center; }
+    .vk-name { font-weight: bold; font-size: 13px; color: #2b587a; margin-bottom: 3px; }
+    .vk-status { font-size: 11px; color: #888; font-style: italic; margin-bottom: 5px; }
+    .vk-menu { list-style: none; background: #fff; border: 1px solid #d3d9de; }
+    .vk-menu li { border-bottom: 1px solid #f0f2f5; }
+    .vk-menu li:last-child { border-bottom: none; }
+    .vk-menu a { display: block; padding: 8px 12px; font-size: 12px; color: #2b587a; text-decoration: none; }
+    .vk-menu a:hover { background: #f0f4f8; }
+    .vk-menu li.active a { background: #e5ebf1; font-weight: bold; border-left: 2px solid #4e545a; padding-left: 10px; }
+    .vk-menu .count { color: #999; font-size: 11px; }
+    .vk-content { flex: 1; min-width: 0; }
+    .vk-panel { background: #fff; border: 1px solid #d3d9de; margin-bottom: 15px; }
+    .vk-panel-head { background: #f0f2f5; border-bottom: 1px solid #e2e7ec; padding: 8px 15px; font-weight: bold; color: #2b587a; font-size: 12px; }
+    .vk-panel-body { padding: 15px; }
+    .vk-info-row { display: flex; margin-bottom: 6px; font-size: 12px; }
+    .vk-info-row .k { width: 130px; color: #888; }
+    .vk-post { display: flex; padding: 15px; border-bottom: 1px solid #f0f2f5; }
+    .vk-post:last-child { border-bottom: none; }
+    .vk-post-ava { width: 40px; height: 40px; border-radius: 2px; flex-shrink: 0; background-color: #c9d6e3; margin-right: 10px; }
+    .vk-post-content { flex: 1; }
+    .vk-post-author { font-weight: bold; color: #2b587a; font-size: 12px; margin-bottom: 2px; }
+    .vk-post-date { color: #999; font-weight: normal; font-size: 11px; }
+    .vk-post-text { font-size: 12px; margin-bottom: 8px; }
+    .vk-post-actions { font-size: 11px; color: #888; }
+    .vk-post-actions a { color: #2b587a; margin-right: 8px; }
+    .vk-post-input { padding: 15px; background: #fafafa; }
+    .vk-post-input textarea { width: 100%; height: 50px; border: 1px solid #ccc; padding: 5px; font-family: inherit; font-size: 12px; resize: vertical; margin-bottom: 8px; outline: none; }
+    .vk-btn { background: #5e82a8; border: 1px solid #3f6895; color: #fff; padding: 5px 15px; font-size: 11px; cursor: pointer; border-radius: 2px; font-weight: bold; font-family: inherit; }
+    .vk-btn:hover { background: #6d92b8; }
+    
+    .vk-header-bar { background: #4e545a; height: 42px; display: flex; align-items: center; padding: 0 20px; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .vk-header-bar .logo { font-size: 18px; font-weight: bold; margin-right: 20px; color: #fff; text-decoration: none; display: flex; align-items: center; }
+    .vk-header-bar .logo svg { width: 20px; height: 20px; margin-right: 6px; }
+    .vk-header-bar .search { width: 200px; height: 22px; border: 1px solid #3b3f43; padding: 0 5px; font-family: inherit; font-size: 11px; background: #fff; }
+    .vk-header-bar .right-menu { margin-left: auto; font-size: 12px; }
+    .vk-header-bar .right-menu a { color: #fff; margin-left: 15px; text-decoration: none; }
+    
+    .error-msg { color: #d00; font-size: 11px; margin-bottom: 10px; background: #ffe6e6; padding: 5px; border: 1px solid #fcc; display: none; }
+    .error-msg.show { display: block; }
+</style>
 """
 
+HEADER_HTML = """
+<div class="header">
+    <a href="/" class="header-logo">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="11" fill="#d17128"/>
+            <circle cx="12" cy="12" r="8" fill="#fff"/>
+            <circle cx="12" cy="12" r="5" fill="#d17128"/>
+        </svg>
+        OpenVK
+    </a>
+    <div class="header-nav">
+        <a href="/">вход</a>
+        <a href="/register">регистрация</a>
+        <a href="#" onclick="alert('Раздел помощи в разработке')">помощь</a>
+    </div>
+</div>
+"""
 
-# ──────────────────────────────────────────────────────────────────────
-#  Отдача клиента  ←  вот этого не хватало в прошлый раз
-# ──────────────────────────────────────────────────────────────────────
+FOOTER_HTML = """
+<div class="footer">
+    <a href="#">об инстанции</a> &nbsp; <a href="#">правила</a> &nbsp; <a href="#">блог</a> &nbsp; <a href="#">помощь</a> &nbsp; <a href="#">разработчикам</a> &nbsp; <a href="#">приватность</a>
+    <div class="footer-langs">
+        <span class="flag flag-ru"></span> <span class="flag flag-by"></span> <span class="flag flag-ua"></span> &nbsp; <a href="#">all languages »</a>
+    </div>
+    <div>OpenVK Altair Preview (839745a-nightly) | PHP: 8.4.27 | DB: 8.0.34-26</div>
+    <div>OpenVK является любительской разработкой и никак не связан с ВКонтакте и компанией ООО "ВК"</div>
+    <div style="margin-top: 5px;">время подавать напитки и вершить судьбы</div>
+    <div style="margin-top: 5px;"><a href="#">Mastodon</a> | <a href="#">Telegram</a> | <a href="#">GitHub</a> | <a href="#">Discord</a> | <a href="#">Email</a></div>
+    <div class="footer-debian">
+        <svg viewBox="0 0 100 100" width="24" height="24">
+            <path d="M46,18 C52,16 60,18 64,24 C68,30 69,38 66,46 C66,46 67,49 68,53 C69,57 68,62 65,65 C61,68 55,67 52,63 C49,59 48,53 49,47 C51,41 55,36 55,30 C55,25 51,21 46,18 Z" fill="#d70a53"/>
+            <path d="M50,15 C48,14 45,14 42,16 C35,20 30,30 32,40 C34,50 42,58 52,62 C62,66 73,65 80,60 C87,55 92,45 90,35 C88,25 80,17 70,15 C63,13 55,14 50,15 Z M52,18 C58,18 65,20 70,24 C76,28 80,35 80,42 C80,50 75,57 68,61 C60,65 50,65 43,61 C36,57 30,50 30,42 C30,34 35,26 42,22 C45,19 49,18 52,18 Z" fill="#d70a53"/>
+            <path d="M55,35 C58,35 60,38 60,40 C60,43 57,45 55,45 C52,45 50,42 50,40 C50,37 52,35 55,35 Z" fill="#d70a53"/>
+        </svg>
+        debian <span style="font-size: 10px; color: #666; font-weight: normal; margin-top: 5px;">POWERED</span>
+    </div>
+    <div style="margin-top: 5px;">Хостинг предоставлен провайдером <a href="#">Senko Digital</a></div>
+</div>
+"""
+
+# ================= ШАБЛОНЫ СТРАНИЦ =================
+
+LOGIN_PAGE = Template(BASE_CSS + """
+<div style="display: flex; flex-direction: column; align-items: center; padding-top: 20px;">
+    <div style="width: 780px;">
+        """ + HEADER_HTML + """
+        <div class="main-box">
+            <div class="left-col">
+                <form action="/login" method="POST">
+                    <div class="error-msg {{ 'show' if error else '' }}">{{ error if error else '' }}</div>
+                    <div class="form-group">
+                        <label>Электронная почта:</label>
+                        <input type="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль:</label>
+                        <input type="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn">Войти</button>
+                    <a href="/register" class="btn" style="text-align: center; line-height: 24px; text-decoration: none;">Регистрация</a>
+                    <a href="#" onclick="alert('Восстановление пароля в разработке')" style="display: inline-block; margin-top: 5px; color: #2b587a;">Забыли пароль?</a>
+                </form>
+            </div>
+            <div class="right-col">
+                <div class="welcome-banner">Добро пожаловать</div>
+                <div class="welcome-content">
+                    <p><b>OpenVK - универсальное средство поиска коллег основанное на структуре ВКонтакте.</b><br>
+                    Мы хотим, чтобы друзья, однокурсники, одноклассники, соседи и коллеги всегда могли быть в контакте.<br>
+                    С помощью этого сайта Вы можете:</p>
+                    <ul>
+                        <li>Найти людей, с которыми Вы когда-либо учились, работали или отдыхали.</li>
+                        <li>Узнать больше о людях, которые Вас окружают, и найти новых друзей.</li>
+                        <li>Всегда оставаться в контакте с теми, кто Вам дорог.</li>
+                        <li>Продвигать своё творчество и/или мнение.</li>
+                    </ul>
+                    <div style="width: 250px; margin: 10px auto; background: #fdf5d0; border: 1px solid #e3d9a7; text-align: center; padding: 8px;">
+                        <b>Экскурсия по сайту</b><br><span style="color: #555; font-size: 10px;">О том, что Вас ждет после регистрации</span>
+                    </div>
+                </div>
+                <div style="text-align: center; padding-bottom: 15px; margin-top: auto;">
+                    <a href="/login" class="btn btn-inline" onclick="document.forms[0].submit(); return false;">Войти</a>
+                    <a href="/register" class="btn btn-inline" style="text-decoration: none; line-height: 24px;">Регистрация</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    """ + FOOTER_HTML + """
+</div>
+""")
+
+REGISTER_PAGE = Template(BASE_CSS + """
+<div style="display: flex; flex-direction: column; align-items: center; padding-top: 20px;">
+    <div style="width: 780px;">
+        """ + HEADER_HTML + """
+        <div class="main-box">
+            <!-- Левая колонка (как на скрине) -->
+            <div class="left-col">
+                <form action="/login" method="POST">
+                    <div class="form-group">
+                        <label>Электронная почта:</label>
+                        <input type="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль:</label>
+                        <input type="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn">Войти</button>
+                    <a href="/register" class="btn" style="text-align: center; line-height: 24px; text-decoration: none;">Регистрация</a>
+                    <a href="#" onclick="alert('Восстановление пароля в разработке')" style="display: inline-block; margin-top: 5px; color: #2b587a;">Забыли пароль?</a>
+                </form>
+            </div>
+            
+            <!-- Правая колонка (Форма регистрации) -->
+            <div class="right-col">
+                <div class="welcome-banner">Регистрация</div>
+                <div class="welcome-content">
+                    <div class="reg-title">Регистрация</div>
+                    
+                    <div class="reg-header-text">
+                        <div class="reg-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="11" fill="#fff"/>
+                                <circle cx="12" cy="12" r="8" fill="#4e545a"/>
+                                <circle cx="12" cy="12" r="5" fill="#fff"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <b>OpenVK - универсальное средство поиска коллег основанное на структуре ВКонтакте.</b><br>
+                            Мы хотим, чтобы друзья, однокурсники, одноклассники, соседи и коллеги всегда могли быть в контакте.
+                        </div>
+                    </div>
+
+                    <form action="/register" method="POST">
+                        <div class="error-msg {{ 'show' if error else '' }}">{{ error if error else '' }}</div>
+                        
+                        <div class="reg-section-title">Основное</div>
+                        
+                        <div class="reg-form-row">
+                            <label>Имя:</label>
+                            <input type="text" name="name" required>
+                        </div>
+                        <div class="reg-form-row">
+                            <label>Фамилия:</label>
+                            <input type="text" name="surname" required>
+                        </div>
+                        <div class="reg-form-row">
+                            <label>Электронная почта:</label>
+                            <input type="email" name="email" required>
+                        </div>
+                        <div class="reg-form-row">
+                            <label>Пароль:</label>
+                            <input type="password" name="password" required>
+                        </div>
+
+                        <div class="reg-section-title">Остальное</div>
+                        
+                        <div class="reg-form-row">
+                            <label>День рождения:</label>
+                            <input type="date" name="birthday">
+                        </div>
+                        <div class="reg-form-row">
+                            <label>Местоположение:</label>
+                            <select name="location">
+                                <option value="он его">он его</option>
+                                <option value="Москва">Москва</option>
+                                <option value="Санкт-Петербург">Санкт-Петербург</option>
+                                <option value="Новосибирск">Новосибирск</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Капча -->
+                        <div class="reg-form-row">
+                            <label>CAPTCHA:</label>
+                            <div class="captcha-box">
+                                <span class="captcha-text">ЕВРАЗ1</span>
+                            </div>
+                            <input type="text" name="captcha" placeholder="Enter 8 characters" required style="width: 150px;">
+                        </div>
+
+                        <div class="reg-form-row" style="margin-top: 15px;">
+                            <label></label>
+                            <div style="display: flex; align-items: center; width: 250px;">
+                                <input type="checkbox" name="agree" required style="margin-right: 5px;">
+                                <span>Я согласен с политикой конфиденциальности и правилами сайта</span>
+                            </div>
+                        </div>
+
+                        <div class="reg-form-row" style="margin-top: 15px;">
+                            <label></label>
+                            <button type="submit" class="btn" style="width: 120px; margin: 0;">Регистрация</button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    """ + FOOTER_HTML + """
+</div>
+""")
+
+PROFILE_PAGE = Template(BASE_CSS + """
+<div class="vk-header-bar">
+    <a href="/profile" class="logo">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="11" fill="#d17128"/>
+            <circle cx="12" cy="12" r="8" fill="#fff"/>
+            <circle cx="12" cy="12" r="5" fill="#d17128"/>
+        </svg>
+        OpenVK
+    </a>
+    <input type="text" class="search" placeholder="Поиск">
+    <div class="right-menu">
+        <a href="/profile" style="font-weight:bold;">{{ user.name }} {{ user.surname }}</a>
+        <a href="/logout">Выход</a>
+    </div>
+</div>
+
+<div class="vk-container">
+    <div class="vk-sidebar">
+        <div class="vk-profile-card">
+            <div class="vk-avatar"></div>
+            <div class="vk-name">{{ user.name }} {{ user.surname }}</div>
+            <div class="vk-status">Всем привет! :)</div>
+            <a href="#" class="vk-edit-link" style="font-size: 10px; color: #999;">изменить статус</a>
+        </div>
+        
+        <ul class="vk-menu">
+            <li class="active"><a href="/profile">Моя страница</a></li>
+            <li><a href="#" onclick="alert('Друзья: заглушка')">Друзья <span class="count">24</span></a></li>
+            <li><a href="#" onclick="alert('Фотографии: заглушка')">Фотографии <span class="count">112</span></a></li>
+            <li><a href="#" onclick="alert('Аудиозаписи: заглушка')">Аудиозаписи</a></li>
+            <li><a href="#" onclick="alert('Сообщения: заглушка')">Сообщения <span class="count">3</span></a></li>
+            <li><a href="#" onclick="alert('Настройки: заглушка')">Настройки</a></li>
+        </ul>
+    </div>
+
+    <div class="vk-content">
+        <div class="vk-panel">
+            <div class="vk-panel-head">Моя страница</div>
+            <div class="vk-panel-body">
+                <div class="vk-info-row"><div class="k">Пол:</div><div class="v">мужской</div></div>
+                <div class="vk-info-row"><div class="k">День рождения:</div><div class="v">{{ user.birthday or 'Не указан' }}</div></div>
+                <div class="vk-info-row"><div class="k">Местоположение:</div><div class="v">{{ user.location or 'Не указано' }}</div></div>
+                <div class="vk-info-row"><div class="k">Email:</div><div class="v">{{ user.email }}</div></div>
+                <div class="vk-info-row"><div class="k">О себе:</div><div class="v">Люблю старые интерфейсы, OpenVK и хорошую музыку.</div></div>
+            </div>
+        </div>
+
+        <div class="vk-panel">
+            <div class="vk-panel-head">Стена</div>
+            
+            <div class="vk-post">
+                <div class="vk-post-ava" style="background-color:#8fa8c4;"></div>
+                <div class="vk-post-content">
+                    <div class="vk-post-author">{{ user.name }} {{ user.surname }} <span class="vk-post-date">15 июн 2010 в 14:32</span></div>
+                    <div class="vk-post-text">Наконец-то разобрался с вёрсткой. OpenVK — это что-то невероятное, всё летает :)</div>
+                    <div class="vk-post-actions"><a href="#" onclick="alert('Лайк!')">Мне нравится</a> 12 &nbsp;·&nbsp; <a href="#" onclick="alert('Комментарий')">Комментировать</a> 4</div>
+                </div>
+            </div>
+
+            <div class="vk-post">
+                <div class="vk-post-ava" style="background-color:#c99aa6;"></div>
+                <div class="vk-post-content">
+                    <div class="vk-post-author">Анна Смирнова <span class="vk-post-date">14 июн 2010 в 21:05</span></div>
+                    <div class="vk-post-text">Кто идёт завтра на концерт? Собираемся у метро в семь!</div>
+                    <div class="vk-post-actions"><a href="#" onclick="alert('Лайк!')">Мне нравится</a> 7 &nbsp;·&nbsp; <a href="#" onclick="alert('Комментарий')">Комментировать</a> 2</div>
+                </div>
+            </div>
+
+            <div class="vk-post-input">
+                <textarea placeholder="Что у вас нового?" id="wallText"></textarea>
+                <button class="vk-btn" onclick="alert('Пост отправлен (имитация): ' + document.getElementById('wallText').value); document.getElementById('wallText').value='';">Отправить</button>
+            </div>
+        </div>
+    </div>
+</div>
+""")
+
+
+# ================= РОУТЫ =================
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> str:
-    return HTML
+async def login_page(request: Request, error: Optional[str] = None):
+    # Если уже авторизован - редирект в профиль
+    if request.cookies.get("session_user"):
+        return RedirectResponse(url="/profile", status_code=303)
+    return LOGIN_PAGE.render(error=error)
+
+@app.post("/login")
+async def do_login(email: str = Form(...), password: str = Form(...)):
+    user = users_db.get(email)
+    if not user or user["password"] != password:
+        return RedirectResponse(url="/?error=Неверный+email+или+пароль", status_code=303)
+    
+    response = RedirectResponse(url="/profile", status_code=303)
+    response.set_cookie(key="session_user", value=email, httponly=True)
+    return response
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request, error: Optional[str] = None):
+    return REGISTER_PAGE.render(error=error)
+
+@app.post("/register")
+async def do_register(
+    name: str = Form(...), 
+    surname: str = Form(...), 
+    email: str = Form(...), 
+    password: str = Form(...),
+    birthday: str = Form(""),
+    location: str = Form(""),
+    captcha: str = Form(...),
+    agree: str = Form(None)
+):
+    if email in users_db:
+        return RedirectResponse(url="/register?error=Пользователь+с+таким+email+уже+существует", status_code=303)
+    
+    if not agree:
+        return RedirectResponse(url="/register?error=Необходимо+согласиться+с+правилами", status_code=303)
+        
+    if captcha.lower() != "евраз1":
+        return RedirectResponse(url="/register?error=Неверная+CAPTCHA", status_code=303)
+
+    # Сохраняем в оперативку
+    users_db[email] = {
+        "name": name,
+        "surname": surname,
+        "email": email,
+        "password": password,
+        "birthday": birthday,
+        "location": location,
+        "status": "Всем привет! :)"
+    }
+    
+    # Автоматический вход после регистрации
+    response = RedirectResponse(url="/profile", status_code=303)
+    response.set_cookie(key="session_user", value=email, httponly=True)
+    return response
+
+@app.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request):
+    session_email = request.cookies.get("session_user")
+    if not session_email or session_email not in users_db:
+        return RedirectResponse(url="/", status_code=303)
+    
+    user = users_db[session_email]
+    return PROFILE_PAGE.render(user=user)
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("session_user")
+    return response
 
 
-@app.get("/favicon.ico")
-async def favicon():
-    # Чтобы браузер не спамил 404-ми
-    return HTMLResponse(status_code=204)
+if __name__ == "__main__":
+    print("Сервер запущен! Открой в браузере: http://127.0.0.1:8000")
+    uvicorn.run(app, host="127.0.0.1", port=8000)
