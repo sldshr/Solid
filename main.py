@@ -5,6 +5,8 @@ import uvicorn
 import html
 import hashlib
 from datetime import datetime
+from PIL import Image
+import io
 
 app = FastAPI()
 
@@ -13,7 +15,30 @@ SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- ПЕРЕВОДЫ (i18n) ---
+# --- ФУНКЦИЯ СЖАТИЯ КАРТИНОК ДО 100КБ ---
+def compress_image(file_content: bytes, target_kb: int = 100) -> bytes:
+    img = Image.open(io.BytesIO(file_content))
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    
+    # Уменьшаем размеры, если картинка гигантская (макс 1200px)
+    img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+    
+    output = io.BytesIO()
+    quality = 90
+    img.save(output, format="JPEG", quality=quality)
+    
+    # Крутим качество, пока не влезем в лимит
+    while output.tell() > target_kb * 1024 and quality > 10:
+        output.seek(0)
+        output.truncate()
+        quality -= 10
+        img.save(output, format="JPEG", quality=quality)
+        
+    output.seek(0)
+    return output.read()
+
+# --- ПЕРЕВОДЫ ---
 LOCALES = {
     "ru": {
         "reg": "Регистрация", "login": "Вход", "username": "юзернейм", "nickname": "никнейм",
@@ -31,10 +56,10 @@ LOCALES = {
         "alert_bad_login": "Неверный никнейм или пароль!", "alert_desc_long": "Описание не должно превышать 300 символов!",
         "link_profile": "(Ссылка)", "avatar": "Аватарка", "cancel": "Отмена",
         "username_label": "Имя пользователя", "nickname_label": "Никнейм",
-        "loading_init": "Инициализация...", "loading_send": "Отправка запроса...",
-        "loading_wait": "Ожидание ответа БД...", "loading_ok": "Успешно!",
-        "loading_err": "Ошибка:", "loading_reload": "Перезагрузка страницы...",
-        "post_created": "Пост создан", "post_deleted": "Пост удален"
+        "bugreport_title": "Баг-репорт", "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы",
+        "bugreport_send": "Отправить", "bugreport_my": "Мои заявки",
+        "attach_image": "Прикрепить фото (до 5МБ)",
+        "status_accepted": "Принято", "status_working": "В работе", "status_fixed": "Исправлено", "status_rejected": "Отклонено"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -52,10 +77,10 @@ LOCALES = {
         "alert_bad_login": "Invalid nickname or password!", "alert_desc_long": "Description must not exceed 300 characters!",
         "link_profile": "(Link)", "avatar": "Avatar", "cancel": "Cancel",
         "username_label": "Username", "nickname_label": "Nickname",
-        "loading_init": "Initializing...", "loading_send": "Sending request...",
-        "loading_wait": "Waiting for DB response...", "loading_ok": "Success!",
-        "loading_err": "Error:", "loading_reload": "Reloading page...",
-        "post_created": "Post created", "post_deleted": "Post deleted"
+        "bugreport_title": "Bug Report", "bugreport_name": "Your Name", "bugreport_desc": "Issue Description",
+        "bugreport_send": "Send", "bugreport_my": "My Reports",
+        "attach_image": "Attach photo (max 5MB)",
+        "status_accepted": "Accepted", "status_working": "In Progress", "status_fixed": "Fixed", "status_rejected": "Rejected"
     }
 }
 
@@ -68,8 +93,7 @@ def hash_password(password: str) -> str:
 def format_date(iso_str: str) -> str:
     if not iso_str: return ""
     try:
-        clean_str = iso_str.replace("Z", "+00:00")
-        dt = datetime.fromisoformat(clean_str)
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         return dt.strftime("%d.%m.%Y %H:%M")
     except:
         return iso_str[:10]
@@ -104,7 +128,7 @@ def get_css():
         .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; }
         .input-group { position: relative; display: flex; align-items: center; width: 280px; }
         
-        input[type="text"], input[type="password"], input[type="file"], textarea {
+        input[type="text"], input[type="password"], input[type="file"], textarea, select {
             background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px;
             font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none;
         }
@@ -147,6 +171,7 @@ def get_css():
         .post-item { background: #a9a9a9; padding: 15px; font-size: 18px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         .post-content { margin-bottom: 10px; }
+        .post-image { max-width: 100%; height: auto; border-radius: 5px; margin-bottom: 10px; display: block; }
         .post-date { font-size: 12px; color: #555; text-align: right; border-top: 1px solid #888; padding-top: 5px; }
         
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
@@ -155,39 +180,30 @@ def get_css():
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
 
-        /* Улучшенные кнопки языков */
+        /* Статусы багрепортов */
+        .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
+        .status-Принято, .status-Accepted { background: #4da6ff; }
+        .status-В-работе, .status-In-Progress { background: #f1c40f; }
+        .status-Исправлено, .status-Fixed { background: #2ecc71; }
+        .status-Отклонено, .status-Rejected { background: #e74c3c; }
+
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-        .lang-btn { 
-            background: transparent; 
-            border: 2px solid #a9a9a9; 
-            color: #a9a9a9; 
-            padding: 8px 15px; 
-            width: auto; 
-            font-size: 16px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: all 0.2s;
-        }
+        .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
         .lang-btn:hover { background: #a9a9a9; color: black; }
         .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
 
-        /* Оверлей загрузки */
+        /* Оверлей загрузки (Только спиннер) */
         #overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.85); z-index: 9999; flex-direction: column;
-            justify-content: center; align-items: center; color: #00ff00; font-family: monospace;
+            background: rgba(0, 0, 0, 0.7); z-index: 9999; flex-direction: column;
+            justify-content: center; align-items: center;
         }
         .spinner {
-            border: 8px solid #333; border-top: 8px solid #00ff00; border-radius: 50%;
-            width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 20px;
+            border: 8px solid #fff; border-top: 8px solid transparent; border-radius: 50%;
+            width: 60px; height: 60px; animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #log-box {
-            text-align: left; width: 80%; max-width: 500px; height: 150px; overflow-y: auto;
-            background: #111; padding: 15px; border: 1px solid #333; white-space: pre-wrap;
-            font-size: 14px; line-height: 1.4;
-        }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -204,72 +220,55 @@ def get_css():
     </style>
     """
 
-# --- JS ДЛЯ AJAX И ЛОГОВ ---
+# --- JS (AJAX, БЕЗ ЛОГОВ) ---
 def get_js_logic(lang):
     return f"""
     <script>
-        const msgInit = "{t('loading_init', lang)}";
-        const msgSend = "{t('loading_send', lang)}";
-        const msgWait = "{t('loading_wait', lang)}";
-        const msgOk = "{t('loading_ok', lang)}";
-        const msgErr = "{t('loading_err', lang)}";
-        const msgReload = "{t('loading_reload', lang)}";
-
-        function log(text, isError = false) {{
-            const box = document.getElementById('log-box');
-            const color = isError ? '#ff4d4d' : '#00ff00';
-            box.innerHTML += `<span style="color: ${{color}}">> ${{text}}</span><br>`;
-            box.scrollTop = box.scrollHeight;
-        }}
-
         function showOverlay() {{
             document.getElementById('overlay').style.display = 'flex';
-            document.getElementById('log-box').innerHTML = '';
+        }}
+        function hideOverlay() {{
+            document.getElementById('overlay').style.display = 'none';
         }}
 
         async function handleCreatePost(event) {{
             event.preventDefault();
             showOverlay();
-            log(msgInit);
-            
             const form = event.target;
             const formData = new FormData(form);
             
             try {{
-                log(msgSend + " POST /create_post");
                 const res = await fetch('/create_post', {{ method: 'POST', body: formData }});
-                log(msgWait);
-                
                 if (!res.ok) throw new Error("HTTP " + res.status);
-                
-                const data = await res.json();
-                log(msgOk + " ID: " + data.id);
-                log(msgReload);
-                setTimeout(() => window.location.reload(), 800);
+                window.location.reload();
             }} catch (e) {{
-                log(msgErr + " " + e.message, true);
-                setTimeout(() => document.getElementById('overlay').style.display = 'none', 3000);
+                alert("Error: " + e.message);
+                hideOverlay();
             }}
         }}
 
-        async function handleDeletePost(postId, btn) {{
+        async function handleDeletePost(postId) {{
             if (!confirm("{t('confirm_delete', lang)}")) return;
             showOverlay();
-            log(msgInit);
-            
             try {{
-                log(msgSend + " POST /delete_post/" + postId);
                 const res = await fetch('/delete_post/' + postId, {{ method: 'POST' }});
-                log(msgWait);
-                
                 if (!res.ok) throw new Error("HTTP " + res.status);
-                
-                log(msgOk + " " + "{t('post_deleted', lang)}");
-                log(msgReload);
-                setTimeout(() => window.location.reload(), 800);
+                window.location.reload();
             }} catch (e) {{
-                log(msgErr + " " + e.message, true);
-                setTimeout(() => document.getElementById('overlay').style.display = 'none', 3000);
+                alert("Error: " + e.message);
+                hideOverlay();
+            }}
+        }}
+
+        async function handlePinPost(postId) {{
+            showOverlay();
+            try {{
+                const res = await fetch('/pin_post/' + postId, {{ method: 'POST' }});
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                window.location.reload();
+            }} catch (e) {{
+                alert("Error: " + e.message);
+                hideOverlay();
             }}
         }}
 
@@ -294,7 +293,6 @@ def get_overlay_html():
     return """
     <div id="overlay">
         <div class="spinner"></div>
-        <div id="log-box"></div>
     </div>
     """
 
@@ -380,9 +378,12 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
         is_pinned = post.get('is_pinned', False)
         content = html.escape(post.get('content', '')).replace('\n', '<br>')
         post_date = format_date(post.get('created_at', ''))
+        image_url = post.get('image_url', '')
         
         pinned_class = "pinned" if is_pinned else ""
         pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
+        
+        img_html = f'<img src="{image_url}" class="post-image">' if image_url else ''
         
         actions = ""
         if show_actions and viewer_is_owner:
@@ -397,6 +398,7 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
         <div class="post-wrapper">
             {actions}
             <div class="post-item {pinned_class}">
+                {img_html}
                 <div class="post-content">{content}</div>
                 <div class="post-date">{post_date}</div>
             </div>
@@ -414,30 +416,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=True, viewer_is_owner=True)
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
-    
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
-    
-    # Добавляем JS для закрепления постов (чтобы не делать форму)
-    js_pin = f"""
-    <script>
-        async function handlePinPost(postId) {{
-            showOverlay();
-            log(msgInit);
-            try {{
-                log(msgSend + " POST /pin_post/" + postId);
-                const res = await fetch('/pin_post/' + postId, {{ method: 'POST' }});
-                log(msgWait);
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                log(msgOk + " Pinned status toggled");
-                log(msgReload);
-                setTimeout(() => window.location.reload(), 800);
-            }} catch (e) {{
-                log(msgErr + " " + e.message, true);
-                setTimeout(() => document.getElementById('overlay').style.display = 'none', 3000);
-            }}
-        }}
-    </script>
-    """
     
     return f"""
     <!DOCTYPE html>
@@ -448,25 +427,19 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
         <title>{t('profile', lang)}</title>
         {get_css()}
         {get_js_logic(lang)}
-        {js_pin}
     </head>
     <body>
         <div class="dashboard-container">
             <div class="sidebar">
                 <h2>{t('profile', lang)}</h2>
                 {avatar_html}
-                <div class="info-card">
-                    <b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}
-                </div>
-                <div class="info-card">
-                    <b>{t('nickname_label', lang)}:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a>
-                </div>
+                <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}</div>
+                <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a></div>
                 {desc_block}
-                <div class="info-card">
-                    <b>{t('total_posts', lang)}:</b><br>{len(posts)}
-                </div>
+                <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(posts)}</div>
                 
                 <a href="/dashboard/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
+                <a href="/bugreport" class="btn" style="background: #f1c40f; color: black;">{t('bugreport_title', lang)}</a>
                 <form action="/logout" method="get" style="margin: 0; width: 100%;">
                     <button type="submit" class="logout-btn">{t('logout', lang)}</button>
                 </form>
@@ -479,8 +452,9 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
 
             <div class="main-content">
                 <div class="create-post-box">
-                    <form id="create-form" onsubmit="handleCreatePost(event)">
+                    <form id="create-form" onsubmit="handleCreatePost(event)" enctype="multipart/form-data">
                         <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500" style="margin-bottom: 5px;"></textarea>
+                        <input type="file" name="image" accept="image/*" style="background: #a9a9a9; padding: 10px; margin-bottom: 5px;">
                         <button type="submit">{t('create_post_btn', lang)}</button>
                     </form>
                 </div>
@@ -521,9 +495,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
                 <div class="posts-area">
                     <h2>{t('edit_profile', lang)}</h2>
                     <form action="/dashboard/edit" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 10px;">
-                        
                         {avatar_html}
-                        
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('avatar', lang)}</div>
                         <input type="file" name="avatar" accept="image/*" style="background: #a9a9a9; padding: 10px; font-size: 16px;">
                         
@@ -532,7 +504,6 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
                         
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('description', lang)}</div>
                         <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="updateCounter(this)" style="background: #a9a9a9; height: 150px; padding: 12px; font-size: 18px;">{html.escape(desc)}</textarea>
-                        
                         <div id="char-count" style="color: white; text-align: right; font-size: 14px;">{len(desc)} / 300</div>
                         
                         <button type="submit" style="background: #4da6ff; color: white; margin-top: 10px;">{t('save_changes', lang)}</button>
@@ -554,7 +525,6 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=False)
     desc = user_data.get('description', '')
     avatar_html = get_avatar_html(user_data)
-    
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
     return f"""
@@ -572,22 +542,15 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
             <div class="sidebar">
                 <h2>{t('profile', lang)}</h2>
                 {avatar_html}
-                <div class="info-card">
-                    <b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}
-                </div>
-                <div class="info-card">
-                    <b>{t('nickname_label', lang)}:</b><br>{html.escape(nickname)}
-                </div>
+                <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}</div>
+                <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{html.escape(nickname)}</div>
                 {desc_block}
-                <div class="info-card">
-                    <b>{t('total_posts', lang)}:</b><br>{len(posts)}
-                </div>
+                <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(posts)}</div>
                 
                 <div class="lang-switch">
                     <a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
                     <a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
                 </div>
-                
                 <a href="/" class="btn" style="margin-top: auto; background: #a9a9a9;">{t('back_home', lang)}</a>
             </div>
 
@@ -596,6 +559,70 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
                     <h2>{t('user_posts', lang)}</h2>
                     {posts_html}
                 </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
+            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
+        </div>
+        {get_overlay_html()}
+    </body>
+    </html>
+    """
+
+def bugreport_html(username: str, reports: list, lang: str):
+    reports_html = ""
+    if not reports:
+        reports_html = "<div class='post-item'>Заявок пока нет...</div>"
+    else:
+        for r in reports:
+            status_class = f"status-{r.get('status', 'Принято').replace(' ', '-')}"
+            status_text = r.get('status', 'Принято')
+            date_str = format_date(r.get('created_at', ''))
+            content = html.escape(r.get('content', ''))
+            reports_html += f"""
+            <div class="post-item" style="border-left-color: transparent;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <b>{t('bugreport_title', lang)}</b>
+                    <span class="status-badge {status_class}">{status_text}</span>
+                </div>
+                <div class="post-content">{content}</div>
+                <div class="post-date">{date_str}</div>
+            </div>
+            """
+            
+    return f"""
+    <!DOCTYPE html>
+    <html lang="{lang}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{t('bugreport_title', lang)}</title>
+        {get_css()}
+        {get_js_logic(lang)}
+    </head>
+    <body>
+        <div class="dashboard-container">
+            <!-- Сайдбар для мобильной навигации (можно оставить пустым или сделать ссылки) -->
+            <div class="sidebar" style="display: none;"></div>
+            
+            <div class="main-content" style="max-width: 800px; margin: 0 auto;">
+                <div class="create-post-box">
+                    <h2 style="color: white; text-align: center; margin: 10px 0;">{t('bugreport_title', lang)}</h2>
+                    <form action="/bugreport" method="post" style="display: flex; flex-direction: column; gap: 5px;">
+                        <input type="text" name="name" value="{username}" placeholder="{t('bugreport_name', lang)}" required style="background: #a9a9a9; padding: 12px; margin-bottom: 5px;">
+                        <textarea name="content" placeholder="{t('bugreport_desc', lang)}" required style="background: #a9a9a9; height: 150px; padding: 12px; margin-bottom: 5px;"></textarea>
+                        <button type="submit" style="background: #f1c40f; color: black;">{t('bugreport_send', lang)}</button>
+                    </form>
+                </div>
+
+                <div class="posts-area">
+                    <h2>{t('bugreport_my', lang)}</h2>
+                    {reports_html}
+                </div>
+                
+                <a href="/dashboard" class="btn" style="background: #a9a9a9; margin-top: 10px;">{t('cancel', lang)}</a>
             </div>
         </div>
 
@@ -715,14 +742,29 @@ async def edit_profile_action(
     supabase.table('users').update(update_data).eq('nickname', nickname).execute()
     return RedirectResponse(url="/dashboard", status_code=303)
 
-# --- AJAX МАРШРУТЫ (ВОЗВРАЩАЮТ JSON, А НЕ REDIRECT) ---
 @app.post("/create_post")
-def create_post(content: str = Form(...), nickname: str = Cookie(None)):
+async def create_post(content: str = Form(...), image: UploadFile = File(None), nickname: str = Cookie(None)):
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
     if not content.strip(): return JSONResponse({"status": "error", "msg": "Empty content"}, status_code=400)
     
+    image_url = ""
+    if image and image.filename:
+        try:
+            raw_bytes = await image.read()
+            # Сжимаем картинку до 100 КБ
+            compressed_bytes = compress_image(raw_bytes, target_kb=100)
+            
+            file_path = f"{nickname}_{datetime.now().strftime('%Y%md%H%M%S')}.jpg"
+            supabase.storage.from_("post_images").upload(
+                path=file_path, file=compressed_bytes,
+                file_options={"content-type": "image/jpeg"}
+            )
+            image_url = supabase.storage.from_("post_images").get_public_url(file_path)
+        except Exception as e:
+            print(f"Image upload error: {e}")
+    
     res = supabase.table('posts').insert({
-        "user_nickname": nickname, "content": content.strip(), "is_pinned": False
+        "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "image_url": image_url
     }).execute()
     
     post_id = res.data[0]['id'] if res.data else ""
@@ -731,19 +773,48 @@ def create_post(content: str = Form(...), nickname: str = Cookie(None)):
 @app.post("/delete_post/{post_id}")
 def delete_post(post_id: str, nickname: str = Cookie(None)):
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
-    
     supabase.table('posts').delete().eq('id', post_id).eq('user_nickname', nickname).execute()
     return JSONResponse({"status": "ok"})
 
 @app.post("/pin_post/{post_id}")
 def pin_post(post_id: str, nickname: str = Cookie(None)):
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
-    
     res = supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
     if res.data:
         supabase.table('posts').update({"is_pinned": not res.data[0]['is_pinned']}).eq('id', post_id).eq('user_nickname', nickname).execute()
-    
     return JSONResponse({"status": "ok"})
+
+# --- БАГ-РЕПОРТ ---
+@app.get("/bugreport", response_class=HTMLResponse)
+def bugreport_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    username = ""
+    reports = []
+    
+    if nickname:
+        res = supabase.table('users').select('username').eq('nickname', nickname).execute()
+        if res.data:
+            username = res.data[0]['username']
+            
+        rep_res = supabase.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
+        reports = rep_res.data
+    
+    return bugreport_html(username, reports, lang)
+
+@app.post("/bugreport")
+def bugreport_submit(
+    name: str = Form(...), content: str = Form(...),
+    nickname: str = Cookie(None), lang: str = Cookie("ru")
+):
+    data = {
+        "name": name,
+        "content": content,
+        "status": "Принято" if lang == "ru" else "Accepted"
+    }
+    if nickname:
+        data["user_nickname"] = nickname
+        
+    supabase.table('bug_reports').insert(data).execute()
+    return RedirectResponse(url="/bugreport", status_code=303)
 
 @app.get("/logout")
 def logout():
