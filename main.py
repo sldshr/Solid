@@ -1,12 +1,10 @@
-from fastapi import FastAPI, Form, Cookie, UploadFile, File
+from fastapi import FastAPI, Form, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from supabase import create_client, Client
 import uvicorn
 import html
 import hashlib
 from datetime import datetime
-from PIL import Image
-import io
 
 app = FastAPI()
 
@@ -14,29 +12,6 @@ app = FastAPI()
 SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --- ФУНКЦИЯ СЖАТИЯ КАРТИНОК ДО 100КБ ---
-def compress_image(file_content: bytes, target_kb: int = 100) -> bytes:
-    img = Image.open(io.BytesIO(file_content))
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    
-    # Уменьшаем размеры, если картинка гигантская (макс 1200px)
-    img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
-    
-    output = io.BytesIO()
-    quality = 90
-    img.save(output, format="JPEG", quality=quality)
-    
-    # Крутим качество, пока не влезем в лимит
-    while output.tell() > target_kb * 1024 and quality > 10:
-        output.seek(0)
-        output.truncate()
-        quality -= 10
-        img.save(output, format="JPEG", quality=quality)
-        
-    output.seek(0)
-    return output.read()
 
 # --- ПЕРЕВОДЫ ---
 LOCALES = {
@@ -54,11 +29,10 @@ LOCALES = {
         "user_not_found": "Пользователь не найден.", "alert_captcha": "Подтвердите, что вы не робот!",
         "alert_pass_mismatch": "Пароли не совпадают!", "alert_nick_taken": "Такой никнейм уже занят!",
         "alert_bad_login": "Неверный никнейм или пароль!", "alert_desc_long": "Описание не должно превышать 300 символов!",
-        "link_profile": "(Ссылка)", "avatar": "Аватарка", "cancel": "Отмена",
+        "link_profile": "(Ссылка)", "cancel": "Отмена",
         "username_label": "Имя пользователя", "nickname_label": "Никнейм",
         "bugreport_title": "Баг-репорт", "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы",
         "bugreport_send": "Отправить", "bugreport_my": "Мои заявки",
-        "attach_image": "Прикрепить фото (до 5МБ)",
         "status_accepted": "Принято", "status_working": "В работе", "status_fixed": "Исправлено", "status_rejected": "Отклонено"
     },
     "en": {
@@ -75,11 +49,10 @@ LOCALES = {
         "user_not_found": "User not found.", "alert_captcha": "Please confirm you are not a robot!",
         "alert_pass_mismatch": "Passwords do not match!", "alert_nick_taken": "Nickname is already taken!",
         "alert_bad_login": "Invalid nickname or password!", "alert_desc_long": "Description must not exceed 300 characters!",
-        "link_profile": "(Link)", "avatar": "Avatar", "cancel": "Cancel",
+        "link_profile": "(Link)", "cancel": "Cancel",
         "username_label": "Username", "nickname_label": "Nickname",
         "bugreport_title": "Bug Report", "bugreport_name": "Your Name", "bugreport_desc": "Issue Description",
         "bugreport_send": "Send", "bugreport_my": "My Reports",
-        "attach_image": "Attach photo (max 5MB)",
         "status_accepted": "Accepted", "status_working": "In Progress", "status_fixed": "Fixed", "status_rejected": "Rejected"
     }
 }
@@ -128,7 +101,7 @@ def get_css():
         .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; }
         .input-group { position: relative; display: flex; align-items: center; width: 280px; }
         
-        input[type="text"], input[type="password"], input[type="file"], textarea, select {
+        input[type="text"], input[type="password"], textarea, select {
             background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px;
             font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none;
         }
@@ -151,8 +124,6 @@ def get_css():
         .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
         .sidebar h2 { color: white; text-align: center; font-size: 28px; margin: 10px 0; }
         
-        .profile-avatar { width: 150px; height: 150px; object-fit: cover; display: block; margin: 0 auto; border: 3px solid #a9a9a9; }
-        
         .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
         .logout-btn { margin-top: 10px; background: #ff4d4d; }
         .logout-btn:hover { background: #cc0000; }
@@ -171,7 +142,6 @@ def get_css():
         .post-item { background: #a9a9a9; padding: 15px; font-size: 18px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         .post-content { margin-bottom: 10px; }
-        .post-image { max-width: 100%; height: auto; border-radius: 5px; margin-bottom: 10px; display: block; }
         .post-date { font-size: 12px; color: #555; text-align: right; border-top: 1px solid #888; padding-top: 5px; }
         
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
@@ -180,7 +150,6 @@ def get_css():
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
 
-        /* Статусы багрепортов */
         .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
         .status-Принято, .status-Accepted { background: #4da6ff; }
         .status-В-работе, .status-In-Progress { background: #f1c40f; }
@@ -193,7 +162,17 @@ def get_css():
         .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
 
-        /* Оверлей загрузки (Только спиннер) */
+        /* Красный текст ошибки */
+        .error-msg {
+            color: #ff4d4d;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: right;
+            width: 100%;
+            margin-top: 10px;
+            min-height: 20px; /* Чтобы не прыгала верстка */
+        }
+
         #overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7); z-index: 9999; flex-direction: column;
@@ -216,6 +195,7 @@ def get_css():
             .sidebar { width: 100%; }
             .posts-area { padding: 10px; }
             .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
+            .error-msg { text-align: center; }
         }
     </style>
     """
@@ -298,7 +278,9 @@ def get_overlay_html():
 
 # --- HTML ГЕНЕРАТОРЫ ---
 
-def auth_html(lang: str):
+def auth_html(lang: str, error_msg: str = ""):
+    error_block = f'<div class="error-msg">{error_msg}</div>' if error_msg else '<div class="error-msg"></div>'
+    
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
@@ -356,6 +338,7 @@ def auth_html(lang: str):
                         <a href="/set_lang/en?next=/" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
                     </div>
                 </div>
+                {error_block}
             </div>
         </div>
 
@@ -378,12 +361,9 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
         is_pinned = post.get('is_pinned', False)
         content = html.escape(post.get('content', '')).replace('\n', '<br>')
         post_date = format_date(post.get('created_at', ''))
-        image_url = post.get('image_url', '')
         
         pinned_class = "pinned" if is_pinned else ""
         pin_text = t('unpin', lang) if is_pinned else t('pin', lang)
-        
-        img_html = f'<img src="{image_url}" class="post-image">' if image_url else ''
         
         actions = ""
         if show_actions and viewer_is_owner:
@@ -398,7 +378,6 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
         <div class="post-wrapper">
             {actions}
             <div class="post-item {pinned_class}">
-                {img_html}
                 <div class="post-content">{content}</div>
                 <div class="post-date">{post_date}</div>
             </div>
@@ -406,16 +385,9 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
         '''
     return html_out
 
-def get_avatar_html(user_data):
-    avatar_url = user_data.get('avatar_url', '')
-    if avatar_url:
-        return f'<img src="{avatar_url}" class="profile-avatar">'
-    return ''
-
 def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=True, viewer_is_owner=True)
     desc = user_data.get('description', '')
-    avatar_html = get_avatar_html(user_data)
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
     return f"""
@@ -432,7 +404,6 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
         <div class="dashboard-container">
             <div class="sidebar">
                 <h2>{t('profile', lang)}</h2>
-                {avatar_html}
                 <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}</div>
                 <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a></div>
                 {desc_block}
@@ -452,9 +423,8 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
 
             <div class="main-content">
                 <div class="create-post-box">
-                    <form id="create-form" onsubmit="handleCreatePost(event)" enctype="multipart/form-data">
+                    <form id="create-form" onsubmit="handleCreatePost(event)">
                         <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500" style="margin-bottom: 5px;"></textarea>
-                        <input type="file" name="image" accept="image/*" style="background: #a9a9a9; padding: 10px; margin-bottom: 5px;">
                         <button type="submit">{t('create_post_btn', lang)}</button>
                     </form>
                 </div>
@@ -477,7 +447,6 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
 
 def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
     desc = user_data.get('description', '')
-    avatar_html = get_avatar_html(user_data)
     
     return f"""
     <!DOCTYPE html>
@@ -494,10 +463,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
             <div class="main-content" style="max-width: 600px;">
                 <div class="posts-area">
                     <h2>{t('edit_profile', lang)}</h2>
-                    <form action="/dashboard/edit" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 10px;">
-                        {avatar_html}
-                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('avatar', lang)}</div>
-                        <input type="file" name="avatar" accept="image/*" style="background: #a9a9a9; padding: 10px; font-size: 16px;">
+                    <form action="/dashboard/edit" method="post" style="display: flex; flex-direction: column; gap: 10px;">
                         
                         <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('username_label', lang)}</div>
                         <input type="text" name="username" value="{html.escape(user_data['username'])}" required style="background: #a9a9a9; padding: 12px; font-size: 18px;">
@@ -524,7 +490,6 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
 def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=False)
     desc = user_data.get('description', '')
-    avatar_html = get_avatar_html(user_data)
     desc_block = f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''
     
     return f"""
@@ -541,7 +506,6 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
         <div class="dashboard-container">
             <div class="sidebar">
                 <h2>{t('profile', lang)}</h2>
-                {avatar_html}
                 <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user_data['username'])}</div>
                 <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{html.escape(nickname)}</div>
                 {desc_block}
@@ -604,7 +568,6 @@ def bugreport_html(username: str, reports: list, lang: str):
     </head>
     <body>
         <div class="dashboard-container">
-            <!-- Сайдбар для мобильной навигации (можно оставить пустым или сделать ссылки) -->
             <div class="sidebar" style="display: none;"></div>
             
             <div class="main-content" style="max-width: 800px; margin: 0 auto;">
@@ -658,21 +621,21 @@ def register(
     re_pass: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")
 ):
     if not captcha: 
-        return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
+        return auth_html(lang, t('alert_captcha', lang))
     if password != re_pass: 
-        return HTMLResponse(f"<script>alert('{t('alert_pass_mismatch', lang)}'); window.history.back();</script>")
+        return auth_html(lang, t('alert_pass_mismatch', lang))
     
     res = supabase.table('users').select('nickname').eq('nickname', nickname).execute()
     if res.data: 
-        return HTMLResponse(f"<script>alert('{t('alert_nick_taken', lang)}'); window.history.back();</script>")
+        return auth_html(lang, t('alert_nick_taken', lang))
     
     try:
         supabase.table('users').insert({
             "username": username, "nickname": nickname, "password": hash_password(password),
-            "description": "", "avatar_url": ""
+            "description": ""
         }).execute()
     except Exception as e:
-        return HTMLResponse(f"<script>alert('DB Error: {str(e)}'); window.history.back();</script>")
+        return auth_html(lang, f"DB Error: {str(e)}")
     
     response = RedirectResponse(url="/dashboard", status_code=303)
     response.set_cookie(key="nickname", value=nickname, httponly=True)
@@ -681,7 +644,7 @@ def register(
 @app.post("/login")
 def login(nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), lang: str = Cookie("ru")):
     if not captcha: 
-        return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
+        return auth_html(lang, t('alert_captcha', lang))
     
     res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     user = res.data[0] if res.data else None
@@ -691,7 +654,7 @@ def login(nickname: str = Form(...), password: str = Form(...), captcha: str = F
         response.set_cookie(key="nickname", value=nickname, httponly=True)
         return response
     
-    return HTMLResponse(f"<script>alert('{t('alert_bad_login', lang)}'); window.history.back();</script>")
+    return auth_html(lang, t('alert_bad_login', lang))
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(nickname: str = Cookie(None), lang: str = Cookie("ru")):
@@ -713,58 +676,27 @@ def edit_profile_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     return edit_profile_html(nickname, user_res.data[0], lang)
 
 @app.post("/dashboard/edit")
-async def edit_profile_action(
+def edit_profile_action(
     username: str = Form(...), description: str = Form(""),
-    avatar: UploadFile = File(None),
     nickname: str = Cookie(None), lang: str = Cookie("ru")
 ):
     if not nickname: return RedirectResponse(url="/", status_code=303)
     if len(description) > 300: 
         return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
 
-    update_data = {"username": username, "description": description}
-
-    if avatar and avatar.filename:
-        try:
-            file_bytes = await avatar.read()
-            ext = avatar.filename.split(".")[-1]
-            file_path = f"{nickname}.{ext}"
-            
-            supabase.storage.from_("avatars").upload(
-                path=file_path, file=file_bytes,
-                file_options={"content-type": avatar.content_type, "upsert": "true"}
-            )
-            public_url = supabase.storage.from_("avatars").get_public_url(file_path)
-            update_data["avatar_url"] = public_url
-        except Exception as e:
-            print(f"Upload error: {e}")
-
-    supabase.table('users').update(update_data).eq('nickname', nickname).execute()
+    supabase.table('users').update({
+        "username": username, "description": description
+    }).eq('nickname', nickname).execute()
+    
     return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/create_post")
-async def create_post(content: str = Form(...), image: UploadFile = File(None), nickname: str = Cookie(None)):
+def create_post(content: str = Form(...), nickname: str = Cookie(None)):
     if not nickname: return JSONResponse({"status": "error", "msg": "Unauthorized"}, status_code=401)
     if not content.strip(): return JSONResponse({"status": "error", "msg": "Empty content"}, status_code=400)
     
-    image_url = ""
-    if image and image.filename:
-        try:
-            raw_bytes = await image.read()
-            # Сжимаем картинку до 100 КБ
-            compressed_bytes = compress_image(raw_bytes, target_kb=100)
-            
-            file_path = f"{nickname}_{datetime.now().strftime('%Y%md%H%M%S')}.jpg"
-            supabase.storage.from_("post_images").upload(
-                path=file_path, file=compressed_bytes,
-                file_options={"content-type": "image/jpeg"}
-            )
-            image_url = supabase.storage.from_("post_images").get_public_url(file_path)
-        except Exception as e:
-            print(f"Image upload error: {e}")
-    
     res = supabase.table('posts').insert({
-        "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "image_url": image_url
+        "user_nickname": nickname, "content": content.strip(), "is_pinned": False
     }).execute()
     
     post_id = res.data[0]['id'] if res.data else ""
@@ -784,7 +716,6 @@ def pin_post(post_id: str, nickname: str = Cookie(None)):
         supabase.table('posts').update({"is_pinned": not res.data[0]['is_pinned']}).eq('id', post_id).eq('user_nickname', nickname).execute()
     return JSONResponse({"status": "ok"})
 
-# --- БАГ-РЕПОРТ ---
 @app.get("/bugreport", response_class=HTMLResponse)
 def bugreport_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     username = ""
