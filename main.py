@@ -102,14 +102,22 @@ def get_css():
             align-items: flex-start; max-width: 100%; margin-bottom: 20px;
         }
         
-        .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; }
+        /* Подвал */
+        .footer { 
+            text-align: center; font-size: 16px; font-weight: bold; color: #555; 
+            width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px;
+        }
         .footer a { color: #000; border-bottom: 2px solid #000; }
+        .footer-links { font-size: 14px; color: #777; }
+        .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
 
-        .auth-wrapper { display: flex; gap: 20px; flex-direction: column; }
-        .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; }
-        .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; }
-        .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; }
-        .input-group { position: relative; display: flex; align-items: center; width: 280px; }
+        /* Формы */
+        .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
+        .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
+        .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
+        .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
+        
+        .input-group { position: relative; display: flex; align-items: center; width: 100%; }
         
         input[type="text"], input[type="password"], textarea, select {
             background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px;
@@ -124,13 +132,20 @@ def get_css():
         }
         button:hover, .btn:hover { background-color: #8c8c8c; }
         
-        .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
+        .eye-btn { 
+            position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; 
+            width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; 
+        }
         .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
         
-        .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
+        .captcha-container { 
+            background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; 
+            gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;
+        }
         .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
         .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
 
+        /* Дашборд */
         .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
         .sidebar h2 { color: white; text-align: center; font-size: 28px; margin: 10px 0; }
@@ -167,23 +182,19 @@ def get_css():
         .status-Исправлено, .status-Fixed { background: #2ecc71; }
         .status-Отклонено, .status-Rejected { background: #e74c3c; }
 
+        /* Языки */
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
         .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
         .lang-btn:hover { background: #a9a9a9; color: black; }
         .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
         
-        /* Белая страница для политики конфиденциальности */
+        /* Политика конфиденциальности */
         .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; }
 
         .error-msg {
-            color: #ff4d4d;
-            font-weight: bold;
-            font-size: 18px;
-            text-align: right;
-            width: 100%;
-            margin-top: 10px;
-            min-height: 20px;
+            color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right;
+            width: 100%; margin-top: 10px; min-height: 20px;
         }
 
         #overlay {
@@ -197,18 +208,19 @@ def get_css():
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* --- Адаптация под мобильные --- */
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
+            .auth-wrapper { width: 100%; }
             .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
-            .input-group { width: 100%; }
             .label-text { font-size: 28px; text-align: center; margin: 10px 0 0 0; order: -1; }
-            .form-box { width: 100%; }
             .dashboard-container { flex-direction: column; }
             .sidebar { width: 100%; }
             .posts-area { padding: 10px; }
             .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
             .error-msg { text-align: center; }
+            .login-lang-wrapper { justify-content: center; }
         }
     </style>
     """
@@ -229,7 +241,6 @@ def get_js_logic(lang):
             showOverlay();
             const form = event.target;
             const formData = new FormData(form);
-            
             try {{
                 const res = await fetch('/create_post', {{ method: 'POST', body: formData }});
                 if (!res.ok) throw new Error("HTTP " + res.status);
@@ -286,6 +297,15 @@ def get_overlay_html():
     return """
     <div id="overlay">
         <div class="spinner"></div>
+    </div>
+    """
+
+# --- ФУТЕР ---
+def get_footer(lang):
+    return f"""
+    <div class="footer">
+        <div>{t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
+        <div class="footer-links"><a href="/privacy">{t('privacy_title', lang)}</a></div>
     </div>
     """
 
@@ -359,10 +379,7 @@ def auth_html(lang: str, error_msg: str = ""):
             </div>
         </div>
 
-        <div class="footer">
-            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
-            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
-        </div>
+        {get_footer(lang)}
         {get_overlay_html()}
     </body>
     </html>
@@ -453,10 +470,7 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
             </div>
         </div>
         
-        <div class="footer">
-            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
-            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
-        </div>
+        {get_footer(lang)}
         {get_overlay_html()}
     </body>
     </html>
@@ -500,10 +514,7 @@ def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
                 </div>
             </div>
         </div>
-        <div class="footer">
-            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
-            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
-        </div>
+        {get_footer(lang)}
         {get_overlay_html()}
     </body>
     </html>
@@ -548,10 +559,7 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
             </div>
         </div>
 
-        <div class="footer">
-            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
-            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
-        </div>
+        {get_footer(lang)}
         {get_overlay_html()}
     </body>
     </html>
@@ -616,10 +624,7 @@ def bugreport_html(username: str, reports: list, lang: str):
             </div>
         </div>
 
-        <div class="footer">
-            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
-            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
-        </div>
+        {get_footer(lang)}
         {get_overlay_html()}
     </body>
     </html>
@@ -652,10 +657,7 @@ def privacy_html(lang: str):
                 </div>
             </div>
         </div>
-        <div class="footer">
-            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | 
-            {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a>
-        </div>
+        {get_footer(lang)}
     </body>
     </html>
     """
