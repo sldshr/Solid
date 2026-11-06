@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Form, Cookie, Query
+from fastapi import FastAPI, Form, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
 from supabase import create_client, Client
 import uvicorn
@@ -27,6 +27,10 @@ LOCALES = {
         "profile": "ПРОФИЛЬ",
         "total_posts": "Всего постов",
         "logout": "Выйти",
+        "edit_profile": "Редактировать профиль",
+        "save_changes": "Сохранить изменения",
+        "description": "Описание",
+        "desc_placeholder": "Расскажите о себе (до 300 символов)...",
         "create_post_btn": "Создать пост",
         "create_post_placeholder": "Напишите что-нибудь...",
         "my_posts": "МОИ ПОСТЫ",
@@ -43,6 +47,7 @@ LOCALES = {
         "alert_pass_mismatch": "Пароли не совпадают!",
         "alert_nick_taken": "Такой никнейм уже занят!",
         "alert_bad_login": "Неверный никнейм или пароль!",
+        "alert_desc_long": "Описание не должно превышать 300 символов!",
         "lang_name": "Язык",
         "link_profile": "(Ссылка)"
     },
@@ -59,6 +64,10 @@ LOCALES = {
         "profile": "PROFILE",
         "total_posts": "Total posts",
         "logout": "Logout",
+        "edit_profile": "Edit Profile",
+        "save_changes": "Save changes",
+        "description": "Description",
+        "desc_placeholder": "Tell about yourself (max 300 chars)...",
         "create_post_btn": "Create post",
         "create_post_placeholder": "Write something...",
         "my_posts": "MY POSTS",
@@ -75,6 +84,7 @@ LOCALES = {
         "alert_pass_mismatch": "Passwords do not match!",
         "alert_nick_taken": "Nickname is already taken!",
         "alert_bad_login": "Invalid nickname or password!",
+        "alert_desc_long": "Description must not exceed 300 characters!",
         "lang_name": "Language",
         "link_profile": "(Link)"
     }
@@ -83,9 +93,12 @@ LOCALES = {
 def t(key: str, lang: str = "ru") -> str:
     return LOCALES.get(lang, LOCALES["ru"]).get(key, key)
 
-# --- ХЕШИРОВАНИЕ ПАРОЛЕЙ ---
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
+
+# --- SVG ИКОНКИ ---
+SVG_EYE = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
+SVG_EYE_OFF = """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 
 # --- CSS СТИЛИ ---
 def get_css():
@@ -106,7 +119,6 @@ def get_css():
         a { color: black; text-decoration: none; font-weight: bold; }
         a:hover { text-decoration: underline; }
         
-        /* --- Общие контейнеры --- */
         .container {
             background: white;
             padding: 30px;
@@ -118,7 +130,6 @@ def get_css():
             margin-bottom: 20px;
         }
         
-        /* Футер */
         .footer {
             text-align: center;
             font-size: 18px;
@@ -130,9 +141,8 @@ def get_css():
         }
         .footer a { color: #000; border-bottom: 2px solid #000; }
 
-        /* --- Логин/Регистрация --- */
-        .auth-wrapper { display: flex; gap: 20px; }
-        .auth-wrapper.login-wrapper { align-items: flex-end; }
+        .auth-wrapper { display: flex; gap: 20px; flex-direction: column; }
+        .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end;}
         .form-box {
             background-color: black;
             padding: 5px;
@@ -154,6 +164,7 @@ def get_css():
             text-align: center;
             outline: none;
         }
+        textarea { text-align: left; resize: vertical; }
         
         button, .btn {
             background-color: #a9a9a9;
@@ -175,15 +186,15 @@ def get_css():
             right: 5px;
             background: transparent;
             border: none;
-            font-size: 24px;
             cursor: pointer;
-            width: auto;
+            width: 40px;
             padding: 5px;
-            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
         
-        /* Капча-чекбокс */
         .captcha-container {
             background-color: #a9a9a9;
             padding: 10px;
@@ -196,13 +207,8 @@ def get_css():
             font-size: 18px;
             font-weight: bold;
         }
-        .captcha-container input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-        }
+        .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
 
-        /* --- Личный кабинет --- */
         .dashboard-container {
             display: flex;
             gap: 20px;
@@ -227,9 +233,12 @@ def get_css():
             font-size: 18px;
             text-align: center;
             word-wrap: break-word;
+            white-space: pre-wrap;
         }
         .logout-btn { margin-top: 10px; background: #ff4d4d; }
         .logout-btn:hover { background: #cc0000; }
+        .edit-btn { background: #4da6ff; margin-top: 5px; }
+        .edit-btn:hover { background: #1a82e2; }
         
         .main-content {
             flex: 1;
@@ -247,8 +256,6 @@ def get_css():
         }
         .create-post-box textarea {
             height: 120px;
-            resize: vertical;
-            text-align: left;
             font-size: 18px;
             padding: 10px;
         }
@@ -263,7 +270,6 @@ def get_css():
         }
         .posts-area h2 { color: white; font-size: 28px; margin: 0 0 10px 0; text-align: center;}
         
-        /* Посты */
         .post-wrapper { position: relative; }
         .post-item {
             background: #a9a9a9;
@@ -272,12 +278,8 @@ def get_css():
             word-wrap: break-word;
             border-left: 5px solid transparent;
         }
-        .post-item.pinned {
-            border-left: 5px solid #ff4d4d;
-            background: #d9d9d9;
-        }
+        .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         
-        /* Кнопки при наведении */
         .post-actions {
             position: absolute;
             top: 5px;
@@ -301,7 +303,6 @@ def get_css():
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
 
-        /* Переключатель языка */
         .lang-switch {
             display: flex;
             justify-content: center;
@@ -310,32 +311,23 @@ def get_css():
         }
         .lang-btn {
             background: transparent;
-            border: 2px solid white;
-            color: white;
+            border: 2px solid black;
+            color: black;
             padding: 5px 10px;
             width: auto;
             font-size: 16px;
         }
-        .lang-btn.active { background: white; color: black; }
-        .lang-btn.auth-lang { border-color: black; color: black; }
-        .lang-btn.auth-lang.active { background: black; color: white; }
+        .lang-btn.active { background: black; color: white; }
+        
+        .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px;}
 
-        /* --- Мобильная адаптация --- */
         @media (max-width: 768px) {
             body { padding: 10px; }
-            .container {
-                flex-direction: column;
-                padding: 15px;
-                gap: 20px;
-                border-width: 5px;
-                width: 100%;
-            }
-            .auth-wrapper { flex-direction: column; gap: 10px; width: 100%; }
-            .auth-wrapper.login-wrapper { align-items: flex-start; }
+            .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
+            .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
             .input-group { width: 100%; }
             .label-text { font-size: 28px; text-align: center; margin: 10px 0 0 0; order: -1; }
             .form-box { width: 100%; }
-            
             .dashboard-container { flex-direction: column; }
             .sidebar { width: 100%; }
             .posts-area { padding: 10px; }
@@ -344,7 +336,7 @@ def get_css():
     </style>
     """
 
-# --- ГЕНЕРАТОРЫ HTML ---
+# --- HTML ШАБЛОНЫ ---
 
 def auth_html(lang: str):
     return f"""
@@ -356,14 +348,16 @@ def auth_html(lang: str):
         <title>{t('login', lang)} / {t('reg', lang)}</title>
         {get_css()}
         <script>
+            const eyeSvg = `{SVG_EYE}`;
+            const eyeOffSvg = `{SVG_EYE_OFF}`;
             function togglePassword(inputId, btn) {{
                 const input = document.getElementById(inputId);
                 if (input.type === "password") {{
                     input.type = "text";
-                    btn.innerHTML = "🙈";
+                    btn.innerHTML = eyeOffSvg;
                 }} else {{
                     input.type = "password";
-                    btn.innerHTML = "👁";
+                    btn.innerHTML = eyeSvg;
                 }}
             }}
         </script>
@@ -379,12 +373,12 @@ def auth_html(lang: str):
                         
                         <div class="input-group">
                             <input type="password" name="password" id="reg-pass" placeholder="{t('password', lang)}" required>
-                            <button type="button" class="eye-btn" onclick="togglePassword('reg-pass', this)">👁</button>
+                            <button type="button" class="eye-btn" onclick="togglePassword('reg-pass', this)">{SVG_EYE}</button>
                         </div>
                         
                         <div class="input-group">
                             <input type="password" name="re_pass" id="reg-repass" placeholder="{t('re_pass', lang)}" required>
-                            <button type="button" class="eye-btn" onclick="togglePassword('reg-repass', this)">👁</button>
+                            <button type="button" class="eye-btn" onclick="togglePassword('reg-repass', this)">{SVG_EYE}</button>
                         </div>
                         
                         <label class="captcha-container">
@@ -395,30 +389,33 @@ def auth_html(lang: str):
                 </div>
             </div>
 
-            <div class="auth-wrapper login-wrapper">
-                <div class="form-box">
-                    <form action="/login" method="post">
-                        <input type="text" name="nickname" placeholder="{t('nickname', lang)}" required>
-                        
-                        <div class="input-group">
-                            <input type="password" name="password" id="log-pass" placeholder="{t('password', lang)}" required>
-                            <button type="button" class="eye-btn" onclick="togglePassword('log-pass', this)">👁</button>
-                        </div>
-                        
-                        <label class="captcha-container">
-                            <input type="checkbox" name="captcha" required> {t('captcha', lang)}
-                        </label>
-                        <button type="submit">{t('login_btn', lang)}</button>
-                    </form>
+            <div class="auth-wrapper">
+                <div class="auth-wrapper-inner">
+                    <div class="form-box">
+                        <form action="/login" method="post">
+                            <input type="text" name="nickname" placeholder="{t('nickname', lang)}" required>
+                            
+                            <div class="input-group">
+                                <input type="password" name="password" id="log-pass" placeholder="{t('password', lang)}" required>
+                                <button type="button" class="eye-btn" onclick="togglePassword('log-pass', this)">{SVG_EYE}</button>
+                            </div>
+                            
+                            <label class="captcha-container">
+                                <input type="checkbox" name="captcha" required> {t('captcha', lang)}
+                            </label>
+                            <button type="submit">{t('login_btn', lang)}</button>
+                        </form>
+                    </div>
+                    <div class="label-text">{t('login', lang)}</div>
                 </div>
-                <div class="label-text">{t('login', lang)}</div>
+                <!-- Переключатель языка под логином -->
+                <div class="login-lang-wrapper">
+                    <div class="lang-switch">
+                        <a href="/set_lang/ru?next=/" class="btn lang-btn {'active' if lang == 'ru' else ''}">RU</a>
+                        <a href="/set_lang/en?next=/" class="btn lang-btn {'active' if lang == 'en' else ''}">EN</a>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <!-- Переключатель языка и футер -->
-        <div class="lang-switch">
-            <a href="/set_lang/ru?next=/" class="btn lang-btn auth-lang {'active' if lang == 'ru' else ''}">RU</a>
-            <a href="/set_lang/en?next=/" class="btn lang-btn auth-lang {'active' if lang == 'en' else ''}">EN</a>
         </div>
 
         <div class="footer">
@@ -463,6 +460,7 @@ def render_posts(posts_list, lang, show_actions=False, viewer_is_owner=False):
 
 def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=True, viewer_is_owner=True)
+    desc = user_data.get('description', '')
     
     return f"""
     <!DOCTYPE html>
@@ -483,9 +481,13 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
                 <div class="info-card">
                     <b>Nickname:</b><br><a href="/{user_nickname}" target="_blank">{html.escape(user_nickname)} {t('link_profile', lang)}</a>
                 </div>
+                {f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''}
                 <div class="info-card">
                     <b>{t('total_posts', lang)}:</b><br>{len(posts)}
                 </div>
+                
+                <a href="/dashboard/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
+                
                 <form action="/logout" method="get" style="margin: 0; width: 100%;">
                     <button type="submit" class="logout-btn">{t('logout', lang)}</button>
                 </form>
@@ -518,8 +520,45 @@ def dashboard_html(user_nickname: str, user_data: dict, posts: list, lang: str):
     </html>
     """
 
+def edit_profile_html(user_nickname: str, user_data: dict, lang: str):
+    return f"""
+    <!DOCTYPE html>
+    <html lang="{lang}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{t('edit_profile', lang)}</title>
+        {get_css()}
+    </head>
+    <body>
+        <div class="dashboard-container" style="justify-content: center;">
+            <div class="main-content" style="max-width: 600px;">
+                <div class="posts-area">
+                    <h2>{t('edit_profile', lang)}</h2>
+                    <form action="/dashboard/edit" method="post" style="display: flex; flex-direction: column; gap: 10px;">
+                        
+                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">Username</div>
+                        <input type="text" name="username" value="{html.escape(user_data['username'])}" required style="background: #a9a9a9; padding: 12px; font-size: 18px;">
+                        
+                        <div style="color: white; font-size: 18px; margin-bottom: -5px;">{t('description', lang)} (max 300)</div>
+                        <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" style="background: #a9a9a9; height: 150px; padding: 12px; font-size: 18px;">{html.escape(user_data.get('description', ''))}</textarea>
+                        
+                        <button type="submit" style="background: #4da6ff; color: white; margin-top: 10px;">{t('save_changes', lang)}</button>
+                        <a href="/dashboard" class="btn" style="background: #a9a9a9;">Отмена / Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="footer">
+            {t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a>
+        </div>
+    </body>
+    </html>
+    """
+
 def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
     posts_html = render_posts(posts, lang, show_actions=False)
+    desc = user_data.get('description', '')
     
     return f"""
     <!DOCTYPE html>
@@ -540,6 +579,7 @@ def public_profile_html(nickname: str, user_data: dict, posts: list, lang: str):
                 <div class="info-card">
                     <b>Nickname:</b><br>{html.escape(nickname)}
                 </div>
+                {f'<div class="info-card"><b>{t("description", lang)}:</b><br>{html.escape(desc)}</div>' if desc else ''}
                 <div class="info-card">
                     <b>{t('total_posts', lang)}:</b><br>{len(posts)}
                 </div>
@@ -574,17 +614,15 @@ def set_lang(lang: str, next: str = "/"):
     if lang not in ["ru", "en"]:
         lang = "ru"
     response = RedirectResponse(url=next, status_code=303)
-    response.set_cookie(key="lang", value=lang, max_age=31536000) # 1 год
+    response.set_cookie(key="lang", value=lang, max_age=31536000)
     return response
 
 @app.get("/", response_class=HTMLResponse)
 def index(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if nickname:
-        # Проверяем, существует ли пользователь в БД
         res = supabase.table('users').select('nickname').eq('nickname', nickname).execute()
         if res.data:
             return RedirectResponse(url="/dashboard", status_code=303)
-            
     return auth_html(lang)
 
 @app.post("/register")
@@ -598,21 +636,19 @@ def register(
 ):
     if not captcha:
         return HTMLResponse(f"<script>alert('{t('alert_captcha', lang)}'); window.history.back();</script>")
-    
     if password != re_pass:
         return HTMLResponse(f"<script>alert('{t('alert_pass_mismatch', lang)}'); window.history.back();</script>")
     
-    # Проверка на занятый никнейм
     res = supabase.table('users').select('nickname').eq('nickname', nickname).execute()
     if res.data:
         return HTMLResponse(f"<script>alert('{t('alert_nick_taken', lang)}'); window.history.back();</script>")
     
-    # Сохранение в Supabase
     try:
         supabase.table('users').insert({
             "username": username,
             "nickname": nickname,
-            "password": hash_password(password)
+            "password": hash_password(password),
+            "description": ""
         }).execute()
     except Exception as e:
         return HTMLResponse(f"<script>alert('DB Error: {str(e)}'); window.history.back();</script>")
@@ -645,38 +681,58 @@ def login(
 def dashboard(nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname:
         return RedirectResponse(url="/", status_code=303)
-        
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
     if not user_res.data:
         return RedirectResponse(url="/", status_code=303)
-        
-    user_data = user_res.data[0]
     
-    # Получаем посты (сортировка: сначала закрепленные, потом по дате)
     posts_res = supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
+    return dashboard_html(nickname, user_res.data[0], posts_res.data, lang)
+
+@app.get("/dashboard/edit", response_class=HTMLResponse)
+def edit_profile_page(nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if not nickname:
+        return RedirectResponse(url="/", status_code=303)
+    user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
+    if not user_res.data:
+        return RedirectResponse(url="/", status_code=303)
+    return edit_profile_html(nickname, user_res.data[0], lang)
+
+@app.post("/dashboard/edit")
+def edit_profile_action(
+    username: str = Form(...),
+    description: str = Form(""),
+    nickname: str = Cookie(None),
+    lang: str = Cookie("ru")
+):
+    if not nickname:
+        return RedirectResponse(url="/", status_code=303)
     
-    return dashboard_html(nickname, user_data, posts_res.data, lang)
+    if len(description) > 300:
+        return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}'); window.history.back();</script>")
+
+    supabase.table('users').update({
+        "username": username,
+        "description": description
+    }).eq('nickname', nickname).execute()
+    
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/create_post")
 def create_post(content: str = Form(...), nickname: str = Cookie(None)):
     if not nickname:
         return RedirectResponse(url="/", status_code=303)
-    
     if content.strip():
         supabase.table('posts').insert({
             "user_nickname": nickname,
             "content": content.strip(),
             "is_pinned": False
         }).execute()
-        
     return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.post("/delete_post/{post_id}")
 def delete_post(post_id: str, nickname: str = Cookie(None)):
     if not nickname:
         return RedirectResponse(url="/", status_code=303)
-    
-    # Удаляем только если пост принадлежит текущему пользователю
     supabase.table('posts').delete().eq('id', post_id).eq('user_nickname', nickname).execute()
     return RedirectResponse(url="/dashboard", status_code=303)
 
@@ -684,14 +740,10 @@ def delete_post(post_id: str, nickname: str = Cookie(None)):
 def pin_post(post_id: str, nickname: str = Cookie(None)):
     if not nickname:
         return RedirectResponse(url="/", status_code=303)
-    
-    # Получаем текущий статус поста
     res = supabase.table('posts').select('is_pinned').eq('id', post_id).eq('user_nickname', nickname).execute()
     if res.data:
         current_status = res.data[0]['is_pinned']
-        # Инвертируем статус
         supabase.table('posts').update({"is_pinned": not current_status}).eq('id', post_id).eq('user_nickname', nickname).execute()
-        
     return RedirectResponse(url="/dashboard", status_code=303)
 
 @app.get("/logout")
@@ -703,14 +755,11 @@ def logout():
 @app.get("/{nickname}", response_class=HTMLResponse)
 def public_profile(nickname: str, lang: str = Cookie("ru")):
     user_res = supabase.table('users').select('*').eq('nickname', nickname).execute()
-    
     if not user_res.data:
         return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", status_code=404)
-        
-    user_data = user_res.data[0]
-    posts_res = supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
     
-    return public_profile_html(nickname, user_data, posts_res.data, lang)
+    posts_res = supabase.table('posts').select('*').eq('user_nickname', nickname).order('is_pinned', desc=True).order('created_at', desc=True).execute()
+    return public_profile_html(nickname, user_res.data[0], posts_res.data, lang)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
