@@ -78,10 +78,10 @@ async def auth_middleware(r: Request, nickname: Optional[str] = Cookie(None)):
         raise HTTPException(status_code=401)
     try:
         x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-        if not x.data:
+        if not x.data or not isinstance(x.data, list) or len(x.data) == 0:
             raise HTTPException(status_code=401)
     except Exception:
-        raise HTTPException(status_code=500, detail="DB Error")
+        raise HTTPException(status_code=401)
     return nickname
 
 @app.exception_handler(RequestValidationError)
@@ -554,13 +554,16 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
     </div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def render_records(records, lang, own=False, feed=False, uid=None):
-    if not records: return f"<div class='post-item'>{t('no_posts', lang)}</div>"
+    if not records or not isinstance(records, list): 
+        return f"<div class='post-item'>{t('no_posts', lang)}</div>"
     out = ""
     for x in records:
         if not isinstance(x, dict): continue
         rid = esc(x.get('id'))
-        pinned = x.get('is_pinned', False)
-        hidden = x.get('is_hidden', False)
+        if not rid: continue
+        
+        pinned = bool(x.get('is_pinned', False))
+        hidden = bool(x.get('is_hidden', False))
         content = esc(x.get('content')).replace('\n', '<br>')
         date = format_date(esc(x.get('created_at')))
         pc = "pinned" if pinned else ""
@@ -594,8 +597,8 @@ def render_records(records, lang, own=False, feed=False, uid=None):
 
 def merge_memory(db_records, nickname, is_owner=False):
     f = []
-    if not db_records:
-        return f
+    if not db_records or not isinstance(db_records, list):
+        db_records = []
         
     for x in db_records:
         if not isinstance(x, dict):
@@ -625,7 +628,7 @@ def merge_memory(db_records, nickname, is_owner=False):
         
     try:
         f.sort(key=sort_key, reverse=True)
-    except:
+    except Exception:
         pass
     return f
 
@@ -835,23 +838,30 @@ async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = 
     
     try:
         u = sb.table('users').select('username,description').eq('nickname', user).execute()
-        if u.data: user_data = u.data[0]
-    except Exception: pass
+        if u.data and isinstance(u.data, list) and len(u.data) > 0:
+            user_data = u.data[0]
+    except Exception:
+        pass
     
     try:
         p = sb.table('posts').select('*').eq('user_nickname', user).execute()
-        p_data = p.data or []
-    except Exception: pass
+        if p.data and isinstance(p.data, list):
+            p_data = p.data
+    except Exception:
+        pass
     
     try:
         f = sb.table('posts').select('*').eq('is_hidden', False).order('created_at', desc=True).limit(50).execute()
-        f_data = f.data or []
+        if f.data and isinstance(f.data, list):
+            f_data = f.data
     except Exception:
         try:
             f = sb.table('posts').select('*').order('created_at', desc=True).limit(50).execute()
-            f_data = f.data or []
-        except Exception: pass
-    
+            if f.data and isinstance(f.data, list):
+                f_data = f.data
+        except Exception:
+            pass
+            
     po = merge_memory(p_data, user, True)
     pf = merge_memory(f_data, user, False)
     
@@ -874,8 +884,15 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
             i = client_id or str(uuid.uuid4())
             n = datetime.now(timezone.utc).isoformat()
             
-            pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "is_hidden": bool(is_hidden), "created_at": n, "likes": 0, "dislikes": 0}
-            sb.table('posts').insert(pd).execute()
+            pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "created_at": n}
+            try:
+                pd_full = dict(pd)
+                pd_full["is_hidden"] = bool(is_hidden)
+                pd_full["likes"] = 0
+                pd_full["dislikes"] = 0
+                sb.table('posts').insert(pd_full).execute()
+            except Exception:
+                sb.table('posts').insert(pd).execute()
             
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
@@ -889,7 +906,8 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
         elif req.method == "pin_record":
             rid = req.params.get("post_id")
             x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', user).execute()
-            if not x.data: raise HTTPException(404, "Not found")
+            if not x.data or not isinstance(x.data, list) or len(x.data) == 0: 
+                raise HTTPException(404, "Not found")
             
             ns = not x.data[0].get('is_pinned', False)
             sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', user).execute()
@@ -900,31 +918,40 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
             vote_type = int(req.params.get("vote_type", 0))
             if vote_type not in [-1, 0, 1]: raise HTTPException(400, "Bad type")
             
-            ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
+            try:
+                ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
+            except Exception:
+                ex = type('obj', (object,), {'data': []})
+                
             p = sb.table('posts').select('likes,dislikes').eq('id', rid).execute()
-            if not p.data: raise HTTPException(404, "Not found")
+            if not p.data or not isinstance(p.data, list) or len(p.data) == 0: 
+                raise HTTPException(404, "Not found")
             
             likes = p.data[0].get('likes') or 0
             dislikes = p.data[0].get('dislikes') or 0
             
             if vote_type == 0:
                 if ex.data:
-                    sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
-                    if ex.data[0]['vote_type'] == 1: likes = max(0, likes - 1)
+                    try: sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
+                    except Exception: pass
+                    if ex.data[0].get('vote_type') == 1: likes = max(0, likes - 1)
                     else: dislikes = max(0, dislikes - 1)
             else:
                 if ex.data:
-                    old = ex.data[0]['vote_type']
+                    old = ex.data[0].get('vote_type')
                     if old == vote_type:
-                        sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
+                        try: sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
+                        except Exception: pass
                         if vote_type == 1: likes = max(0, likes - 1)
                         else: dislikes = max(0, dislikes - 1)
                     else:
-                        sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
+                        try: sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
+                        except Exception: pass
                         if vote_type == 1: likes += 1; dislikes = max(0, dislikes - 1)
                         else: dislikes += 1; likes = max(0, likes - 1)
                 else:
-                    sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
+                    try: sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
+                    except Exception: pass
                     if vote_type == 1: likes += 1
                     else: dislikes += 1
                     
@@ -943,7 +970,7 @@ async def edit(r: Request, user: str = Depends(auth_middleware), lang: str = Coo
     user_data = {"username": user, "description": ""}
     try:
         u = sb.table('users').select('username,description').eq('nickname', user).execute()
-        if u.data: user_data = u.data[0]
+        if u.data and isinstance(u.data, list) and len(u.data) > 0: user_data = u.data[0]
     except Exception: pass
     token = get_csrf_token(r)
     res = HTMLResponse(edit_html(user, user_data, lang, token))
@@ -955,7 +982,12 @@ async def edit_action(r: Request, res: Response, user: str = Depends(auth_middle
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
     
-    sb.table('users').update({"username": username, "description": description}).eq('nickname', user).execute()
+    try:
+        sb.table('users').update({"username": username, "description": description}).eq('nickname', user).execute()
+    except Exception:
+        try:
+            sb.table('users').update({"username": username}).eq('nickname', user).execute()
+        except Exception: pass
     return RedirectResponse("/cabinet", 303)
 
 @app.get("/bugreport", response_class=HTMLResponse)
