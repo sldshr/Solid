@@ -24,7 +24,8 @@ class ConnectionManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
@@ -206,7 +207,6 @@ def get_css():
         .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
         .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
 
-        /* --- ВКЛАДКИ --- */
         .tabs-container { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; }
         .tabs-header { display: flex; gap: 5px; }
         .tab-btn { background: #555; border: none; padding: 10px; cursor: pointer; font-weight: bold; font-size: 16px; color: white; border-radius: 5px 5px 0 0; flex: 1; transition: 0.2s; }
@@ -257,7 +257,6 @@ def get_css():
 
         .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
 
-        /* --- TOAST & MODAL --- */
         #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
         #toast.show { opacity: 1; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
@@ -301,7 +300,6 @@ def get_js(lang, token):
             ve: "{t('vote_err', lang)}"
         }};
 
-        // WebSocket Real-time
         let ws;
         function connectWS() {{
             const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -327,7 +325,6 @@ def get_js(lang, token):
         }}
         connectWS();
 
-        // UI Toast & Modal
         function showToast(msg) {{
             const t = document.getElementById('toast');
             t.innerText = msg;
@@ -352,7 +349,6 @@ def get_js(lang, token):
             nX.onclick = () => {{ m.classList.remove('show'); cb(false); }};
         }}
 
-        // RPC Helper
         async function rpc(method, params) {{
             const res = await fetch('/rpc', {{
                 method: 'POST',
@@ -446,7 +442,6 @@ def get_js(lang, token):
             }}
         }}
 
-        // Debounced & Optimistic Votes
         const voteTimers = {{}};
         async function toggleVote(postId, type, btn) {{
             const wrapper = document.getElementById('post-' + postId);
@@ -514,7 +509,6 @@ def get_overlay():
     </div>
     """
 
-# --- ФУТЕР ---
 def get_footer(lang):
     return f"""
     <div class="footer">
@@ -525,7 +519,6 @@ def get_footer(lang):
     </div>
     """
 
-# --- HTML ГЕНЕРАТОРЫ ---
 def auth_html(lang: str, error_msg: str = "", token: str = ""):
     eb = f"<div class='error-msg'>{error_msg}</div>" if error_msg else "<div class='error-msg'></div>"
     return f"""
@@ -557,7 +550,10 @@ def render_records(records, lang, own=False, feed=False, uid=None):
     if not records: return f"<div class='post-item'>{t('no_posts', lang)}</div>"
     out = ""
     for x in records:
-        rid, pinned, hidden = x.get('id', ''), x.get('is_pinned', False), x.get('is_hidden', False)
+        if not isinstance(x, dict): continue
+        rid = x.get('id', '')
+        pinned = x.get('is_pinned', False)
+        hidden = x.get('is_hidden', False)
         content = html.escape(x.get('content', '')).replace('\n', '<br>')
         date = format_date(x.get('created_at', ''))
         pc = "pinned" if pinned else ""
@@ -588,11 +584,31 @@ def render_records(records, lang, own=False, feed=False, uid=None):
     return out
 
 def merge_memory(db_records, nickname, is_owner=False):
-    f = [x for x in db_records if x['id'] not in deleted_records and (is_owner or not x.get('is_hidden', False))]
-    for x in f:
-        if x['id'] in pinned_records: x['is_pinned'] = pinned_records[x['id']]
+    f = []
+    if not db_records:
+        db_records = []
+        
+    for x in db_records:
+        if not isinstance(x, dict):
+            continue
+        x_id = x.get('id')
+        if not x_id:
+            continue
+        if x_id in deleted_records:
+            continue
+        if not is_owner and x.get('is_hidden', False):
+            continue
+            
+        if x_id in pinned_records:
+            x['is_pinned'] = pinned_records[x_id]
+        f.append(x)
+        
     for rid, x in pending_records.items():
-        if x['user_nickname'] == nickname and (is_owner or not x.get('is_hidden', False)): f.append(x)
+        if not isinstance(x, dict):
+            continue
+        if x.get('user_nickname') == nickname and (is_owner or not x.get('is_hidden', False)):
+            f.append(x)
+            
     f.sort(key=lambda x: (not x.get('is_pinned', False), x.get('created_at', '')), reverse=True)
     return f
 
@@ -726,7 +742,6 @@ def privacy_html(lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div></div></div>{get_footer(lang)}</body></html>"""
 
-# --- МАРШРУТЫ ---
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, next: str = "/"):
     res = RedirectResponse(next, 303)
@@ -801,7 +816,6 @@ async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = 
     set_csrf_cookie(res, token, r)
     return res
 
-# --- ЕДИНЫЙ RPC ЭНДПОИНТ ---
 @app.post("/rpc")
 async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_middleware)):
     if not check_csrf(r):
@@ -888,8 +902,8 @@ async def edit(r: Request, user: str = Depends(auth_middleware), lang: str = Coo
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
 async def edit_action(r: Request, res: Response, user: str = Depends(auth_middleware), username: str = Form(...), description: str = Form(""), csrf_token: str = Form(None), lang: str = Cookie("ru")):
-    if not check_csrf(r, csrf_token): return HTMLResponse("<script>alert('CSRF Error');window.history.back()</script>")
-    if len(description) > 300: return HTMLResponse(f"<script>alert('{t('alert_desc_long', lang)}');window.history.back()</script>")
+    if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
+    if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
     
     sb.table('users').update({"username": username, "description": description}).eq('nickname', user).execute()
     return RedirectResponse("/cabinet", 303)
@@ -910,7 +924,7 @@ async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie
 
 @app.post("/bugreport", response_class=HTMLResponse)
 async def bugreport_submit(r: Request, res: Response, name: str = Form(...), content: str = Form(...), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
-    if not check_csrf(r, csrf_token): return HTMLResponse("<script>alert('CSRF Error');window.history.back()</script>")
+    if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     d = {"name": name, "content": content, "status": "Принято" if lang == "ru" else "Accepted"}
     if nickname: d["user_nickname"] = nickname
     sb.table('bug_reports').insert(d).execute()
