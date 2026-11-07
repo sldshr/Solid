@@ -1,13 +1,11 @@
 from fastapi import FastAPI,Form,Cookie,Request,Response,HTTPException
 from fastapi.responses import HTMLResponse,RedirectResponse,JSONResponse
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.gzip import GZipMiddleware
 from supabase import create_async_client,AsyncClient
 import uvicorn,html,bcrypt,secrets,asyncio,uuid,hashlib
 from datetime import datetime,timezone
 
 app=FastAPI()
-app.add_middleware(GZipMiddleware,minimum_size=500)
 S_URL="https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb:AsyncClient=None
@@ -24,6 +22,7 @@ def _v(p,h):
         if len(h)==64 and hashlib.sha256(p.encode()).hexdigest()==h:return True
         return bcrypt.checkpw(p.encode(),h.encode())
     except:return False
+
 def _g(r):return r.cookies.get("csrf_token") or secrets.token_hex(32)
 def _c(r,f):return r.cookies.get("csrf_token") and (r.cookies.get("csrf_token")==f or r.cookies.get("csrf_token")==r.headers.get("X-CSRF-Token"))
 def _s(res,t,r):
@@ -31,23 +30,27 @@ def _s(res,t,r):
 
 async def _sp(p):
     try:await sb.table('posts').insert(p).execute()
-    except Exception as e:print(f"DB Err: {e}")
+    except Exception as e:print(f"DB Create: {e}")
     finally:_p.pop(p["id"],None)
 
 async def _sd(i):
     try:await sb.table('posts').delete().eq('id',i).execute()
-    except Exception as e:print(f"DB Err: {e}")
+    except Exception as e:print(f"DB Delete: {e}")
     finally:_d.discard(i)
 
 async def _spi(i,s):
     try:await sb.table('posts').update({"is_pinned":s}).eq('id',i).execute()
-    except Exception as e:print(f"DB Err: {e}")
+    except Exception as e:print(f"DB Pin: {e}")
     finally:_pi.pop(i,None)
 
 @app.exception_handler(RequestValidationError)
 async def ve(r,e):
-    l=r.cookies.get("lang","ru");m="Заполните все обязательные поля!" if l=="ru" else "Fill all required fields!"
-    t=_g(r);res=HTMLResponse(content=_ah(l,m,t),status_code=422);_s(res,t,r);return res
+    l=r.cookies.get("lang","ru")
+    m="Заполните все обязательные поля!" if l=="ru" else "Fill all required fields!"
+    t=_g(r)
+    res=HTMLResponse(content=_ah(l,m,t),status_code=422)
+    _s(res,t,r)
+    return res
 
 L={"ru":{"reg":"Регистрация","login":"Вход","username":"юзернейм","nickname":"никнейм","password":"пароль","re_pass":"повтор пароля","captcha":"Я не робот","register_btn":"Зарегистрироваться!","login_btn":"Войти","profile":"ПРОФИЛЬ","total_posts":"Всего записей","logout":"Выйти","edit_profile":"Редактировать профиль","save_changes":"Сохранить изменения","description":"Описание","desc_placeholder":"Расскажите о себе...","create_post_btn":"Создать запись","create_post_placeholder":"Напишите что-нибудь...","my_posts":"МОИ ЗАПИСИ","user_posts":"ЗАПИСИ ПОЛЬЗОВАТЕЛЯ","no_posts":"Записей пока нет...","pin":"Закрепить","unpin":"Открепить","delete":"Удалить","confirm_delete":"Удалить запись?","created_by":"Создано:","hosting":"Хостинг:","back_home":"На главную","user_not_found":"Пользователь не найден.","alert_captcha":"Подтвердите, что вы не робот!","alert_pass_mismatch":"Пароли не совпадают!","alert_nick_taken":"Такой никнейм уже занят!","alert_bad_login":"Неверный никнейм или пароль!","alert_desc_long":"Описание > 300 символов!","link_profile":"(Ссылка)","cancel":"Отмена","username_label":"Имя пользователя","nickname_label":"Никнейм","bugreport_title":"Баг-репорт","bugreport_name":"Ваше имя","bugreport_desc":"Описание проблемы","bugreport_send":"Отправить","bugreport_my":"Мои заявки","privacy_title":"Политика конфиденциальности","privacy_text":"1. Сбор информации. Собираем только данные при регистрации.<br><br>2. Использование. Данные нужны для работы сайта.<br><br>3. Безопасность. Используем шифрование (bcrypt).<br><br>4. Cookies. Сайт использует cookies для сессии.<br><br>5. Ваши права. Вы можете изменить данные в профиле.","privacy_agree":"Я согласен с","privacy_link":"Политикой конфиденциальности","alert_privacy":"Примите политику!","cabinet":"ЛИЧНЫЙ КАБИНЕТ","hidden_record":"Скрытая запись","hidden_label":"Сделать скрытой","record_page":"Запись"},"en":{"reg":"Registration","login":"Login","username":"username","nickname":"nickname","password":"password","re_pass":"re enter pass","captcha":"I am not a robot","register_btn":"Register!","login_btn":"Login","profile":"PROFILE","total_posts":"Total records","logout":"Logout","edit_profile":"Edit Profile","save_changes":"Save changes","description":"Description","desc_placeholder":"Tell about yourself...","create_post_btn":"Create record","create_post_placeholder":"Write something...","my_posts":"MY RECORDS","user_posts":"USER RECORDS","no_posts":"No records yet...","pin":"Pin","unpin":"Unpin","delete":"Delete","confirm_delete":"Delete record?","created_by":"Created by:","hosting":"Hosting:","back_home":"Back to home","user_not_found":"User not found.","alert_captcha":"Confirm you are not a robot!","alert_pass_mismatch":"Passwords do not match!","alert_nick_taken":"Nickname is taken!","alert_bad_login":"Invalid login!","alert_desc_long":"Description > 300 chars!","link_profile":"(Link)","cancel":"Cancel","username_label":"Username","nickname_label":"Nickname","bugreport_title":"Bug Report","bugreport_name":"Your Name","bugreport_desc":"Issue Description","bugreport_send":"Send","bugreport_my":"My Reports","privacy_title":"Privacy Policy","privacy_text":"1. We collect data you provide.<br><br>2. Used for site operation.<br><br>3. We use bcrypt.<br><br>4. Site uses cookies.<br><br>5. You can change data anytime.","privacy_agree":"I agree to the","privacy_link":"Privacy Policy","alert_privacy":"Accept the Privacy Policy!","cabinet":"PERSONAL CABINET","hidden_record":"Hidden record","hidden_label":"Make hidden","record_page":"Record"}}
 def _t(k,l):return L.get(l,L["ru"]).get(k,k)
@@ -159,8 +162,9 @@ async def lg(r:Request,res:Response,nickname:str=Form(...),password:str=Form(...
 @app.get("/cabinet",response_class=HTMLResponse)
 async def db(r:Request,nickname:str=Cookie(None),lang:str=Cookie("ru")):
     if not nickname:return RedirectResponse("/",303)
-    u,p=await asyncio.gather(sb.table('users').select('username,description').eq('nickname',nickname).execute(),sb.table('posts').select('id,user_nickname,content,is_pinned,is_hidden,created_at').eq('user_nickname',nickname).execute())
+    u=await sb.table('users').select('username,description').eq('nickname',nickname).execute()
     if not u.data:return RedirectResponse("/",303)
+    p=await sb.table('posts').select('*').eq('user_nickname',nickname).execute()
     po=_mp(p.data,nickname,True);t=_g(r);res=HTMLResponse(_dh(nickname,u.data[0],po,lang,t));_s(res,t,r);return res
 
 @app.post("/create_record")
@@ -208,8 +212,9 @@ async def eda(r:Request,res:Response,username:str=Form(...),description:str=Form
 async def br(r:Request,nickname:str=Cookie(None),lang:str=Cookie("ru")):
     u="";rp=[]
     if nickname:
-        x,y=await asyncio.gather(sb.table('users').select('username').eq('nickname',nickname).execute(),sb.table('bug_reports').select('*').eq('user_nickname',nickname).order('created_at',desc=True).execute())
+        x=await sb.table('users').select('username').eq('nickname',nickname).execute()
         if x.data:u=x.data[0]['username']
+        y=await sb.table('bug_reports').select('*').eq('user_nickname',nickname).order('created_at',desc=True).execute()
         rp=y.data
     t=_g(r);res=HTMLResponse(_bh(u,rp,lang,t));_s(res,t,r);return res
 
@@ -227,8 +232,9 @@ async def lo():
 
 @app.get("/{nickname}/{rid}",response_class=HTMLResponse)
 async def rp(nickname:str,rid:str,r:Request,lang:str=Cookie("ru")):
-    u,x=await asyncio.gather(sb.table('users').select('username').eq('nickname',nickname).execute(),sb.table('posts').select('id,user_nickname,content,is_pinned,is_hidden,created_at').eq('id',rid).eq('user_nickname',nickname).execute())
+    u=await sb.table('users').select('username').eq('nickname',nickname).execute()
     if not u.data:return HTMLResponse(f"<h2>{_t('user_not_found',lang)}</h2>",404)
+    x=await sb.table('posts').select('*').eq('id',rid).eq('user_nickname',nickname).execute()
     if not x.data:return HTMLResponse(f"<h2>{_t('no_posts',lang)}</h2>",404)
     rec=x.data[0]
     if rec.get('is_hidden') and r.cookies.get("nickname")!=nickname:return HTMLResponse(f"<h2>{_t('user_not_found',lang)}</h2>",404)
@@ -236,9 +242,10 @@ async def rp(nickname:str,rid:str,r:Request,lang:str=Cookie("ru")):
 
 @app.get("/{nickname}",response_class=HTMLResponse)
 async def pb(nickname:str,r:Request,lang:str=Cookie("ru")):
-    u,p=await asyncio.gather(sb.table('users').select('username,description').eq('nickname',nickname).execute(),sb.table('posts').select('id,user_nickname,content,is_pinned,is_hidden,created_at').eq('user_nickname',nickname).execute())
+    u=await sb.table('users').select('username,description').eq('nickname',nickname).execute()
     if not u.data:return HTMLResponse(f"<h2>{_t('user_not_found',lang)} <a href='/'>OK</a></h2>",404)
     is_owner=(r.cookies.get("nickname")==nickname)
+    p=await sb.table('posts').select('*').eq('user_nickname',nickname).execute()
     po=_mp(p.data,nickname,is_owner);t=_g(r);res=HTMLResponse(_ph(nickname,u.data[0],po,lang,t));_s(res,t,r);return res
 
 if __name__=="__main__":uvicorn.run(app,host="127.0.0.1",port=8000)
