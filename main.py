@@ -89,7 +89,7 @@ def _rc(p,cm,l,t,is_owner=False,home=False):
 
 def _mp(dp,n,v=None):
     f=[x for x in dp if x['id'] not in _d]
-    if v:f=[x for x in f if x.get('visibility')==v and not x.get('is_hidden')]
+    if v:f=[x for x in f if x.get('visibility')==v]
     else:f=[x for x in f if x.get('user_nickname')==n]
     for x in f:
         if x['id'] in _pi:x['is_pinned']=_pi[x['id']]
@@ -141,7 +141,7 @@ async def ix(r:Request,nickname:str=Cookie(None),lang:str=Cookie("ru")):
 @app.get("/home",response_class=HTMLResponse)
 async def hm(r:Request,nickname:str=Cookie(None),lang:str=Cookie("ru")):
     t=_g(r)
-    p=await sb.table('posts').select('*,users(username)').eq('visibility','public').eq('is_hidden',False).order('created_at',desc=True).execute()
+    p=await sb.table('posts').select('*,users(username)').eq('visibility','public').order('created_at',desc=True).execute()
     po=_mp(p.data,nickname,'public')
     cm={}
     if po:
