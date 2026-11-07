@@ -14,7 +14,7 @@ S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
 
-# --- ОПЕРАТИВНАЯ ПАМЯТЬ (ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ) ---
+# --- ОПЕРАТИВНАЯ ПАМЯТЬ ---
 deleted_records = set()
 pinned_records = {}
 pending_records = {}
@@ -123,11 +123,11 @@ LOCALES = {
         "username_label": "Имя", "nickname_label": "Никнейм", "bugreport_title": "Баг-репорт", 
         "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы", "bugreport_send": "Отправить", 
         "bugreport_my": "Мои заявки", "privacy_title": "Политика конфиденциальности",
-        "privacy_text": "1. Сбор информации. Собираем только данные при регистрации.<br><br>2. Использование. Данные нужны для работы сайта.<br><br>3. Безопасность. Используем шифрование (bcrypt).<br><br>4. Cookies. Сайт использует cookies для сессии.<br><br>5. Ваши права. Вы можете изменить данные в профиле.",
+        "privacy_text": "1. Сбор информации. Мы собираем только ваш юзернейм, никнейм и хеш пароля. Пароли хранятся в зашифрованном виде (bcrypt).<br><br>2. Использование данных. Данные используются для аутентификации и отображения профиля. Мы не передаем данные третьим лицам.<br><br>3. Контент. Ваши записи и лайки хранятся на серверах Supabase. Скрытые записи видны только вам.<br><br>4. Cookies. Сайт использует cookies для сессии и выбранного языка.<br><br>5. Ваши права. Вы можете изменить профиль или удалить записи в любой момент.",
         "privacy_agree": "Я согласен с", "privacy_link": "Политикой конфиденциальности",
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
         "hidden_record": "Скрытая", "hidden_label": "Скрытая запись", "record_page": "Запись", 
-        "vote_err": "Вы уже голосовали!"
+        "vote_err": "Вы уже голосовали!", "copy_link": "Ссылка"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -147,11 +147,11 @@ LOCALES = {
         "username_label": "Name", "nickname_label": "Nickname", "bugreport_title": "Bug Report", 
         "bugreport_name": "Your Name", "bugreport_desc": "Issue Description", "bugreport_send": "Send", 
         "bugreport_my": "My Reports", "privacy_title": "Privacy Policy",
-        "privacy_text": "1. We collect data you provide.<br><br>2. Used for site operation.<br><br>3. We use bcrypt.<br><br>4. Site uses cookies.<br><br>5. You can change data anytime.",
+        "privacy_text": "1. Data Collection. We collect only your username, nickname, and hashed password (bcrypt).<br><br>2. Data Usage. Data is used for authentication and profile display. We do not share data with third parties.<br><br>3. Content. Your records and votes are stored on Supabase. Hidden records are visible only to you.<br><br>4. Cookies. The site uses cookies for session and language preferences.<br><br>5. Your Rights. You can edit your profile or delete records at any time.",
         "privacy_agree": "I agree to the", "privacy_link": "Privacy Policy",
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
         "hidden_record": "Hidden", "hidden_label": "Make hidden", "record_page": "Record", 
-        "vote_err": "You already voted!"
+        "vote_err": "You already voted!", "copy_link": "Link"
     }
 }
 
@@ -234,6 +234,11 @@ def get_css():
         .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         
+        /* Зеленая подсветка для своих постов */
+        .post-item.my-post { border-left: 5px solid #2ecc71; background: #e8f8f5; }
+        .post-item.my-post.pinned { border-left: 5px solid #ff4d4d; background: #e8f8f5; }
+        .post-item.my-post .post-header { color: #1e8449; }
+        
         .post-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #333; border-bottom: 1px solid #888; padding-bottom: 5px; flex-wrap: wrap; gap: 5px; }
         .post-content { margin-bottom: 10px; font-size: 18px; }
         .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
@@ -251,6 +256,7 @@ def get_css():
         .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
+        .action-btn.link-btn:hover { background: #f1c40f; color: black; }
 
         .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
         .status-Принято, .status-Accepted { background: #4da6ff; }
@@ -320,7 +326,8 @@ def get_js(lang, token):
                 const d = JSON.parse(e.data);
                 if (d.type === 'vote') {{
                     const p = document.getElementById('post-' + d.post_id);
-                    if (p) {{
+                    // Обновляем только если пользователь сейчас не кликает по этому посту
+                    if (p && p.dataset.pendingVote !== "true") {{
                         const likeSpan = p.querySelector('.v-l');
                         const dislikeSpan = p.querySelector('.v-d');
                         if (likeSpan) likeSpan.innerText = d.likes;
@@ -336,6 +343,16 @@ def get_js(lang, token):
             ws.onclose = () => setTimeout(connectWS, 3000);
         }}
         connectWS();
+
+        function copyLink(user, rid, btn) {{
+            if (!user) return;
+            const url = window.location.origin + '/' + user + '/' + rid;
+            navigator.clipboard.writeText(url).then(() => {{
+                showToast("Link copied!");
+            }}).catch(() => {{
+                showToast("Failed to copy");
+            }});
+        }}
 
         function showToast(msg) {{
             const t = document.getElementById('toast');
@@ -412,7 +429,13 @@ def get_js(lang, token):
                 </div>
                 <div class="post-item">
                     <div class="post-content">${{c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}} ${{hid ? `<span class="hidden-badge">${{L.h}}</span>` : ''}}</div>
-                    <div class="post-footer"><div class="post-date">${{d}}</div></div>
+                    <div class="post-footer">
+                        <div class="vote-btns">
+                            <button onclick="toggleVote('${{i}}',1,this)" class="vote-btn like">{SVG_LIKE} <span class="v-l">0</span></button>
+                            <button onclick="toggleVote('${{i}}',-1,this)" class="vote-btn dislike">{SVG_DISLIKE} <span class="v-d">0</span></button>
+                        </div>
+                        <div class="post-date">${{d}}</div>
+                    </div>
                 </div>`;
             a.insertBefore(w, a.children[1]);
             f.reset();
@@ -464,6 +487,10 @@ def get_js(lang, token):
             const likeSpan = wrapper.querySelector('.v-l');
             const dislikeSpan = wrapper.querySelector('.v-d');
             
+            if (!likeSpan || !dislikeSpan || !likeBtn || !dislikeBtn) return;
+
+            wrapper.dataset.pendingVote = "true"; // Блокируем обновление из WebSocket
+
             let likes = parseInt(likeSpan.innerText) || 0;
             let dislikes = parseInt(dislikeSpan.innerText) || 0;
             
@@ -471,16 +498,28 @@ def get_js(lang, token):
             const isDisliked = dislikeBtn.classList.contains('active');
             
             if (type === 1) {{
-                if (isLiked) {{ likeBtn.classList.remove('active'); likes = Math.max(0, likes - 1); }}
-                else {{
-                    likeBtn.classList.add('active'); likes += 1;
-                    if (isDisliked) {{ dislikeBtn.classList.remove('active'); dislikes = Math.max(0, dislikes - 1); }}
+                if (isLiked) {{
+                    likeBtn.classList.remove('active');
+                    likes = Math.max(0, likes - 1);
+                }} else {{
+                    likeBtn.classList.add('active');
+                    likes += 1;
+                    if (isDisliked) {{
+                        dislikeBtn.classList.remove('active');
+                        dislikes = Math.max(0, dislikes - 1);
+                    }}
                 }}
             }} else {{
-                if (isDisliked) {{ dislikeBtn.classList.remove('active'); dislikes = Math.max(0, dislikes - 1); }}
-                else {{
-                    dislikeBtn.classList.add('active'); dislikes += 1;
-                    if (isLiked) {{ likeBtn.classList.remove('active'); likes = Math.max(0, likes - 1); }}
+                if (isDisliked) {{
+                    dislikeBtn.classList.remove('active');
+                    dislikes = Math.max(0, dislikes - 1);
+                }} else {{
+                    dislikeBtn.classList.add('active');
+                    dislikes += 1;
+                    if (isLiked) {{
+                        likeBtn.classList.remove('active');
+                        likes = Math.max(0, likes - 1);
+                    }}
                 }}
             }}
             
@@ -498,11 +537,16 @@ def get_js(lang, token):
                 if (finalDisliked) voteType = -1;
                 
                 try {{
-                    await rpc('vote', {{ post_id: postId, vote_type: voteType }});
+                    const res = await rpc('vote', {{ post_id: postId, vote_type: voteType }});
+                    // Синхронизируем финальные цифры с сервером
+                    likeSpan.innerText = res.likes;
+                    dislikeSpan.innerText = res.dislikes;
                 }} catch (e) {{
                     showToast(e.message);
+                }} finally {{
+                    wrapper.dataset.pendingVote = "false";
                 }}
-            }}, 500);
+            }}, 600);
         }}
     </script>
     """
@@ -567,22 +611,37 @@ def render_records(records, lang, own=False, feed=False, uid=None):
         rid = esc(x.get('id'))
         if not rid: continue
         
+        is_my_post = (uid and x.get('user_nickname') == uid)
         pinned = bool(x.get('is_pinned', False))
         hidden = bool(x.get('is_hidden', False))
         content = esc(x.get('content')).replace('\n', '<br>')
         date = format_date(esc(x.get('created_at')))
+        
         pc = "pinned" if pinned else ""
+        if feed and is_my_post: pc += " my-post"
+        
         likes = x.get('likes') or 0
         dislikes = x.get('dislikes') or 0
         hb = f"<span class='hidden-badge'>{t('hidden_record', lang)}</span>" if hidden else ""
         
-        acts = f"<div class='post-actions'><button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button><button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button></div>" if own else ""
+        # Кнопки действий (удалить, закрепить, скопировать)
+        acts = "<div class='post-actions'>"
+        if uid:
+            acts += f"<button onclick='copyLink(\"{x.get('user_nickname','')}\",\"{rid}\", this)' class='action-btn link-btn'>{t('copy_link', lang)}</button>"
+        if own or (feed and is_my_post):
+            acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
+            acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
+        acts += "</div>"
         
-        vb = ""
-        if feed and uid:
-            vb = f"<div class='vote-btns'><button onclick='toggleVote(\"{rid}\",1,this)' class='vote-btn like'>{SVG_LIKE} <span class='v-l'>{likes}</span></button><button onclick='toggleVote(\"{rid}\",-1,this)' class='vote-btn dislike'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></button></div>"
-        elif feed:
-            vb = f"<div class='vote-btns'><span style='color:green;font-weight:bold'>{SVG_LIKE} {likes}</span> <span style='color:red;font-weight:bold'>{SVG_DISLIKE} {dislikes}</span></div>"
+        # Кнопки голосования (всегда рендерим)
+        vb = "<div class='vote-btns'>"
+        if uid:
+            vb += f"<button onclick='toggleVote(\"{rid}\",1,this)' class='vote-btn like'>{SVG_LIKE} <span class='v-l'>{likes}</span></button>"
+            vb += f"<button onclick='toggleVote(\"{rid}\",-1,this)' class='vote-btn dislike'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></button>"
+        else:
+            vb += f"<span style='color:green;font-weight:bold'>{SVG_LIKE} <span class='v-l'>{likes}</span></span>"
+            vb += f"<span style='color:red;font-weight:bold'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></span>"
+        vb += "</div>"
             
         head = ""
         if feed:
@@ -637,9 +696,9 @@ def merge_memory(db_records, nickname, is_owner=False):
         pass
     return f
 
-def dashboard_html(nickname, user, my_p, feed_p, lang, token):
-    rh_my = render_records(my_p, lang, True, False)
-    rh_feed = render_records(feed_p, lang, False, True, nickname)
+def dashboard_html(nickname, user, my_p, feed_p, lang, token, viewer):
+    rh_my = render_records(my_p, lang, own=True, feed=False, uid=viewer)
+    rh_feed = render_records(feed_p, lang, own=False, feed=True, uid=viewer)
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
@@ -697,8 +756,8 @@ def edit_html(nickname, user, lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
-def public_html(nickname, user, records, lang, token):
-    rh = render_records(records, lang, False, True, nickname)
+def public_html(nickname, user, records, lang, token, viewer):
+    rh = render_records(records, lang, own=False, feed=True, uid=viewer)
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
@@ -714,10 +773,8 @@ def public_html(nickname, user, records, lang, token):
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
     </div><div class="main-content"><div class="tabs-container"><div class="posts-area" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div></div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
-def record_page_html(nickname, user, record, lang, token):
-    c = esc(record.get('content')).replace('\n', '<br>')
-    d = format_date(esc(record.get('created_at')))
-    hb = f"<span class='hidden-badge'>{t('hidden_record', lang)}</span>" if record.get('is_hidden') else ""
+def record_page_html(nickname, user, record, lang, token, viewer):
+    rh = render_records([record], lang, own=False, feed=True, uid=viewer)
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{t('record_page', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
@@ -727,9 +784,7 @@ def record_page_html(nickname, user, record, lang, token):
         <div class="info-card"><b>{t('username_label', lang)}:</b><br>{esc(user.get('username'))}</div>
         <a href="/{nickname}" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
     </div><div class="main-content"><div class="tabs-container"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
-        <div class="post-wrapper"><div class="post-item {'pinned' if record.get('is_pinned') else ''}">
-            <div class="post-content" style="font-size:20px">{c} {hb}</div><div class="post-date">{d}</div>
-        </div></div>
+        {rh}
     </div></div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def bugreport_html(username, reports, lang, token):
@@ -871,7 +926,7 @@ async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = 
     pf = merge_memory(f_data, user, False)
     
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(user, user_data, po, pf, lang, token))
+    res = HTMLResponse(dashboard_html(user, user_data, po, pf, lang, token, user))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -1043,7 +1098,8 @@ async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("r
     if rec.get('is_hidden') and r.cookies.get("nickname") != nickname:
         return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
     token = get_csrf_token(r)
-    res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token))
+    viewer = r.cookies.get("nickname")
+    res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token, viewer))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -1061,11 +1117,12 @@ async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
     except Exception:
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
     
-    is_owner = (r.cookies.get("nickname") == nickname)
+    viewer = r.cookies.get("nickname")
+    is_owner = (viewer == nickname)
     po = merge_memory(p_data, nickname, is_owner)
     
     token = get_csrf_token(r)
-    res = HTMLResponse(public_html(nickname, u_data, po, lang, token))
+    res = HTMLResponse(public_html(nickname, u_data, po, lang, token, viewer))
     set_csrf_cookie(res, token, r)
     return res
 
