@@ -14,6 +14,10 @@ S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
 
+# --- БЕЗОПАСНЫЙ HTML ---
+def esc(val):
+    return html.escape(str(val)) if val is not None else ""
+
 # --- WEBSOCKET МЕНЕДЖЕР (REAL-TIME) ---
 class ConnectionManager:
     def __init__(self):
@@ -72,9 +76,12 @@ def set_csrf_cookie(response: Response, token: str, request: Request):
 async def auth_middleware(r: Request, nickname: Optional[str] = Cookie(None)):
     if not nickname:
         raise HTTPException(status_code=401)
-    x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-    if not x.data:
-        raise HTTPException(status_code=401)
+    try:
+        x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
+        if not x.data:
+            raise HTTPException(status_code=401)
+    except Exception:
+        raise HTTPException(status_code=500, detail="DB Error")
     return nickname
 
 @app.exception_handler(RequestValidationError)
@@ -551,13 +558,14 @@ def render_records(records, lang, own=False, feed=False, uid=None):
     out = ""
     for x in records:
         if not isinstance(x, dict): continue
-        rid = x.get('id', '')
+        rid = esc(x.get('id'))
         pinned = x.get('is_pinned', False)
         hidden = x.get('is_hidden', False)
-        content = html.escape(x.get('content', '')).replace('\n', '<br>')
-        date = format_date(x.get('created_at', ''))
+        content = esc(x.get('content')).replace('\n', '<br>')
+        date = format_date(esc(x.get('created_at')))
         pc = "pinned" if pinned else ""
-        likes, dislikes = x.get('likes', 0), x.get('dislikes', 0)
+        likes = x.get('likes') or 0
+        dislikes = x.get('dislikes') or 0
         hb = f"<span class='hidden-badge'>{t('hidden_record', lang)}</span>" if hidden else ""
         
         acts = f"<div class='post-actions'><button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button><button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button></div>" if own else ""
@@ -570,7 +578,8 @@ def render_records(records, lang, own=False, feed=False, uid=None):
             
         head = ""
         if feed:
-            head = f"<div class='post-header'><span><b><a href='/{x.get('user_nickname','')}'>{html.escape(x.get('user_nickname',''))}</a></b></span><span>{date}</span></div>"
+            user_nick = esc(x.get('user_nickname'))
+            head = f"<div class='post-header'><span><b><a href='/{user_nick}'>{user_nick}</a></b></span><span>{date}</span></div>"
             date = "" 
             
         out += f"""
@@ -586,7 +595,7 @@ def render_records(records, lang, own=False, feed=False, uid=None):
 def merge_memory(db_records, nickname, is_owner=False):
     f = []
     if not db_records:
-        db_records = []
+        return f
         
     for x in db_records:
         if not isinstance(x, dict):
@@ -609,21 +618,30 @@ def merge_memory(db_records, nickname, is_owner=False):
         if x.get('user_nickname') == nickname and (is_owner or not x.get('is_hidden', False)):
             f.append(x)
             
-    f.sort(key=lambda x: (not x.get('is_pinned', False), x.get('created_at', '')), reverse=True)
+    def sort_key(x):
+        p = x.get('is_pinned')
+        c = x.get('created_at')
+        return (bool(p), str(c) if c is not None else '')
+        
+    try:
+        f.sort(key=sort_key, reverse=True)
+    except:
+        pass
     return f
 
 def dashboard_html(nickname, user, my_p, feed_p, lang, token):
     rh_my = render_records(my_p, lang, True, False)
     rh_feed = render_records(feed_p, lang, False, True, nickname)
-    desc = user.get('description', '')
-    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{html.escape(desc)}</div>" if desc else ""
+    user_username = esc(user.get('username'))
+    desc = esc(user.get('description'))
+    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{t('cabinet', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>{t('cabinet', lang)}</h2>
-        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user['username'])}</div>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}" target="_blank">{html.escape(nickname)} {t('link_profile', lang)}</a></div>{db}
+        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{user_username}</div>
+        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}" target="_blank">{esc(nickname)} {t('link_profile', lang)}</a></div>{db}
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(my_p)}</div>
         <a href="/cabinet/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
         <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">{t('logout', lang)}</button></form>
@@ -651,7 +669,8 @@ def dashboard_html(nickname, user, my_p, feed_p, lang, token):
     </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def edit_html(nickname, user, lang, token):
-    desc = user.get('description', '')
+    desc = esc(user.get('description'))
+    user_username = esc(user.get('username'))
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{t('edit_profile', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
@@ -660,9 +679,9 @@ def edit_html(nickname, user, lang, token):
         <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
             <input type="hidden" name="csrf_token" value="{token}">
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('username_label', lang)}</div>
-            <input type="text" name="username" value="{html.escape(user['username'])}" required style="background:#a9a9a9;padding:12px;font-size:18px">
+            <input type="text" name="username" value="{user_username}" required style="background:#a9a9a9;padding:12px;font-size:18px">
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('description', lang)}</div>
-            <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="uc(this)" style="background:#a9a9a9;height:150px;padding:12px;font-size:18px">{html.escape(desc)}</textarea>
+            <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="uc(this)" style="background:#a9a9a9;height:150px;padding:12px;font-size:18px">{desc}</textarea>
             <div id="char-count" style="color:#fff;text-align:right;font-size:14px">{len(desc)} / 300</div>
             <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">{t('save_changes', lang)}</button>
             <a href="/cabinet" class="btn" style="background:#a9a9a9">{t('cancel', lang)}</a>
@@ -672,31 +691,32 @@ def edit_html(nickname, user, lang, token):
 
 def public_html(nickname, user, records, lang, token):
     rh = render_records(records, lang, False, True, nickname)
-    desc = user.get('description', '')
-    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{html.escape(desc)}</div>" if desc else ""
+    user_username = esc(user.get('username'))
+    desc = esc(user.get('description'))
+    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{t('profile', lang)} {html.escape(nickname)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>{t('profile', lang)} {esc(nickname)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>{t('profile', lang)}</h2>
-        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user['username'])}</div>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{html.escape(nickname)}</div>{db}
+        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{user_username}</div>
+        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{esc(nickname)}</div>{db}
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(records)}</div>
         <div class="lang-switch"><a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
     </div><div class="main-content"><div class="tabs-container"><div class="posts-area" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div></div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def record_page_html(nickname, user, record, lang, token):
-    c = html.escape(record.get('content', '')).replace('\n', '<br>')
-    d = format_date(record.get('created_at', ''))
+    c = esc(record.get('content')).replace('\n', '<br>')
+    d = format_date(esc(record.get('created_at')))
     hb = f"<span class='hidden-badge'>{t('hidden_record', lang)}</span>" if record.get('is_hidden') else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{t('record_page', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>{t('profile', lang)}</h2>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}">{html.escape(nickname)}</a></div>
-        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user['username'])}</div>
+        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}">{esc(nickname)}</a></div>
+        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{esc(user.get('username'))}</div>
         <a href="/{nickname}" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
     </div><div class="main-content"><div class="tabs-container"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
         <div class="post-wrapper"><div class="post-item {'pinned' if record.get('is_pinned') else ''}">
@@ -708,10 +728,10 @@ def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else "".join([f"""
         <div class="post-item" style="border-left-color:transparent">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <b>{t('bugreport_title', lang)}</b><span class="status-badge status-{x.get('status','Принято').replace(' ','-')}">{x.get('status','Принято')}</span>
+                <b>{t('bugreport_title', lang)}</b><span class="status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}">{esc(x.get('status','Принято'))}</span>
             </div>
-            <div class="post-content">{html.escape(x.get('content',''))}</div>
-            <div class="post-date">{format_date(x.get('created_at',''))}</div>
+            <div class="post-content">{esc(x.get('content'))}</div>
+            <div class="post-date">{format_date(esc(x.get('created_at')))}</div>
         </div>""" for x in reports])
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -721,7 +741,7 @@ def bugreport_html(username, reports, lang, token):
         <div class="create-post-box"><h2 style="color:#fff;text-align:center;margin:10px 0">{t('bugreport_title', lang)}</h2>
             <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:5px">
                 <input type="hidden" name="csrf_token" value="{token}">
-                <input type="text" name="name" value="{username}" placeholder="{t('bugreport_name', lang)}" required style="background:#a9a9a9;padding:12px;margin-bottom:5px">
+                <input type="text" name="name" value="{esc(username)}" placeholder="{t('bugreport_name', lang)}" required style="background:#a9a9a9;padding:12px;margin-bottom:5px">
                 <textarea name="content" placeholder="{t('bugreport_desc', lang)}" required style="background:#a9a9a9;height:150px;padding:12px;margin-bottom:5px"></textarea>
                 <button type="submit" style="background:#f1c40f;color:#000">{t('bugreport_send', lang)}</button>
             </form>
@@ -742,6 +762,7 @@ def privacy_html(lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div></div></div>{get_footer(lang)}</body></html>"""
 
+# --- МАРШРУТЫ ---
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, next: str = "/"):
     res = RedirectResponse(next, 303)
@@ -752,8 +773,10 @@ async def set_lang(lang: str, next: str = "/"):
 async def index(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     token = get_csrf_token(r)
     if nickname:
-        x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-        if x.data: return RedirectResponse("/cabinet", 303)
+        try:
+            x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
+            if x.data: return RedirectResponse("/cabinet", 303)
+        except Exception: pass
     res = HTMLResponse(auth_html(lang, "", token))
     set_csrf_cookie(res, token, r)
     return res
@@ -773,10 +796,9 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
     if password != re_pass: return auth_html(lang, t('alert_pass_mismatch', lang), token)
     
-    x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-    if x.data: return auth_html(lang, t('alert_nick_taken', lang), token)
-    
     try:
+        x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
+        if x.data: return auth_html(lang, t('alert_nick_taken', lang), token)
         sb.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute()
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
@@ -791,28 +813,50 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
     if not check_csrf(r, csrf_token): return auth_html(lang, "CSRF Error", token)
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     
-    x = sb.table('users').select('password').eq('nickname', nickname).execute()
-    user = x.data[0] if x.data else None
-    if user and verify_password(password, user["password"]):
-        if len(user["password"]) == 64:
-            sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute()
-        res = RedirectResponse("/cabinet", 303)
-        res.set_cookie("nickname", nickname, httponly=True, samesite="lax")
-        return res
+    try:
+        x = sb.table('users').select('password').eq('nickname', nickname).execute()
+        user = x.data[0] if x.data else None
+        if user and verify_password(password, user.get("password", "")):
+            if len(user["password"]) == 64:
+                sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute()
+            res = RedirectResponse("/cabinet", 303)
+            res.set_cookie("nickname", nickname, httponly=True, samesite="lax")
+            return res
+    except Exception as e:
+        return auth_html(lang, f"DB Error: {str(e)}", token)
         
     return auth_html(lang, t('alert_bad_login', lang), token)
 
 @app.get("/cabinet", response_class=HTMLResponse)
 async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
-    u = sb.table('users').select('username,description').eq('nickname', user).execute()
-    p = sb.table('posts').select('*').eq('user_nickname', user).execute()
-    f = sb.table('posts').select('*').eq('is_hidden', False).order('created_at', desc=True).limit(50).execute()
+    user_data = {"username": user, "description": ""}
+    p_data = []
+    f_data = []
     
-    po = merge_memory(p.data, user, True)
-    pf = merge_memory(f.data, user, False)
+    try:
+        u = sb.table('users').select('username,description').eq('nickname', user).execute()
+        if u.data: user_data = u.data[0]
+    except Exception: pass
+    
+    try:
+        p = sb.table('posts').select('*').eq('user_nickname', user).execute()
+        p_data = p.data or []
+    except Exception: pass
+    
+    try:
+        f = sb.table('posts').select('*').eq('is_hidden', False).order('created_at', desc=True).limit(50).execute()
+        f_data = f.data or []
+    except Exception:
+        try:
+            f = sb.table('posts').select('*').order('created_at', desc=True).limit(50).execute()
+            f_data = f.data or []
+        except Exception: pass
+    
+    po = merge_memory(p_data, user, True)
+    pf = merge_memory(f_data, user, False)
     
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(user, u.data[0], po, pf, lang, token))
+    res = HTMLResponse(dashboard_html(user, user_data, po, pf, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -821,82 +865,88 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
     if not check_csrf(r):
         raise HTTPException(status_code=403, detail="CSRF Error")
     
-    if req.method == "create_record":
-        content = req.params.get("content", "")
-        is_hidden = req.params.get("is_hidden", False)
-        client_id = req.params.get("client_id")
-        
-        i = client_id or str(uuid.uuid4())
-        n = datetime.now(timezone.utc).isoformat()
-        
-        pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "is_hidden": bool(is_hidden), "created_at": n, "likes": 0, "dislikes": 0}
-        try: sb.table('posts').insert(pd).execute()
-        except Exception as e: raise HTTPException(500, str(e))
-        
-        await manager.broadcast({"type": "new_record", "post_id": i})
-        return {"status": "ok", "id": i}
-        
-    elif req.method == "delete_record":
-        rid = req.params.get("post_id")
-        try: sb.table('posts').delete().eq('id', rid).eq('user_nickname', user).execute()
-        except Exception as e: raise HTTPException(500, str(e))
-        
-        await manager.broadcast({"type": "delete_record", "post_id": rid})
-        return {"status": "ok"}
-        
-    elif req.method == "pin_record":
-        rid = req.params.get("post_id")
-        x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', user).execute()
-        if not x.data: raise HTTPException(404, "Not found")
-        
-        ns = not x.data[0]['is_pinned']
-        sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', user).execute()
-        return {"status": "ok", "is_pinned": ns}
-        
-    elif req.method == "vote":
-        rid = req.params.get("post_id")
-        vote_type = int(req.params.get("vote_type", 0))
-        if vote_type not in [-1, 0, 1]: raise HTTPException(400, "Bad type")
-        
-        ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
-        p = sb.table('posts').select('likes,dislikes').eq('id', rid).execute()
-        if not p.data: raise HTTPException(404, "Not found")
-        
-        likes, dislikes = p.data[0]['likes'], p.data[0]['dislikes']
-        
-        if vote_type == 0:
-            if ex.data:
-                sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
-                if ex.data[0]['vote_type'] == 1: likes = max(0, likes - 1)
-                else: dislikes = max(0, dislikes - 1)
-        else:
-            if ex.data:
-                old = ex.data[0]['vote_type']
-                if old == vote_type:
+    try:
+        if req.method == "create_record":
+            content = req.params.get("content", "")
+            is_hidden = req.params.get("is_hidden", False)
+            client_id = req.params.get("client_id")
+            
+            i = client_id or str(uuid.uuid4())
+            n = datetime.now(timezone.utc).isoformat()
+            
+            pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "is_hidden": bool(is_hidden), "created_at": n, "likes": 0, "dislikes": 0}
+            sb.table('posts').insert(pd).execute()
+            
+            await manager.broadcast({"type": "new_record", "post_id": i})
+            return {"status": "ok", "id": i}
+            
+        elif req.method == "delete_record":
+            rid = req.params.get("post_id")
+            sb.table('posts').delete().eq('id', rid).eq('user_nickname', user).execute()
+            await manager.broadcast({"type": "delete_record", "post_id": rid})
+            return {"status": "ok"}
+            
+        elif req.method == "pin_record":
+            rid = req.params.get("post_id")
+            x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', user).execute()
+            if not x.data: raise HTTPException(404, "Not found")
+            
+            ns = not x.data[0].get('is_pinned', False)
+            sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', user).execute()
+            return {"status": "ok", "is_pinned": ns}
+            
+        elif req.method == "vote":
+            rid = req.params.get("post_id")
+            vote_type = int(req.params.get("vote_type", 0))
+            if vote_type not in [-1, 0, 1]: raise HTTPException(400, "Bad type")
+            
+            ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
+            p = sb.table('posts').select('likes,dislikes').eq('id', rid).execute()
+            if not p.data: raise HTTPException(404, "Not found")
+            
+            likes = p.data[0].get('likes') or 0
+            dislikes = p.data[0].get('dislikes') or 0
+            
+            if vote_type == 0:
+                if ex.data:
                     sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
-                    if vote_type == 1: likes = max(0, likes - 1)
+                    if ex.data[0]['vote_type'] == 1: likes = max(0, likes - 1)
                     else: dislikes = max(0, dislikes - 1)
-                else:
-                    sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
-                    if vote_type == 1: likes += 1; dislikes = max(0, dislikes - 1)
-                    else: dislikes += 1; likes = max(0, likes - 1)
             else:
-                sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
-                if vote_type == 1: likes += 1
-                else: dislikes += 1
-                
-        sb.table('posts').update({"likes": likes, "dislikes": dislikes}).eq('id', rid).execute()
-        await manager.broadcast({"type": "vote", "post_id": rid, "likes": likes, "dislikes": dislikes})
-        return {"status": "ok", "likes": likes, "dislikes": dislikes}
-        
-    raise HTTPException(400, "Unknown method")
+                if ex.data:
+                    old = ex.data[0]['vote_type']
+                    if old == vote_type:
+                        sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
+                        if vote_type == 1: likes = max(0, likes - 1)
+                        else: dislikes = max(0, dislikes - 1)
+                    else:
+                        sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
+                        if vote_type == 1: likes += 1; dislikes = max(0, dislikes - 1)
+                        else: dislikes += 1; likes = max(0, likes - 1)
+                else:
+                    sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
+                    if vote_type == 1: likes += 1
+                    else: dislikes += 1
+                    
+            sb.table('posts').update({"likes": likes, "dislikes": dislikes}).eq('id', rid).execute()
+            await manager.broadcast({"type": "vote", "post_id": rid, "likes": likes, "dislikes": dislikes})
+            return {"status": "ok", "likes": likes, "dislikes": dislikes}
+            
+        raise HTTPException(400, "Unknown method")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 @app.get("/cabinet/edit", response_class=HTMLResponse)
 async def edit(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
-    u = sb.table('users').select('username,description').eq('nickname', user).execute()
-    if not u.data: return RedirectResponse("/", 303)
+    user_data = {"username": user, "description": ""}
+    try:
+        u = sb.table('users').select('username,description').eq('nickname', user).execute()
+        if u.data: user_data = u.data[0]
+    except Exception: pass
     token = get_csrf_token(r)
-    res = HTMLResponse(edit_html(user, u.data[0], lang, token))
+    res = HTMLResponse(edit_html(user, user_data, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -913,10 +963,12 @@ async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie
     u = ""
     rp = []
     if nickname:
-        x = sb.table('users').select('username').eq('nickname', nickname).execute()
-        if x.data: u = x.data[0]['username']
-        y = sb.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
-        rp = y.data
+        try:
+            x = sb.table('users').select('username').eq('nickname', nickname).execute()
+            if x.data: u = x.data[0].get('username') or ""
+            y = sb.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
+            rp = y.data or []
+        except Exception: pass
     token = get_csrf_token(r)
     res = HTMLResponse(bugreport_html(u, rp, lang, token))
     set_csrf_cookie(res, token, r)
@@ -938,29 +990,45 @@ async def logout():
 
 @app.get("/{nickname}/{rid}", response_class=HTMLResponse)
 async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("ru")):
-    u = sb.table('users').select('username').eq('nickname', nickname).execute()
-    if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
-    x = sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute()
-    if not x.data: return HTMLResponse(f"<h2>{t('no_posts', lang)}</h2>", 404)
-    rec = x.data[0]
+    u_data = {}
+    rec = None
+    try:
+        u = sb.table('users').select('username').eq('nickname', nickname).execute()
+        if u.data: u_data = u.data[0]
+        else: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
+        
+        x = sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute()
+        if not x.data: return HTMLResponse(f"<h2>{t('no_posts', lang)}</h2>", 404)
+        rec = x.data[0]
+    except Exception:
+        return HTMLResponse(f"<h2>DB Error</h2>", 500)
+        
     if rec.get('is_hidden') and r.cookies.get("nickname") != nickname:
         return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
     token = get_csrf_token(r)
-    res = HTMLResponse(record_page_html(nickname, u.data[0], rec, lang, token))
+    res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
 @app.get("/{nickname}", response_class=HTMLResponse)
 async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
-    u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
-    if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
+    u_data = {}
+    p_data = []
+    try:
+        u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
+        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
+        u_data = u.data[0]
+        
+        p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
+        p_data = p.data or []
+    except Exception:
+        return HTMLResponse(f"<h2>DB Error</h2>", 500)
     
     is_owner = (r.cookies.get("nickname") == nickname)
-    p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
-    po = merge_memory(p.data, nickname, is_owner)
+    po = merge_memory(p_data, nickname, is_owner)
     
     token = get_csrf_token(r)
-    res = HTMLResponse(public_html(nickname, u.data[0], po, lang, token))
+    res = HTMLResponse(public_html(nickname, u_data, po, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
