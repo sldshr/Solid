@@ -47,7 +47,7 @@ def set_csrf_cookie(response: Response, token: str, request: Request):
     if not request.cookies.get("csrf_token"):
         response.set_cookie("csrf_token", token, httponly=True, samesite="lax")
 
-# --- МИДДЛВАРЬ / ЗАВИСИМОСТЬ ДЛЯ ПРОВЕРКИ АВТОРИЗАЦИИ ---
+# --- МИДДЛВАРЬ / ЗАВИСИМОСТЬ ---
 async def auth_middleware(r: Request, nickname: Optional[str] = Cookie(None)):
     if not nickname:
         raise HTTPException(status_code=401)
@@ -181,8 +181,17 @@ def get_css():
         
         .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
         .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
-        
-        .posts-area { background: black; padding: 15px; min-height: 300px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
+
+        /* --- СТИЛИ ДЛЯ ВКЛАДОК --- */
+        .tabs-container { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; }
+        .tabs-header { display: flex; gap: 5px; }
+        .tab-btn { background: #555; border: none; padding: 10px; cursor: pointer; font-weight: bold; font-size: 16px; color: white; border-radius: 5px 5px 0 0; flex: 1; transition: 0.2s; }
+        .tab-btn:hover { background: #777; }
+        .tab-btn.active { background: #4da6ff; color: white; }
+        .tab-content { display: none; flex-direction: column; gap: 10px; min-height: 300px; padding-top: 10px; }
+        .tab-content.active { display: flex; }
+
+        .posts-area { padding: 0; display: flex; flex-direction: column; gap: 10px; }
         .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
         
         .post-wrapper { position: relative; transition: opacity 0.3s ease; }
@@ -232,7 +241,8 @@ def get_css():
             .dashboard-container { flex-direction: column; gap: 15px; }
             .sidebar { width: 100%; }
             .main-content { width: 100%; }
-            .posts-area { padding: 10px; }
+            .tabs-container { padding: 10px; }
+            .tab-btn { font-size: 14px; padding: 8px; }
             .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
             .error-msg { text-align: center; }
             .login-lang-wrapper { justify-content: center; }
@@ -255,6 +265,18 @@ def get_js(lang, token):
             c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}", h: "{t('hidden_record', lang)}",
             ve: "{t('vote_err', lang)}"
         }};
+
+        function switchTab(tab) {{
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'my') {{
+                document.getElementById('btn-my').classList.add('active');
+                document.getElementById('tab-my').classList.add('active');
+            }} else {{
+                document.getElementById('btn-feed').classList.add('active');
+                document.getElementById('tab-feed').classList.add('active');
+            }}
+        }}
 
         function tp(i, b) {{
             const x = document.getElementById(i);
@@ -454,8 +476,19 @@ def dashboard_html(nickname, user, my_p, feed_p, lang, token):
             <label style="color:#fff;display:flex;align-items:center;gap:10px;margin-bottom:5px;font-weight:bold"><input type="checkbox" name="is_hidden"> {t('hidden_label', lang)}</label>
             <button type="submit">{t('create_post_btn', lang)}</button>
         </form></div>
-        <div class="posts-area" id="my-records-container"><h2>{t('my_posts', lang)}</h2>{rh_my}</div>
-        <div class="posts-area"><h2>{t('feed', lang)}</h2>{rh_feed}</div>
+        
+        <div class="tabs-container">
+            <div class="tabs-header">
+                <button id="btn-my" class="tab-btn active" onclick="switchTab('my')">{t('my_posts', lang)}</button>
+                <button id="btn-feed" class="tab-btn" onclick="switchTab('feed')">{t('feed', lang)}</button>
+            </div>
+            <div id="tab-my" class="tab-content active">
+                <div class="posts-area" id="my-records-container">{rh_my}</div>
+            </div>
+            <div id="tab-feed" class="tab-content">
+                <div class="posts-area">{rh_feed}</div>
+            </div>
+        </div>
     </div></div>{get_footer(lang)}</body></html>"""
 
 def edit_html(nickname, user, lang, token):
@@ -463,8 +496,9 @@ def edit_html(nickname, user, lang, token):
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{t('edit_profile', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area">
-        <h2>{t('edit_profile', lang)}</h2><form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="tabs-container" style="padding:20px">
+        <h2 style="color:#fff;text-align:center">{t('edit_profile', lang)}</h2>
+        <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
             <input type="hidden" name="csrf_token" value="{token}">
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('username_label', lang)}</div>
             <input type="text" name="username" value="{html.escape(user['username'])}" required style="background:#a9a9a9;padding:12px;font-size:18px">
@@ -491,7 +525,7 @@ def public_html(nickname, user, records, lang, token):
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(records)}</div>
         <div class="lang-switch"><a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content"><div class="posts-area" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div></div></div>{get_footer(lang)}</body></html>"""
+    </div><div class="main-content"><div class="tabs-container"><div class="posts-area" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div></div></div></div>{get_footer(lang)}</body></html>"""
 
 def record_page_html(nickname, user, record, lang, token):
     c = html.escape(record.get('content', '')).replace('\n', '<br>')
@@ -505,11 +539,11 @@ def record_page_html(nickname, user, record, lang, token):
         <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}">{html.escape(nickname)}</a></div>
         <div class="info-card"><b>{t('username_label', lang)}:</b><br>{html.escape(user['username'])}</div>
         <a href="/{nickname}" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
+    </div><div class="main-content"><div class="tabs-container"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
         <div class="post-wrapper"><div class="post-item {'pinned' if record.get('is_pinned') else ''}">
             <div class="post-content" style="font-size:20px">{c} {hb}</div><div class="post-date">{d}</div>
         </div></div>
-    </div></div></div>{get_footer(lang)}</body></html>"""
+    </div></div></div></div>{get_footer(lang)}</body></html>"""
 
 def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else "".join([f"""
@@ -533,7 +567,7 @@ def bugreport_html(username, reports, lang, token):
                 <button type="submit" style="background:#f1c40f;color:#000">{t('bugreport_send', lang)}</button>
             </form>
         </div>
-        <div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div>
+        <div class="tabs-container"><div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div></div>
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">{t('cancel', lang)}</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div></div>{get_footer(lang)}</body></html>"""
@@ -542,7 +576,7 @@ def privacy_html(lang, token):
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>{t('privacy_title', lang)}</title>{get_css()}</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="tabs-container" style="padding:20px">
         <h2 style="color:#fff;text-align:center;margin-bottom:20px">{t('privacy_title', lang)}</h2>
         <div class="privacy-content">{t('privacy_text', lang)}</div>
         <a href="/" class="btn" style="background:#a9a9a9;margin-top:20px">{t('back_home', lang)}</a>
@@ -651,7 +685,6 @@ async def delete_record(rid: str, r: Request, user: str = Depends(auth_middlewar
     
     deleted_records.add(rid)
     try:
-        # Удаляем ТОЛЬКО если автор совпадает с текущим пользователем
         sb.table('posts').delete().eq('id', rid).eq('user_nickname', user).execute()
     except Exception as e:
         print(f"DB Delete Error: {e}")
