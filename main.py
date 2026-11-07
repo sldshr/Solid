@@ -1,13 +1,9 @@
-from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, Depends
+from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel
 from supabase import create_client, Client
-import uvicorn
-import html
-import bcrypt
-import secrets
-import uuid
-import hashlib
+import uvicorn, html, bcrypt, secrets, uuid, hashlib
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -18,10 +14,35 @@ S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
 
-# --- ОПЕРАТИВНАЯ ПАМЯТЬ ---
-pending_records = {}
-deleted_records = set()
-pinned_records = {}
+# --- WEBSOCKET МЕНЕДЖЕР (REAL-TIME) ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                pass
+
+manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 # --- БЕЗОПАСНОСТЬ ---
 def hash_password(password: str) -> str:
@@ -38,7 +59,7 @@ def verify_password(password: str, hashed: str) -> bool:
 def get_csrf_token(request: Request) -> str:
     return request.cookies.get("csrf_token") or secrets.token_hex(32)
 
-def check_csrf(request: Request, form_token: str) -> bool:
+def check_csrf(request: Request, form_token: str = None) -> bool:
     cookie_token = request.cookies.get("csrf_token")
     header_token = request.headers.get("X-CSRF-Token")
     return cookie_token and (cookie_token == form_token or cookie_token == header_token)
@@ -47,7 +68,6 @@ def set_csrf_cookie(response: Response, token: str, request: Request):
     if not request.cookies.get("csrf_token"):
         response.set_cookie("csrf_token", token, httponly=True, samesite="lax")
 
-# --- МИДДЛВАРЬ / ЗАВИСИМОСТЬ ---
 async def auth_middleware(r: Request, nickname: Optional[str] = Cookie(None)):
     if not nickname:
         raise HTTPException(status_code=401)
@@ -56,7 +76,6 @@ async def auth_middleware(r: Request, nickname: Optional[str] = Cookie(None)):
         raise HTTPException(status_code=401)
     return nickname
 
-# --- ОБРАБОТЧИК ОШИБОК ---
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     lang = request.cookies.get("lang", "ru")
@@ -65,6 +84,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     response = HTMLResponse(content=auth_html(lang, error_msg, token), status_code=422)
     set_csrf_cookie(response, token, request)
     return response
+
+# --- RPC МОДЕЛЬ ---
+class RPCRequest(BaseModel):
+    method: str
+    params: dict = {}
 
 # --- ПЕРЕВОДЫ ---
 LOCALES = {
@@ -182,7 +206,7 @@ def get_css():
         .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
         .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
 
-        /* --- СТИЛИ ДЛЯ ВКЛАДОК --- */
+        /* --- ВКЛАДКИ --- */
         .tabs-container { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; }
         .tabs-header { display: flex; gap: 5px; }
         .tab-btn { background: #555; border: none; padding: 10px; cursor: pointer; font-weight: bold; font-size: 16px; color: white; border-radius: 5px 5px 0 0; flex: 1; transition: 0.2s; }
@@ -206,8 +230,9 @@ def get_css():
         .vote-btns { display: flex; gap: 10px; }
         .vote-btn { background: #888; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: bold; font-size: 14px; }
         .vote-btn:hover { background: #666; }
-        .vote-btn.liked { background: #2ecc71; }
-        .vote-btn.disliked { background: #e74c3c; }
+        .vote-btn.active { background: #4da6ff !important; }
+        .vote-btn.like.active { background: #2ecc71 !important; }
+        .vote-btn.dislike.active { background: #e74c3c !important; }
 
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
         .post-wrapper:hover .post-actions { opacity: 1; }
@@ -231,6 +256,16 @@ def get_css():
         .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
 
         .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
+
+        /* --- TOAST & MODAL --- */
+        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
+        #toast.show { opacity: 1; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
+        .modal-overlay.show { display: flex; }
+        .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 90%; text-align: center; border: 5px solid #000; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-danger { background: #ff4d4d; color: white; }
+        .btn-danger:hover { background: #cc0000; }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -265,6 +300,69 @@ def get_js(lang, token):
             c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}", h: "{t('hidden_record', lang)}",
             ve: "{t('vote_err', lang)}"
         }};
+
+        // WebSocket Real-time
+        let ws;
+        function connectWS() {{
+            const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            ws = new WebSocket(proto + window.location.host + '/ws');
+            ws.onmessage = (e) => {{
+                const d = JSON.parse(e.data);
+                if (d.type === 'vote') {{
+                    const p = document.getElementById('post-' + d.post_id);
+                    if (p) {{
+                        const likeSpan = p.querySelector('.v-l');
+                        const dislikeSpan = p.querySelector('.v-d');
+                        if (likeSpan) likeSpan.innerText = d.likes;
+                        if (dislikeSpan) dislikeSpan.innerText = d.dislikes;
+                    }}
+                }} else if (d.type === 'delete_record') {{
+                    const p = document.getElementById('post-' + d.post_id);
+                    if (p) p.remove();
+                }} else if (d.type === 'new_record') {{
+                    showToast("New record added!");
+                }}
+            }};
+            ws.onclose = () => setTimeout(connectWS, 3000);
+        }}
+        connectWS();
+
+        // UI Toast & Modal
+        function showToast(msg) {{
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }}
+
+        function showConfirm(msg, cb) {{
+            const m = document.getElementById('modal-overlay');
+            document.getElementById('modal-text').innerText = msg;
+            m.classList.add('show');
+            
+            const cBtn = document.getElementById('modal-confirm');
+            const xBtn = document.getElementById('modal-cancel');
+            
+            const nC = cBtn.cloneNode(true);
+            const nX = xBtn.cloneNode(true);
+            cBtn.parentNode.replaceChild(nC, cBtn);
+            xBtn.parentNode.replaceChild(nX, xBtn);
+            
+            nC.onclick = () => {{ m.classList.remove('show'); cb(true); }};
+            nX.onclick = () => {{ m.classList.remove('show'); cb(false); }};
+        }}
+
+        // RPC Helper
+        async function rpc(method, params) {{
+            const res = await fetch('/rpc', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json', 'X-CSRF-Token': T }},
+                body: JSON.stringify({{ method, params }})
+            }});
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || data.error || 'RPC Error');
+            return data;
+        }}
 
         function switchTab(tab) {{
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -311,29 +409,25 @@ def get_js(lang, token):
             a.insertBefore(w, a.children[1]);
             f.reset();
 
-            const fd = new FormData(f);
-            fd.append('content', c); fd.append('client_id', i); fd.append('is_hidden', hid ? 'true' : 'false'); fd.append('csrf_token', T);
-
             try {{
-                const r = await fetch('/create_record', {{ method: 'POST', body: fd, headers: {{ 'X-CSRF-Token': T }} }});
-                if (!r.ok) throw new Error('Server Error');
+                await rpc('create_record', {{ content: c, is_hidden: hid, client_id: i }});
             }} catch (x) {{
-                w.remove(); alert('Failed: ' + x.message);
+                w.remove(); showToast('Failed: ' + x.message);
             }}
         }}
 
-        async function hd(i) {{
-            if (!confirm(L.c)) return;
-            const w = document.getElementById('post-' + i);
-            w.style.opacity = '0'; setTimeout(() => w.style.display = 'none', 300);
-            const fd = new FormData(); fd.append('csrf_token', T);
-            try {{
-                const r = await fetch('/delete_record/' + i, {{ method: 'POST', body: fd, headers: {{ 'X-CSRF-Token': T }} }});
-                if (!r.ok) throw new Error('Server Error');
-                w.remove();
-            }} catch (x) {{
-                w.style.opacity = '1'; w.style.display = 'block'; alert('Failed: ' + x.message);
-            }}
+        function hd(i) {{
+            showConfirm(L.c, async (yes) => {{
+                if (!yes) return;
+                const w = document.getElementById('post-' + i);
+                w.style.opacity = '0'; setTimeout(() => w.style.display = 'none', 300);
+                try {{
+                    await rpc('delete_record', {{ post_id: i }});
+                    w.remove();
+                }} catch (x) {{
+                    w.style.opacity = '1'; w.style.display = 'block'; showToast('Failed: ' + x.message);
+                }}
+            }});
         }}
 
         async function hp(i, b) {{
@@ -343,32 +437,81 @@ def get_js(lang, token):
                 p.classList.add('pinned'); b.innerText = L.u;
                 const a = w.parentNode; a.insertBefore(w, a.children[1]);
             }}
-            const fd = new FormData(); fd.append('csrf_token', T);
             try {{
-                const r = await fetch('/pin_record/' + i, {{ method: 'POST', body: fd, headers: {{ 'X-CSRF-Token': T }} }});
-                if (!r.ok) throw new Error('Server Error');
+                await rpc('pin_record', {{ post_id: i }});
             }} catch (x) {{
                 if (s) {{ p.classList.add('pinned'); b.innerText = L.u; }}
                 else {{ p.classList.remove('pinned'); b.innerText = L.p; }}
+                showToast('Failed: ' + x.message);
             }}
         }}
 
-        async function hv(i, t, b) {{
-            const fd = new FormData(); fd.append('csrf_token', T); fd.append('vote_type', t);
-            try {{
-                const r = await fetch('/vote/' + i, {{ method: 'POST', body: fd, headers: {{ 'X-CSRF-Token': T }} }});
-                const d = await r.json();
-                if (!r.ok) throw new Error(d.e || 'Err');
-                const p = b.parentNode.querySelectorAll('.vote-btn');
-                p.forEach(x => x.classList.remove('liked', 'disliked'));
-                if (t == 1) b.classList.add('liked'); else b.classList.add('disliked');
-                b.parentNode.querySelector('.v-l').innerText = d.l;
-                b.parentNode.querySelector('.v-d').innerText = d.d;
-            }} catch (x) {{
-                alert(x.message);
+        // Debounced & Optimistic Votes
+        const voteTimers = {{}};
+        async function toggleVote(postId, type, btn) {{
+            const wrapper = document.getElementById('post-' + postId);
+            if (!wrapper) return;
+            
+            const likeBtn = wrapper.querySelector('.vote-btn.like');
+            const dislikeBtn = wrapper.querySelector('.vote-btn.dislike');
+            const likeSpan = wrapper.querySelector('.v-l');
+            const dislikeSpan = wrapper.querySelector('.v-d');
+            
+            let likes = parseInt(likeSpan.innerText) || 0;
+            let dislikes = parseInt(dislikeSpan.innerText) || 0;
+            
+            const isLiked = likeBtn.classList.contains('active');
+            const isDisliked = dislikeBtn.classList.contains('active');
+            
+            if (type === 1) {{
+                if (isLiked) {{ likeBtn.classList.remove('active'); likes = Math.max(0, likes - 1); }}
+                else {{
+                    likeBtn.classList.add('active'); likes += 1;
+                    if (isDisliked) {{ dislikeBtn.classList.remove('active'); dislikes = Math.max(0, dislikes - 1); }}
+                }}
+            }} else {{
+                if (isDisliked) {{ dislikeBtn.classList.remove('active'); dislikes = Math.max(0, dislikes - 1); }}
+                else {{
+                    dislikeBtn.classList.add('active'); dislikes += 1;
+                    if (isLiked) {{ likeBtn.classList.remove('active'); likes = Math.max(0, likes - 1); }}
+                }}
             }}
+            
+            likeSpan.innerText = likes;
+            dislikeSpan.innerText = dislikes;
+            
+            if (voteTimers[postId]) clearTimeout(voteTimers[postId]);
+            
+            voteTimers[postId] = setTimeout(async () => {{
+                const finalLiked = likeBtn.classList.contains('active');
+                const finalDisliked = dislikeBtn.classList.contains('active');
+                
+                let voteType = 0;
+                if (finalLiked) voteType = 1;
+                if (finalDisliked) voteType = -1;
+                
+                try {{
+                    await rpc('vote', {{ post_id: postId, vote_type: voteType }});
+                }} catch (e) {{
+                    showToast(e.message);
+                }}
+            }}, 500);
         }}
     </script>
+    """
+
+def get_overlay():
+    return """
+    <div id="toast"></div>
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p>
+            <div class="modal-actions">
+                <button id="modal-cancel" class="btn" style="background:#aaa;color:black;">Cancel</button>
+                <button id="modal-confirm" class="btn btn-danger">Confirm</button>
+            </div>
+        </div>
+    </div>
     """
 
 # --- ФУТЕР ---
@@ -408,7 +551,7 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
         </form></div><div class="label-text">{t('login', lang)}</div></div>
         <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div></div>
         {eb}</div>
-    </div>{get_footer(lang)}</body></html>"""
+    </div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def render_records(records, lang, own=False, feed=False, uid=None):
     if not records: return f"<div class='post-item'>{t('no_posts', lang)}</div>"
@@ -425,7 +568,7 @@ def render_records(records, lang, own=False, feed=False, uid=None):
         
         vb = ""
         if feed and uid:
-            vb = f"<div class='vote-btns'><button onclick='hv(\"{rid}\",1,this)' class='vote-btn'>{SVG_LIKE} <span class='v-l'>{likes}</span></button><button onclick='hv(\"{rid}\",-1,this)' class='vote-btn'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></button></div>"
+            vb = f"<div class='vote-btns'><button onclick='toggleVote(\"{rid}\",1,this)' class='vote-btn like'>{SVG_LIKE} <span class='v-l'>{likes}</span></button><button onclick='toggleVote(\"{rid}\",-1,this)' class='vote-btn dislike'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></button></div>"
         elif feed:
             vb = f"<div class='vote-btns'><span style='color:green;font-weight:bold'>{SVG_LIKE} {likes}</span> <span style='color:red;font-weight:bold'>{SVG_DISLIKE} {dislikes}</span></div>"
             
@@ -489,7 +632,7 @@ def dashboard_html(nickname, user, my_p, feed_p, lang, token):
                 <div class="posts-area">{rh_feed}</div>
             </div>
         </div>
-    </div></div>{get_footer(lang)}</body></html>"""
+    </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def edit_html(nickname, user, lang, token):
     desc = user.get('description', '')
@@ -509,7 +652,7 @@ def edit_html(nickname, user, lang, token):
             <a href="/cabinet" class="btn" style="background:#a9a9a9">{t('cancel', lang)}</a>
         </form>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div></div>{get_footer(lang)}</body></html>"""
+    </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def public_html(nickname, user, records, lang, token):
     rh = render_records(records, lang, False, True, nickname)
@@ -525,7 +668,7 @@ def public_html(nickname, user, records, lang, token):
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(records)}</div>
         <div class="lang-switch"><a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content"><div class="tabs-container"><div class="posts-area" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div></div></div></div>{get_footer(lang)}</body></html>"""
+    </div><div class="main-content"><div class="tabs-container"><div class="posts-area" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div></div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def record_page_html(nickname, user, record, lang, token):
     c = html.escape(record.get('content', '')).replace('\n', '<br>')
@@ -543,7 +686,7 @@ def record_page_html(nickname, user, record, lang, token):
         <div class="post-wrapper"><div class="post-item {'pinned' if record.get('is_pinned') else ''}">
             <div class="post-content" style="font-size:20px">{c} {hb}</div><div class="post-date">{d}</div>
         </div></div>
-    </div></div></div></div>{get_footer(lang)}</body></html>"""
+    </div></div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else "".join([f"""
@@ -570,7 +713,7 @@ def bugreport_html(username, reports, lang, token):
         <div class="tabs-container"><div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div></div>
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">{t('cancel', lang)}</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div>{get_footer(lang)}</body></html>"""
+    </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def privacy_html(lang, token):
     return f"""
@@ -658,88 +801,81 @@ async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = 
     set_csrf_cookie(res, token, r)
     return res
 
-@app.post("/create_record")
-async def create_record(r: Request, user: str = Depends(auth_middleware), content: str = Form(...), client_id: str = Form(None), is_hidden: str = Form(None), csrf_token: str = Form(None)):
-    if not check_csrf(r, csrf_token): return JSONResponse({"e": "CSRF"}, 403)
-    if not content.strip(): return JSONResponse({"e": "Empty"}, 400)
+# --- ЕДИНЫЙ RPC ЭНДПОИНТ ---
+@app.post("/rpc")
+async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_middleware)):
+    if not check_csrf(r):
+        raise HTTPException(status_code=403, detail="CSRF Error")
     
-    i = client_id or str(uuid.uuid4())
-    n = datetime.now(timezone.utc).isoformat()
-    hidden_bool = (is_hidden == 'true' or is_hidden == 'on')
-    
-    pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "is_hidden": hidden_bool, "created_at": n, "likes": 0, "dislikes": 0}
-    pending_records[i] = pd
-    
-    try:
-        sb.table('posts').insert(pd).execute()
-    except Exception as e:
-        print(f"DB Create Error: {e}")
-    finally:
-        pending_records.pop(i, None)
+    if req.method == "create_record":
+        content = req.params.get("content", "")
+        is_hidden = req.params.get("is_hidden", False)
+        client_id = req.params.get("client_id")
         
-    return JSONResponse({"s": "ok", "id": i})
-
-@app.post("/delete_record/{rid}")
-async def delete_record(rid: str, r: Request, user: str = Depends(auth_middleware), csrf_token: str = Form(None)):
-    if not check_csrf(r, csrf_token): return JSONResponse({"e": "CSRF"}, 403)
-    
-    deleted_records.add(rid)
-    try:
-        sb.table('posts').delete().eq('id', rid).eq('user_nickname', user).execute()
-    except Exception as e:
-        print(f"DB Delete Error: {e}")
-    finally:
-        deleted_records.discard(rid)
+        i = client_id or str(uuid.uuid4())
+        n = datetime.now(timezone.utc).isoformat()
         
-    return JSONResponse({"s": "ok"})
-
-@app.post("/pin_record/{rid}")
-async def pin_record(rid: str, r: Request, user: str = Depends(auth_middleware), csrf_token: str = Form(None)):
-    if not check_csrf(r, csrf_token): return JSONResponse({"e": "CSRF"}, 403)
-    
-    c = pinned_records.get(rid)
-    if c is None:
+        pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "is_hidden": bool(is_hidden), "created_at": n, "likes": 0, "dislikes": 0}
+        try: sb.table('posts').insert(pd).execute()
+        except Exception as e: raise HTTPException(500, str(e))
+        
+        await manager.broadcast({"type": "new_record", "post_id": i})
+        return {"status": "ok", "id": i}
+        
+    elif req.method == "delete_record":
+        rid = req.params.get("post_id")
+        try: sb.table('posts').delete().eq('id', rid).eq('user_nickname', user).execute()
+        except Exception as e: raise HTTPException(500, str(e))
+        
+        await manager.broadcast({"type": "delete_record", "post_id": rid})
+        return {"status": "ok"}
+        
+    elif req.method == "pin_record":
+        rid = req.params.get("post_id")
         x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', user).execute()
-        if x.data: c = x.data[0]['is_pinned']
-    if c is None: return JSONResponse({"e": "Not found"}, 404)
-    
-    ns = not c
-    pinned_records[rid] = ns
-    
-    try:
+        if not x.data: raise HTTPException(404, "Not found")
+        
+        ns = not x.data[0]['is_pinned']
         sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', user).execute()
-    except Exception as e:
-        print(f"DB Pin Error: {e}")
-    finally:
-        pinned_records.pop(rid, None)
+        return {"status": "ok", "is_pinned": ns}
         
-    return JSONResponse({"s": "ok"})
-
-@app.post("/vote/{rid}")
-async def vote(r: Request, rid: str, user: str = Depends(auth_middleware), vote_type: int = Form(...), csrf_token: str = Form(None)):
-    if not check_csrf(r, csrf_token): return JSONResponse({"e": "CSRF"}, 403)
-    if vote_type not in [1, -1]: return JSONResponse({"e": "Bad type"}, 400)
-    
-    ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
-    p = sb.table('posts').select('likes,dislikes').eq('id', rid).execute()
-    if not p.data: return JSONResponse({"e": "Not found"}, 404)
-    
-    likes, dislikes = p.data[0]['likes'], p.data[0]['dislikes']
-    
-    if ex.data:
-        old = ex.data[0]['vote_type']
-        if old == vote_type:
-            return JSONResponse({"e": t('vote_err', r.cookies.get('lang', 'ru')), "l": likes, "d": dislikes}, 400)
-        sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
-        if vote_type == 1: likes += 1; dislikes = max(0, dislikes - 1)
-        else: dislikes += 1; likes = max(0, likes - 1)
-    else:
-        sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
-        if vote_type == 1: likes += 1
-        else: dislikes += 1
+    elif req.method == "vote":
+        rid = req.params.get("post_id")
+        vote_type = int(req.params.get("vote_type", 0))
+        if vote_type not in [-1, 0, 1]: raise HTTPException(400, "Bad type")
         
-    sb.table('posts').update({"likes": likes, "dislikes": dislikes}).eq('id', rid).execute()
-    return JSONResponse({"s": "ok", "l": likes, "d": dislikes})
+        ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
+        p = sb.table('posts').select('likes,dislikes').eq('id', rid).execute()
+        if not p.data: raise HTTPException(404, "Not found")
+        
+        likes, dislikes = p.data[0]['likes'], p.data[0]['dislikes']
+        
+        if vote_type == 0:
+            if ex.data:
+                sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
+                if ex.data[0]['vote_type'] == 1: likes = max(0, likes - 1)
+                else: dislikes = max(0, dislikes - 1)
+        else:
+            if ex.data:
+                old = ex.data[0]['vote_type']
+                if old == vote_type:
+                    sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
+                    if vote_type == 1: likes = max(0, likes - 1)
+                    else: dislikes = max(0, dislikes - 1)
+                else:
+                    sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
+                    if vote_type == 1: likes += 1; dislikes = max(0, dislikes - 1)
+                    else: dislikes += 1; likes = max(0, likes - 1)
+            else:
+                sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
+                if vote_type == 1: likes += 1
+                else: dislikes += 1
+                
+        sb.table('posts').update({"likes": likes, "dislikes": dislikes}).eq('id', rid).execute()
+        await manager.broadcast({"type": "vote", "post_id": rid, "likes": likes, "dislikes": dislikes})
+        return {"status": "ok", "likes": likes, "dislikes": dislikes}
+        
+    raise HTTPException(400, "Unknown method")
 
 @app.get("/cabinet/edit", response_class=HTMLResponse)
 async def edit(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
