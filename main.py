@@ -14,6 +14,11 @@ S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
 
+# --- ОПЕРАТИВНАЯ ПАМЯТЬ (ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ) ---
+deleted_records = set()
+pinned_records = {}
+pending_records = {}
+
 # --- БЕЗОПАСНЫЙ HTML ---
 def esc(val):
     return html.escape(str(val)) if val is not None else ""
@@ -1065,4 +1070,4 @@ async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
     return res
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
