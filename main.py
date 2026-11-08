@@ -9,6 +9,10 @@ from typing import Optional
 
 app = FastAPI()
 
+# --- ВЕРСИЯ ПРИЛОЖЕНИЯ И ДАТА ---
+APP_VERSION = "0.1"
+SERVER_START_DATE = datetime.now().strftime("%d.%m.%y")
+
 # --- НАСТРОЙКИ SUPABASE ---
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
@@ -454,7 +458,6 @@ def get_js(lang, token):
             const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {{hour: '2-digit', minute:'2-digit'}});
             const a = document.querySelector('#my-records-container');
             
-            // Удаляем пустое состояние, только если оно есть
             const m = a.querySelector('.empty-state');
             if (m) m.remove();
 
@@ -470,21 +473,20 @@ def get_js(lang, token):
                     <div class="post-footer"><div class="post-date">${{d}}</div></div>
                 </div>`;
             
-            // Правильная вставка: после закрепленных постов, но перед остальными
             let inserted = false;
             const wrappers = a.querySelectorAll('.post-wrapper');
-            for (let ww of wrappers) {
-                if (!ww.querySelector('.pinned')) {
+            for (let ww of wrappers) {{
+                if (!ww.querySelector('.pinned')) {{
                     a.insertBefore(w, ww);
                     inserted = true;
                     break;
-                }
-            }
+                }}
+            }}
             if (!inserted) a.appendChild(w);
             
             f.reset();
 
-            try {
+            try {{
                 await rpc('create_record', {{ content: c, client_id: i }});
             }} catch (x) {{
                 w.remove(); showToast('Failed: ' + x.message);
@@ -557,6 +559,7 @@ def get_footer(lang):
         <div class="footer-links">
             <a href="/privacy">{t('privacy_title', lang)}</a> | <a href="/bugreport">{t('bugreport_title', lang)}</a>
         </div>
+        <div style="font-size: 12px; color: #999; margin-top: 5px;">v{APP_VERSION} ({SERVER_START_DATE})</div>
     </div>
     """
 
