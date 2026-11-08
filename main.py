@@ -9,7 +9,7 @@ from typing import Optional
 
 app = FastAPI()
 
-APP_VERSION = "0.5"
+APP_VERSION = "0.6"
 SERVER_START_DATE = datetime.now().strftime("%d.%m.%y")
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
@@ -112,7 +112,6 @@ def check_csrf(request: Request, form_token: str = None) -> bool:
     return cookie_token == form_token or cookie_token == header_token
 
 def set_csrf_cookie(response: Response, token: str, request: Request):
-    # Всегда ставим куку, чтобы избежать проблем с устаревшими/потерянными куками
     response.set_cookie("csrf_token", token, httponly=True, samesite="lax", max_age=86400*365)
 
 @app.exception_handler(RequestValidationError)
@@ -485,7 +484,6 @@ def get_js(lang, token, current_user=""):
                 showToast('Failed: ' + x.message);
             }
         }
-        // Предложка - через fetch/RPC, чтобы CSRF работал стабильно
         async function submitSuggestion(event) {
             event.preventDefault();
             const f = event.target;
@@ -493,7 +491,7 @@ def get_js(lang, token, current_user=""):
             const name = f.querySelector('input[name="sugg_name"]').value.trim();
             const content = f.querySelector('textarea[name="content"]').value.trim();
             if (!name || !content) { showToast(L.sf); return; }
-            if (target === ME) { showToast(L.ss); return; }
+            if (ME && target === ME) { showToast(L.ss); return; }
             const btn = f.querySelector('button[type="submit"]');
             btn.disabled = true;
             try {
@@ -1174,7 +1172,41 @@ async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
 @app.post("/rpc")
 async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
     if not check_csrf(r): raise HTTPException(status_code=403, detail="CSRF Error")
+    
+    # --- ПУБЛИЧНЫЕ МЕТОДЫ (без авторизации) ---
+    if req.method == "submit_suggestion":
+        target = req.params.get("target_nickname", "").strip()
+        sugg_name = req.params.get("sugg_name", "").strip()[:60]
+        content = req.params.get("content", "").strip()[:500]
+        
+        if not target or not sugg_name or not content:
+            raise HTTPException(400, "Missing fields")
+        if nickname and target == nickname:
+            raise HTTPException(400, "Cannot suggest to yourself")
+        
+        try:
+            u = sb.table('users').select('nickname').eq('nickname', target).execute()
+            if not u.data: 
+                raise HTTPException(404, "User not found")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, str(e))
+        
+        try:
+            sb.table('suggestions').insert({
+                "author_nickname": target,
+                "suggested_by_name": sugg_name,
+                "content": content,
+                "status": "pending"
+            }).execute()
+        except Exception as e:
+            raise HTTPException(500, str(e))
+        return {"status": "ok"}
+    
+    # --- МЕТОДЫ, ТРЕБУЮЩИЕ АВТОРИЗАЦИИ ---
     if not nickname: raise HTTPException(status_code=401, detail="Unauthorized")
+    
     try:
         if req.method == "create_record":
             content = req.params.get("content", "")
@@ -1201,19 +1233,6 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             ns = not x.data[0].get('is_pinned', False)
             sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute()
             return {"status": "ok", "is_pinned": ns}
-        elif req.method == "submit_suggestion":
-            target = req.params.get("target_nickname", "")
-            sugg_name = req.params.get("sugg_name", "").strip()[:60]
-            content = req.params.get("content", "").strip()[:500]
-            if not target or not sugg_name or not content:
-                raise HTTPException(400, "Missing fields")
-            if target == nickname:
-                raise HTTPException(400, "Cannot suggest to yourself")
-            u = sb.table('users').select('nickname').eq('nickname', target).execute()
-            if not u.data: raise HTTPException(404, "User not found")
-            data = {"author_nickname": target, "suggested_by_name": sugg_name, "content": content, "status": "pending"}
-            sb.table('suggestions').insert(data).execute()
-            return {"status": "ok"}
         elif req.method == "approve_suggestion":
             sid = req.params.get("suggestion_id")
             s = sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).eq('status', 'pending').execute()
