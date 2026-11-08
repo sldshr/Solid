@@ -10,7 +10,7 @@ from typing import Optional
 app = FastAPI()
 
 # --- ВЕРСИЯ ПРИЛОЖЕНИЯ И ДАТА ---
-APP_VERSION = "0.1"
+APP_VERSION = "0.4"
 SERVER_START_DATE = datetime.now().strftime("%d.%m.%y")
 
 # --- НАСТРОЙКИ SUPABASE ---
@@ -166,7 +166,14 @@ LOCALES = {
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
         "record_page": "Запись", "copy_link": "Ссылка", 
         "ext_title": "Переход на внешний сайт", "ext_desc": "Вы покидаете наш сайт и переходите по ссылке:", 
-        "ext_continue": "Перейти", "ext_loading": "Загрузка превью..."
+        "ext_continue": "Перейти", "ext_loading": "Загрузка превью...",
+        "suggestions_title": "ПРЕДЛОЖКИ", "suggestions_btn": "Предложить пост",
+        "sugges_title": "Предложить пост для", "sugges_name": "Ваше имя",
+        "sugges_content": "Текст поста", "sugges_send": "Отправить",
+        "sugges_success": "Предложение отправлено! Спасибо!",
+        "sugges_empty": "Предложек пока нет...",
+        "sugges_approve": "Одобрить", "sugges_reject": "Отклонить",
+        "suggested_by": "Предложено:", "sugges_own": "Вы не можете предложить пост самому себе."
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -191,7 +198,14 @@ LOCALES = {
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
         "record_page": "Record", "copy_link": "Link", 
         "ext_title": "Leaving site", "ext_desc": "You are leaving our site and going to:", 
-        "ext_continue": "Continue", "ext_loading": "Loading preview..."
+        "ext_continue": "Continue", "ext_loading": "Loading preview...",
+        "suggestions_title": "SUGGESTIONS", "suggestions_btn": "Suggest a post",
+        "sugges_title": "Suggest a post for", "sugges_name": "Your Name",
+        "sugges_content": "Post text", "sugges_send": "Send",
+        "sugges_success": "Suggestion sent! Thank you!",
+        "sugges_empty": "No suggestions yet...",
+        "sugges_approve": "Approve", "sugges_reject": "Reject",
+        "suggested_by": "Suggested by:", "sugges_own": "You can't suggest to yourself."
     }
 }
 
@@ -251,6 +265,8 @@ def get_css():
         .logout-btn:hover { background: #cc0000; }
         .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
         .edit-btn:hover { background: #1a82e2; }
+        .sugges-btn { background: #f1c40f; color: black; margin-top: 5px; }
+        .sugges-btn:hover { background: #d4ac0d; }
         
         .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
         
@@ -269,6 +285,8 @@ def get_css():
         
         .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
         .post-date { font-size: 12px; color: #555; }
+        
+        .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; margin-top: 5px; text-align: right; border-top: 1px dashed #888; padding-top: 5px;}
 
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
         .post-wrapper:hover .post-actions { opacity: 1; }
@@ -276,6 +294,16 @@ def get_css():
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
         .action-btn.link-btn:hover { background: #f1c40f; color: black; }
+
+        /* Стили для предложек */
+        .suggestion-card { background: #a9a9a9; padding: 15px; border-radius: 5px; border-left: 5px solid #f1c40f; margin-bottom: 10px; }
+        .sugg-author { font-weight: bold; color: #333; font-size: 14px; margin-bottom: 5px; }
+        .sugg-content { font-size: 16px; margin-bottom: 10px; text-align: center; }
+        .sugg-actions { display: flex; gap: 10px; }
+        .sugg-approve { background: #2ecc71; color: white; padding: 8px; }
+        .sugg-approve:hover { background: #27ae60; }
+        .sugg-reject { background: #e74c3c; color: white; padding: 8px; }
+        .sugg-reject:hover { background: #c0392b; }
 
         .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
         .status-Принято, .status-Accepted { background: #4da6ff; }
@@ -333,56 +361,57 @@ def get_css():
     """
 
 # --- JS ---
-def get_js(lang, token):
-    return f"""
+def get_js(lang, token, current_user=""):
+    js = """
     <script>
-        const T = "{token}";
-        const L = {{
-            d: "{t('delete', lang)}", p: "{t('pin', lang)}", u: "{t('unpin', lang)}",
-            c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}"
-        }};
+        const T = "__TOKEN__";
+        const ME = "__ME__";
+        const L = {
+            d: "__DEL__", p: "__PIN__", u: "__UNPIN__",
+            c: "__CONFIRM__", n: "__NOPOSTS__", cl: "__COPYLINK__"
+        };
 
-        if ('serviceWorker' in navigator) {{
-            window.addEventListener('load', () => {{
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
-            }});
-        }}
+            });
+        }
 
         let ws;
-        function connectWS() {{
+        function connectWS() {
             const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
             ws = new WebSocket(proto + window.location.host + '/ws');
-            ws.onmessage = (e) => {{
+            ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
-                if (d.type === 'delete_record') {{
+                if (d.type === 'delete_record') {
                     const p = document.getElementById('post-' + d.post_id);
                     if (p) p.remove();
-                }} else if (d.type === 'new_record') {{
+                } else if (d.type === 'new_record') {
                     showToast("New record added!");
-                }}
-            }};
+                }
+            };
             ws.onclose = () => setTimeout(connectWS, 3000);
-        }}
+        }
         connectWS();
 
-        function copyLink(user, rid, btn) {{
+        function copyLink(user, rid, btn) {
             if (!user) return;
             const url = window.location.origin + '/' + user + '/' + rid;
-            navigator.clipboard.writeText(url).then(() => {{
+            navigator.clipboard.writeText(url).then(() => {
                 showToast("Link copied!");
-            }}).catch(() => {{
+            }).catch(() => {
                 showToast("Failed to copy");
-            }});
-        }}
+            });
+        }
 
-        function showToast(msg) {{
+        function showToast(msg) {
             const t = document.getElementById('toast');
             t.innerText = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 3000);
-        }}
+        }
 
-        function showConfirm(msg, cb) {{
+        function showConfirm(msg, cb) {
             const m = document.getElementById('modal-overlay');
             document.getElementById('modal-text').innerText = msg;
             m.classList.add('show');
@@ -395,67 +424,67 @@ def get_js(lang, token):
             cBtn.parentNode.replaceChild(nC, cBtn);
             xBtn.parentNode.replaceChild(nX, xBtn);
             
-            nC.onclick = () => {{ m.classList.remove('show'); cb(true); }};
-            nX.onclick = () => {{ m.classList.remove('show'); cb(false); }};
-        }}
+            nC.onclick = () => { m.classList.remove('show'); cb(true); };
+            nX.onclick = () => { m.classList.remove('show'); cb(false); };
+        }
 
         let pendingUrl = "";
-        async function showLinkWarning(e, el) {{
+        async function showLinkWarning(e, el) {
             e.preventDefault();
             pendingUrl = el.getAttribute('data-url');
             if (!pendingUrl) return;
             
             document.getElementById('link-modal-confirm').href = pendingUrl;
             const ogBox = document.getElementById('og-preview');
-            ogBox.innerHTML = `<p style="margin:0; font-size:14px; color:#666;">{t('ext_loading', lang)}</p>`;
+            ogBox.innerHTML = `<p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p>`;
             document.getElementById('link-modal').classList.add('show');
             
-            try {{
+            try {
                 const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl));
                 const data = await res.json();
-                if (data.title || data.description || data.image) {{
+                if (data.title || data.description || data.image) {
                     let html = '';
-                    if (data.image) html += `<img src="${{data.image}}" class="og-img">`;
-                    if (data.title) html += `<h4 class="og-title">${{data.title}}</h4>`;
-                    if (data.description) html += `<p class="og-desc">${{data.description}}</p>`;
+                    if (data.image) html += `<img src="${data.image}" class="og-img">`;
+                    if (data.title) html += `<h4 class="og-title">${data.title}</h4>`;
+                    if (data.description) html += `<p class="og-desc">${data.description}</p>`;
                     ogBox.innerHTML = html;
-                }} else {{
+                } else {
                     ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">No preview available.</p>';
-                }}
-            }} catch (err) {{
+                }
+            } catch (err) {
                 ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">Failed to load preview.</p>';
-            }}
-        }}
+            }
+        }
 
-        function closeLinkModal() {{
+        function closeLinkModal() {
             document.getElementById('link-modal').classList.remove('show');
-        }}
+        }
 
-        async function rpc(method, params) {{
-            const res = await fetch('/rpc', {{
+        async function rpc(method, params) {
+            const res = await fetch('/rpc', {
                 method: 'POST',
-                headers: {{ 'Content-Type': 'application/json', 'X-CSRF-Token': T }},
-                body: JSON.stringify({{ method, params }})
-            }});
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': T },
+                body: JSON.stringify({ method, params })
+            });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || data.error || 'RPC Error');
             return data;
-        }}
+        }
 
-        function tp(i, b) {{
+        function tp(i, b) {
             const x = document.getElementById(i);
-            if (x.type === 'password') {{ x.type = 'text'; b.innerHTML = `{SVG_EYE_OFF}`; }}
-            else {{ x.type = 'password'; b.innerHTML = `{SVG_EYE}`; }}
-        }}
+            if (x.type === 'password') { x.type = 'text'; b.innerHTML = `__SVG_EYE_OFF__`; }
+            else { x.type = 'password'; b.innerHTML = `__SVG_EYE__`; }
+        }
 
-        function uc(e) {{ document.getElementById('char-count').innerText = e.value.length + ' / 300'; }}
+        function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
 
-        async function hc(e) {{
+        async function hc(e) {
             e.preventDefault();
             const f = e.target, c = f.querySelector('textarea').value.trim();
             if (!c) return;
             const i = crypto.randomUUID(), n = new Date();
-            const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {{hour: '2-digit', minute:'2-digit'}});
+            const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'});
             const a = document.querySelector('#my-records-container');
             
             const m = a.querySelector('.empty-state');
@@ -465,132 +494,204 @@ def get_js(lang, token):
             w.className = 'post-wrapper'; w.id = 'post-' + i;
             w.innerHTML = `
                 <div class="post-actions">
-                    <button onclick="hp('${{i}}',this)" class="action-btn pin-btn">${{L.p}}</button>
-                    <button onclick="hd('${{i}}',this)" class="action-btn">${{L.d}}</button>
+                    <button onclick="copyLink('${ME}','${i}',this)" class="action-btn link-btn">${L.cl}</button>
+                    <button onclick="hp('${i}',this)" class="action-btn pin-btn">${L.p}</button>
+                    <button onclick="hd('${i}',this)" class="action-btn">${L.d}</button>
                 </div>
                 <div class="post-item">
-                    <div class="post-content">${{c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}}</div>
-                    <div class="post-footer"><div class="post-date">${{d}}</div></div>
+                    <div class="post-content">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                    <div class="post-footer"><div class="post-date">${d}</div></div>
                 </div>`;
             
             let inserted = false;
             const wrappers = a.querySelectorAll('.post-wrapper');
-            for (let ww of wrappers) {{
-                if (!ww.querySelector('.pinned')) {{
+            for (let ww of wrappers) {
+                if (!ww.querySelector('.pinned')) {
                     a.insertBefore(w, ww);
                     inserted = true;
                     break;
-                }}
-            }}
+                }
+            }
             if (!inserted) a.appendChild(w);
             
             f.reset();
 
-            try {{
-                await rpc('create_record', {{ content: c, client_id: i }});
-            }} catch (x) {{
+            try {
+                await rpc('create_record', { content: c, client_id: i });
+            } catch (x) {
                 w.remove(); showToast('Failed: ' + x.message);
-            }}
-        }}
+            }
+        }
 
-        function hd(i) {{
-            showConfirm(L.c, async (yes) => {{
+        function hd(i) {
+            showConfirm(L.c, async (yes) => {
                 if (!yes) return;
                 const w = document.getElementById('post-' + i);
                 w.style.opacity = '0'; setTimeout(() => w.style.display = 'none', 300);
-                try {{
-                    await rpc('delete_record', {{ post_id: i }});
+                try {
+                    await rpc('delete_record', { post_id: i });
                     w.remove();
-                }} catch (x) {{
+                } catch (x) {
                     w.style.opacity = '1'; w.style.display = 'block'; showToast('Failed: ' + x.message);
-                }}
-            }});
-        }}
+                }
+            });
+        }
 
-        async function hp(i, b) {{
+        async function hp(i, b) {
             const w = document.getElementById('post-' + i), p = w.querySelector('.post-item'), s = p.classList.contains('pinned');
-            if (s) {{ p.classList.remove('pinned'); b.innerText = L.p; }}
-            else {{
+            if (s) { p.classList.remove('pinned'); b.innerText = L.p; }
+            else {
                 p.classList.add('pinned'); b.innerText = L.u;
                 const a = w.parentNode; a.insertBefore(w, a.children[1]);
-            }}
-            try {{
-                await rpc('pin_record', {{ post_id: i }});
-            }} catch (x) {{
-                if (s) {{ p.classList.add('pinned'); b.innerText = L.u; }}
-                else {{ p.classList.remove('pinned'); b.innerText = L.p; }}
+            }
+            try {
+                await rpc('pin_record', { post_id: i });
+            } catch (x) {
+                if (s) { p.classList.add('pinned'); b.innerText = L.u; }
+                else { p.classList.remove('pinned'); b.innerText = L.p; }
                 showToast('Failed: ' + x.message);
-            }}
-        }}
+            }
+        }
+
+        // Работа с предложками
+        async function approveSugg(suggId) {
+            try {
+                await rpc('approve_suggestion', { suggestion_id: suggId });
+                const card = document.getElementById('sugg-' + suggId);
+                if (card) card.remove();
+                showToast("Approved!");
+            } catch (x) {
+                showToast('Failed: ' + x.message);
+            }
+        }
+
+        async function rejectSugg(suggId) {
+            try {
+                await rpc('reject_suggestion', { suggestion_id: suggId });
+                const card = document.getElementById('sugg-' + suggId);
+                if (card) card.remove();
+                showToast("Rejected!");
+            } catch (x) {
+                showToast('Failed: ' + x.message);
+            }
+        }
     </script>
     """
+    js = js.replace("__TOKEN__", token)
+    js = js.replace("__ME__", current_user)
+    js = js.replace("__DEL__", t('delete', lang))
+    js = js.replace("__PIN__", t('pin', lang))
+    js = js.replace("__UNPIN__", t('unpin', lang))
+    js = js.replace("__CONFIRM__", t('confirm_delete', lang))
+    js = js.replace("__NOPOSTS__", t('no_posts', lang))
+    js = js.replace("__COPYLINK__", t('copy_link', lang))
+    js = js.replace("__EXT_LOADING__", t('ext_loading', lang))
+    js = js.replace("__SVG_EYE_OFF__", SVG_EYE_OFF)
+    js = js.replace("__SVG_EYE__", SVG_EYE)
+    return js
 
 def get_overlay(lang):
-    return f"""
+    html = """
     <div id="toast"></div>
     <div id="modal-overlay" class="modal-overlay">
         <div class="modal-box">
             <p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p>
             <div class="modal-actions">
-                <button id="modal-cancel" class="btn" style="background:#aaa;color:black;">{t('cancel', lang)}</button>
+                <button id="modal-cancel" class="btn" style="background:#aaa;color:black;">__CANCEL__</button>
                 <button id="modal-confirm" class="btn btn-danger">OK</button>
             </div>
         </div>
     </div>
     <div id="link-modal" class="modal-overlay">
         <div class="modal-box" style="text-align: left;">
-            <h3 style="margin-top:0;">{t('ext_title', lang)}</h3>
-            <p style="font-size:14px; color:#555; margin-bottom:10px;">{t('ext_desc', lang)}</p>
+            <h3 style="margin-top:0;">__EXT_TITLE__</h3>
+            <p style="font-size:14px; color:#555; margin-bottom:10px;">__EXT_DESC__</p>
             <div id="og-preview" class="og-box">
-                <p style="margin:0; font-size:14px; color:#666;">{t('ext_loading', lang)}</p>
+                <p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p>
             </div>
             <div class="modal-actions">
-                <button onclick="closeLinkModal()" class="btn" style="background:#aaa;color:black;">{t('cancel', lang)}</button>
-                <a id="link-modal-confirm" href="#" target="_blank" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">{t('ext_continue', lang)}</a>
+                <button onclick="closeLinkModal()" class="btn" style="background:#aaa;color:black;">__CANCEL__</button>
+                <a id="link-modal-confirm" href="#" target="_blank" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">__EXT_CONTINUE__</a>
             </div>
         </div>
     </div>
     """
+    html = html.replace("__CANCEL__", t('cancel', lang))
+    html = html.replace("__EXT_TITLE__", t('ext_title', lang))
+    html = html.replace("__EXT_DESC__", t('ext_desc', lang))
+    html = html.replace("__EXT_LOADING__", t('ext_loading', lang))
+    html = html.replace("__EXT_CONTINUE__", t('ext_continue', lang))
+    return html
 
 def get_footer(lang):
-    return f"""
+    html = """
     <div class="footer">
-        <div>{t('created_by', lang)} <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | {t('hosting', lang)} <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
+        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
         <div class="footer-links">
-            <a href="/privacy">{t('privacy_title', lang)}</a> | <a href="/bugreport">{t('bugreport_title', lang)}</a>
+            <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a>
         </div>
-        <div style="font-size: 12px; color: #999; margin-top: 5px;">v{APP_VERSION} ({SERVER_START_DATE})</div>
+        <div style="font-size: 12px; color: #999; margin-top: 5px;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
     </div>
     """
+    html = html.replace("__CREATED_BY__", t('created_by', lang))
+    html = html.replace("__HOSTING__", t('hosting', lang))
+    html = html.replace("__PRIVACY_TITLE__", t('privacy_title', lang))
+    html = html.replace("__BUGREPORT_TITLE__", t('bugreport_title', lang))
+    html = html.replace("__APP_VERSION__", APP_VERSION)
+    html = html.replace("__SERVER_START_DATE__", SERVER_START_DATE)
+    return html
 
 def auth_html(lang: str, error_msg: str = "", token: str = ""):
     eb = f"<div class='error-msg'>{error_msg}</div>" if error_msg else "<div class='error-msg'></div>"
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('login', lang)} / {t('reg', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>__LOGIN__ / __REG__</title>__CSS____JS__</head><body>
     <div class="container">
-        <div class="auth-wrapper"><div class="label-text">{t('reg', lang)}</div><div class="form-box"><form action="/register" method="post">
-            <input type="hidden" name="csrf_token" value="{token}">
-            <input type="text" name="username" placeholder="{t('username', lang)}" required>
-            <input type="text" name="nickname" placeholder="{t('nickname', lang)}" required>
-            <div class="input-group"><input type="password" name="password" id="rp" placeholder="{t('password', lang)}" required><button type="button" class="eye-btn" onclick="tp('rp',this)">{SVG_EYE}</button></div>
-            <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="{t('re_pass', lang)}" required><button type="button" class="eye-btn" onclick="tp('rr',this)">{SVG_EYE}</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> {t('captcha', lang)}</label>
-            <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>{t('privacy_agree', lang)} <a href="/privacy" target="_blank" class="privacy-link">{t('privacy_link', lang)}</a></span></label>
-            <button type="submit">{t('register_btn', lang)}</button>
+        <div class="auth-wrapper"><div class="label-text">__REG__</div><div class="form-box"><form action="/register" method="post">
+            <input type="hidden" name="csrf_token" value="__TOKEN__">
+            <input type="text" name="username" placeholder="__USERNAME__" required>
+            <input type="text" name="nickname" placeholder="__NICKNAME__" required>
+            <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
+            <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
+            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+            <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" class="privacy-link">__PRIVACY_LINK__</a></span></label>
+            <button type="submit">__REG_BTN__</button>
         </form></div></div>
         <div class="auth-wrapper"><div class="auth-wrapper-inner"><div class="form-box"><form action="/login" method="post">
-            <input type="hidden" name="csrf_token" value="{token}">
-            <input type="text" name="nickname" placeholder="{t('nickname', lang)}" required>
-            <div class="input-group"><input type="password" name="password" id="lp" placeholder="{t('password', lang)}" required><button type="button" class="eye-btn" onclick="tp('lp',this)">{SVG_EYE}</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> {t('captcha', lang)}</label>
-            <button type="submit">{t('login_btn', lang)}</button>
-        </form></div><div class="label-text">{t('login', lang)}</div></div>
-        <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div></div>
-        {eb}</div>
-    </div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
+            <input type="hidden" name="csrf_token" value="__TOKEN__">
+            <input type="text" name="nickname" placeholder="__NICKNAME__" required>
+            <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
+            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+            <button type="submit">__LOGIN_BTN__</button>
+        </form></div><div class="label-text">__LOGIN__</div></div>
+        <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn __EN_ACTIVE__">EN</a></div></div>
+        __ERROR__</div>
+    </div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__LOGIN__", t('login', lang))
+    html = html.replace("__REG__", t('reg', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, ""))
+    html = html.replace("__TOKEN__", token)
+    html = html.replace("__USERNAME__", t('username', lang))
+    html = html.replace("__NICKNAME__", t('nickname', lang))
+    html = html.replace("__PASSWORD__", t('password', lang))
+    html = html.replace("__REPASS__", t('re_pass', lang))
+    html = html.replace("__CAPTCHA__", t('captcha', lang))
+    html = html.replace("__PRIVACY_AGREE__", t('privacy_agree', lang))
+    html = html.replace("__PRIVACY_LINK__", t('privacy_link', lang))
+    html = html.replace("__REG_BTN__", t('register_btn', lang))
+    html = html.replace("__LOGIN_BTN__", t('login_btn', lang))
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__ERROR__", eb)
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    html = html.replace("__SVG_EYE__", SVG_EYE)
+    return html
 
 def render_records(records, lang, own=False, uid=None):
     if not records or not isinstance(records, list): 
@@ -604,6 +705,7 @@ def render_records(records, lang, own=False, uid=None):
         pinned = bool(x.get('is_pinned', False))
         content = linkify(x.get('content'))
         date = format_date(esc(x.get('created_at')))
+        sugg_by = esc(x.get('suggested_by', ''))
         
         pc = "pinned" if pinned else ""
         
@@ -614,14 +716,24 @@ def render_records(records, lang, own=False, uid=None):
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
-            
-        out += f"""
-        <div class="post-wrapper" id="post-{rid}">{acts}
-            <div class="post-item {pc}">
-                <div class="post-content">{content}</div>
-                <div class="post-footer"><div class="post-date">{date}</div></div>
+        
+        sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
+        
+        item_html = """
+        <div class="post-wrapper" id="post-__RID__">__ACTS__
+            <div class="post-item __PC__">
+                <div class="post-content">__CONTENT__</div>
+                <div class="post-footer"><div class="post-date">__DATE__</div></div>
+                __SUGG__
             </div>
         </div>"""
+        item_html = item_html.replace("__RID__", rid)
+        item_html = item_html.replace("__ACTS__", acts)
+        item_html = item_html.replace("__PC__", pc)
+        item_html = item_html.replace("__CONTENT__", content)
+        item_html = item_html.replace("__DATE__", date)
+        item_html = item_html.replace("__SUGG__", sugg_html)
+        out += item_html
     return out
 
 def merge_memory(db_records, nickname):
@@ -664,54 +776,200 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('cabinet', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>__CABINET__</title>__CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar">
-        <h2>{t('cabinet', lang)}</h2>
-        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{user_username}</div>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}" target="_blank">{esc(nickname)} {t('link_profile', lang)}</a></div>{db}
-        <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(my_p)}</div>
-        <a href="/cabinet/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
-        <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">{t('logout', lang)}</button></form>
-        <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
+        <h2>__CABINET__</h2>
+        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
+        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICKNAME__" target="_blank">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
+        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
+        <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
+        <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE__</a>
+        <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">__LOGOUT__</button></form>
+        <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div>
     <div class="main-content">
         <div class="create-post-box"><form id="create-form" onsubmit="hc(event)">
-            <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500"></textarea>
-            <button type="submit">{t('create_post_btn', lang)}</button>
+            <textarea name="content" placeholder="__CREATE_POST_PLACEHOLDER__" required maxlength="500"></textarea>
+            <button type="submit">__CREATE_POST_BTN__</button>
         </form></div>
         
         <div class="posts-area" id="my-records-container">
-            <h2>{t('my_posts', lang)}</h2>
-            {rh_my}
+            <h2>__MY_POSTS__</h2>
+            __RECORDS_HTML__
         </div>
-    </div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
+    </div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__CABINET__", t('cabinet', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, viewer))
+    html = html.replace("__USERNAME_LABEL__", t('username_label', lang))
+    html = html.replace("__USERNAME__", user_username)
+    html = html.replace("__NICKNAME_LABEL__", t('nickname_label', lang))
+    html = html.replace("__NICKNAME__", esc(nickname))
+    html = html.replace("__LINK_PROFILE__", t('link_profile', lang))
+    html = html.replace("__DB__", db)
+    html = html.replace("__TOTAL_POSTS__", t('total_posts', lang))
+    html = html.replace("__POST_COUNT__", str(len(my_p)))
+    html = html.replace("__EDIT_PROFILE__", t('edit_profile', lang))
+    html = html.replace("__SUGGESTIONS_TITLE__", t('suggestions_title', lang))
+    html = html.replace("__LOGOUT__", t('logout', lang))
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__CREATE_POST_PLACEHOLDER__", t('create_post_placeholder', lang))
+    html = html.replace("__CREATE_POST_BTN__", t('create_post_btn', lang))
+    html = html.replace("__MY_POSTS__", t('my_posts', lang))
+    html = html.replace("__RECORDS_HTML__", rh_my)
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
+
+def suggestions_page_html(nickname, suggestions, lang, token):
+    if not suggestions:
+        rh = f"<div class='post-item'>{t('sugges_empty', lang)}</div>"
+    else:
+        rh = ""
+        for s in suggestions:
+            sid = esc(s.get('id'))
+            sugg_by = esc(s.get('suggested_by_name'))
+            content = linkify(s.get('content'))
+            date = format_date(esc(s.get('created_at')))
+            
+            card = """
+            <div class="suggestion-card" id="sugg-__SID__">
+                <div class="sugg-author">__SUGG_BY__: __NAME__ (__DATE__)</div>
+                <div class="sugg-content">__CONTENT__</div>
+                <div class="sugg-actions">
+                    <button class="btn sugg-approve" onclick="approveSugg('__SID__')">__APPROVE__</button>
+                    <button class="btn sugg-reject" onclick="rejectSugg('__SID__')">__REJECT__</button>
+                </div>
+            </div>"""
+            card = card.replace("__SID__", sid)
+            card = card.replace("__SUGG_BY__", t('suggested_by', lang))
+            card = card.replace("__NAME__", sugg_by)
+            card = card.replace("__DATE__", date)
+            card = card.replace("__CONTENT__", content)
+            card = card.replace("__APPROVE__", t('sugges_approve', lang))
+            card = card.replace("__REJECT__", t('sugges_reject', lang))
+            rh += card
+    
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <title>__SUGGESTIONS_TITLE__</title>__CSS____JS__</head><body>
+    <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
+    <div class="main-content" style="max-width:800px;margin:0 auto">
+        <div class="posts-area" style="min-height:300px;padding:20px;">
+            <h2>__SUGGESTIONS_TITLE__</h2>
+            __SUGGESTIONS_HTML__
+        </div>
+        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__BACK__</a>
+        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    </div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__SUGGESTIONS_TITLE__", t('suggestions_title', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, nickname))
+    html = html.replace("__SUGGESTIONS_HTML__", rh)
+    html = html.replace("__BACK__", t('back_home', lang))
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
+
+def sugges_form_html(nickname, lang, token, error="", success=""):
+    is_own = False
+    msg_html = ""
+    if error:
+        msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{error}</div>"
+    elif success:
+        msg_html = f"<div class='error-msg' style='color:#2ecc71;'>{success}</div>"
+    
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <title>__TITLE__ __NICKNAME__</title>__CSS____JS__</head><body>
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
+        <div class="posts-area" style="padding:20px;">
+            <h2>__TITLE__ __NICKNAME__</h2>
+            __MSG__
+            <form action="/__NICKNAME__/sugges" method="post" style="display:flex;flex-direction:column;gap:10px">
+                <input type="hidden" name="csrf_token" value="__TOKEN__">
+                <input type="text" name="sugg_name" placeholder="__SUGG_NAME__" required maxlength="60" style="background:#a9a9a9;padding:12px;font-size:16px;">
+                <textarea name="content" placeholder="__SUGG_CONTENT__" required maxlength="500" style="background:#a9a9a9;height:150px;padding:12px;font-size:16px;"></textarea>
+                <button type="submit" style="background:#2ecc71;color:white;font-size:18px;">__SEND__</button>
+            </form>
+            <a href="/__NICKNAME__" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
+            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/__NICKNAME__/sugges" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICKNAME__/sugges" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+        </div>
+    </div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__TITLE__", t('sugges_title', lang))
+    html = html.replace("__NICKNAME__", esc(nickname))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, ""))
+    html = html.replace("__TOKEN__", token)
+    html = html.replace("__SUGG_NAME__", t('sugges_name', lang))
+    html = html.replace("__SUGG_CONTENT__", t('sugges_content', lang))
+    html = html.replace("__SEND__", t('sugges_send', lang))
+    html = html.replace("__BACK__", t('back_home', lang))
+    html = html.replace("__MSG__", msg_html)
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
 
 def edit_html(nickname, user, lang, token):
     desc = esc(user.get('description'))
     user_username = esc(user.get('username'))
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('edit_profile', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>__EDIT_PROFILE__</title>__CSS____JS__</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
-        <h2 style="color:#fff;text-align:center">{t('edit_profile', lang)}</h2>
+        <h2 style="color:#fff;text-align:center">__EDIT_PROFILE__</h2>
         <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
-            <input type="hidden" name="csrf_token" value="{token}">
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('username_label', lang)}</div>
-            <input type="text" name="username" value="{user_username}" required style="background:#a9a9a9;padding:12px;font-size:18px">
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('description', lang)}</div>
-            <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder', lang)}" oninput="uc(this)" style="background:#a9a9a9;height:150px;padding:12px;font-size:18px">{desc}</textarea>
-            <div id="char-count" style="color:#fff;text-align:right;font-size:14px">{len(desc)} / 300</div>
-            <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">{t('save_changes', lang)}</button>
-            <a href="/cabinet" class="btn" style="background:#a9a9a9">{t('cancel', lang)}</a>
+            <input type="hidden" name="csrf_token" value="__TOKEN__">
+            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__USERNAME_LABEL__</div>
+            <input type="text" name="username" value="__USERNAME__" required style="background:#a9a9a9;padding:12px;font-size:18px">
+            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__DESCRIPTION__</div>
+            <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="background:#a9a9a9;height:150px;padding:12px;font-size:18px">__DESC__</textarea>
+            <div id="char-count" style="color:#fff;text-align:right;font-size:14px">__DESC_LEN__ / 300</div>
+            <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
+            <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
         </form>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
+        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    </div></div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__EDIT_PROFILE__", t('edit_profile', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, nickname))
+    html = html.replace("__TOKEN__", token)
+    html = html.replace("__USERNAME_LABEL__", t('username_label', lang))
+    html = html.replace("__USERNAME__", user_username)
+    html = html.replace("__DESCRIPTION__", t('description', lang))
+    html = html.replace("__DESC_PLACEHOLDER__", t('desc_placeholder', lang))
+    html = html.replace("__DESC__", desc)
+    html = html.replace("__DESC_LEN__", str(len(desc)))
+    html = html.replace("__SAVE_CHANGES__", t('save_changes', lang))
+    html = html.replace("__CANCEL__", t('cancel', lang))
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
 
 def public_html(nickname, user, records, lang, token, viewer):
     is_owner = (viewer == nickname)
@@ -719,80 +977,167 @@ def public_html(nickname, user, records, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    sugg_btn = ""
+    if viewer and not is_owner:
+        sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    elif not viewer:
+        sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('profile', lang)} {esc(nickname)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>__PROFILE__ __NICKNAME__</title>__CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar">
-        <h2>{t('profile', lang)}</h2>
-        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{user_username}</div>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{esc(nickname)}</div>{db}
-        <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(records)}</div>
-        <div class="lang-switch"><a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-        <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
+        <h2>__PROFILE__</h2>
+        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
+        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br>__NICKNAME__</div>__DB__
+        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
+        __SUGG_BTN__
+        <div class="lang-switch"><a href="/set_lang/ru?next=/__NICKNAME__" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICKNAME__" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+        <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area" style="min-height:500px">
-        <h2>{t('user_posts', lang)}</h2>
-        {rh}
-    </div></div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
+        <h2>__USER_POSTS__</h2>
+        __RECORDS_HTML__
+    </div></div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__PROFILE__", t('profile', lang))
+    html = html.replace("__NICKNAME__", esc(nickname))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, viewer or ""))
+    html = html.replace("__USERNAME_LABEL__", t('username_label', lang))
+    html = html.replace("__USERNAME__", user_username)
+    html = html.replace("__NICKNAME_LABEL__", t('nickname_label', lang))
+    html = html.replace("__DB__", db)
+    html = html.replace("__TOTAL_POSTS__", t('total_posts', lang))
+    html = html.replace("__POST_COUNT__", str(len(records)))
+    html = html.replace("__SUGG_BTN__", sugg_btn)
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__BACK_HOME__", t('back_home', lang))
+    html = html.replace("__USER_POSTS__", t('user_posts', lang))
+    html = html.replace("__RECORDS_HTML__", rh)
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
 
 def record_page_html(nickname, user, record, lang, token, viewer):
     rh = render_records([record], lang, own=False, uid=viewer)
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    sugg_btn = ""
+    if not viewer or viewer != nickname:
+        sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('record_page', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>__RECORD_PAGE__</title>__CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar">
-        <h2>{t('profile', lang)}</h2>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}">{esc(nickname)}</a></div>
-        <div class="info-card"><b>{t('username_label', lang)}:</b><br>{esc(user.get('username'))}</div>
-        <a href="/{nickname}" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
-        {rh}
-    </div></div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
+        <h2>__PROFILE__</h2>
+        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICKNAME__">__NICKNAME__</a></div>
+        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
+        __SUGG_BTN__
+        <a href="/__NICKNAME__" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
+    </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>
+        __RECORDS_HTML__
+    </div></div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__RECORD_PAGE__", t('record_page', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, viewer or ""))
+    html = html.replace("__PROFILE__", t('profile', lang))
+    html = html.replace("__NICKNAME_LABEL__", t('nickname_label', lang))
+    html = html.replace("__NICKNAME__", esc(nickname))
+    html = html.replace("__USERNAME_LABEL__", t('username_label', lang))
+    html = html.replace("__USERNAME__", esc(user.get('username')))
+    html = html.replace("__SUGG_BTN__", sugg_btn)
+    html = html.replace("__BACK_HOME__", t('back_home', lang))
+    html = html.replace("__RECORDS_HTML__", rh)
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
 
 def bugreport_html(username, reports, lang, token):
-    rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else "".join([f"""
+    rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else ""
+    for x in reports:
+        item = """
         <div class="post-item" style="border-left-color:transparent">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <b>{t('bugreport_title', lang)}</b><span class="status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}">{esc(x.get('status','Принято'))}</span>
+                <b>__BUGREPORT_TITLE__</b><span class="status-badge status-__STATUS_CLASS__">__STATUS__</span>
             </div>
-            <div class="post-content" style="text-align:left;">{esc(x.get('content'))}</div>
-            <div class="post-date">{format_date(esc(x.get('created_at')))}</div>
-        </div>""" for x in reports])
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+            <div class="post-content" style="text-align:left;">__CONTENT__</div>
+            <div class="post-date">__DATE__</div>
+        </div>"""
+        item = item.replace("__BUGREPORT_TITLE__", t('bugreport_title', lang))
+        item = item.replace("__STATUS_CLASS__", esc(x.get('status','Принято')).replace(' ','-'))
+        item = item.replace("__STATUS__", esc(x.get('status','Принято')))
+        item = item.replace("__CONTENT__", esc(x.get('content')))
+        item = item.replace("__DATE__", format_date(esc(x.get('created_at'))))
+        rh += item
+    
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('bugreport_title', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <title>__BUGREPORT_TITLE__</title>__CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
     <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="create-post-box"><h2 style="color:#fff;text-align:center;margin:10px 0">{t('bugreport_title', lang)}</h2>
+        <div class="create-post-box"><h2 style="color:#fff;text-align:center;margin:10px 0">__BUGREPORT_TITLE__</h2>
             <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:5px">
-                <input type="hidden" name="csrf_token" value="{token}">
-                <input type="text" name="name" value="{esc(username)}" placeholder="{t('bugreport_name', lang)}" required style="background:#a9a9a9;padding:12px;margin-bottom:5px">
-                <textarea name="content" placeholder="{t('bugreport_desc', lang)}" required style="background:#a9a9a9;height:150px;padding:12px;margin-bottom:5px"></textarea>
-                <button type="submit" style="background:#f1c40f;color:#000">{t('bugreport_send', lang)}</button>
+                <input type="hidden" name="csrf_token" value="__TOKEN__">
+                <input type="text" name="name" value="__USERNAME__" placeholder="__BUGREPORT_NAME__" required style="background:#a9a9a9;padding:12px;margin-bottom:5px">
+                <textarea name="content" placeholder="__BUGREPORT_DESC__" required style="background:#a9a9a9;height:150px;padding:12px;margin-bottom:5px"></textarea>
+                <button type="submit" style="background:#f1c40f;color:#000">__BUGREPORT_SEND__</button>
             </form>
         </div>
-        <div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div>
-        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">{t('cancel', lang)}</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
+        <div class="posts-area"><h2>__BUGREPORT_MY__</h2>__REPORTS_HTML__</div>
+        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__CANCEL__</a>
+        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    </div></div>__FOOTER____OVERLAY__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__BUGREPORT_TITLE__", t('bugreport_title', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__JS__", get_js(lang, token, ""))
+    html = html.replace("__TOKEN__", token)
+    html = html.replace("__USERNAME__", esc(username))
+    html = html.replace("__BUGREPORT_NAME__", t('bugreport_name', lang))
+    html = html.replace("__BUGREPORT_DESC__", t('bugreport_desc', lang))
+    html = html.replace("__BUGREPORT_SEND__", t('bugreport_send', lang))
+    html = html.replace("__BUGREPORT_MY__", t('bugreport_my', lang))
+    html = html.replace("__REPORTS_HTML__", rh)
+    html = html.replace("__CANCEL__", t('cancel', lang))
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__FOOTER__", get_footer(lang))
+    html = html.replace("__OVERLAY__", get_overlay(lang))
+    return html
 
 def privacy_html(lang, token):
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    html = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <title>{t('privacy_title', lang)}</title>{get_css()}</head><body>
+    <title>__PRIVACY_TITLE__</title>__CSS__</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area" style="padding:20px">
-        <h2 style="color:#fff;text-align:center;margin-bottom:20px">{t('privacy_title', lang)}</h2>
-        <div class="privacy-content">{t('privacy_text', lang)}</div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:20px">{t('back_home', lang)}</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div></div>{get_footer(lang)}</body></html>"""
+        <h2 style="color:#fff;text-align:center;margin-bottom:20px">__PRIVACY_TITLE__</h2>
+        <div class="privacy-content">__PRIVACY_TEXT__</div>
+        <a href="/" class="btn" style="background:#a9a9a9;margin-top:20px">__BACK_HOME__</a>
+        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    </div></div></div>__FOOTER__</body></html>
+    """
+    html = html.replace("__LANG__", lang)
+    html = html.replace("__PRIVACY_TITLE__", t('privacy_title', lang))
+    html = html.replace("__CSS__", get_css())
+    html = html.replace("__PRIVACY_TEXT__", t('privacy_text', lang))
+    html = html.replace("__BACK_HOME__", t('back_home', lang))
+    html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
+    html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
+    html = html.replace("__FOOTER__", get_footer(lang))
+    return html
 
 # --- МАРШРУТЫ ---
 @app.get("/set_lang/{lang}")
@@ -885,6 +1230,64 @@ async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("
     set_csrf_cookie(res, token, r)
     return res
 
+@app.get("/cabinet/suggestions", response_class=HTMLResponse)
+async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if not nickname: return RedirectResponse("/", 303)
+    
+    s_data = []
+    try:
+        s = sb.table('suggestions').select('*').eq('author_nickname', nickname).eq('status', 'pending').order('created_at', desc=True).execute()
+        if s.data and isinstance(s.data, list): s_data = s.data
+    except Exception: pass
+    
+    token = get_csrf_token(r)
+    res = HTMLResponse(suggestions_page_html(nickname, s_data, lang, token))
+    set_csrf_cookie(res, token, r)
+    return res
+
+@app.get("/{nickname}/sugges", response_class=HTMLResponse)
+async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru"), success: str = None):
+    token = get_csrf_token(r)
+    viewer = r.cookies.get("nickname")
+    
+    if viewer == nickname:
+        return HTMLResponse(sugges_form_html(nickname, lang, token, error=t('sugges_own', lang)))
+    
+    try:
+        u = sb.table('users').select('nickname').eq('nickname', nickname).execute()
+        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
+    except Exception:
+        return HTMLResponse(f"<h2>DB Error</h2>", 500)
+    
+    success_msg = t('sugges_success', lang) if success else ""
+    res = HTMLResponse(sugges_form_html(nickname, lang, token, success=success_msg))
+    set_csrf_cookie(res, token, r)
+    return res
+
+@app.post("/{nickname}/sugges", response_class=HTMLResponse)
+async def sugges_submit(nickname: str, r: Request, res: Response, sugg_name: str = Form(...), content: str = Form(...), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+    if not check_csrf(r, csrf_token):
+        return HTMLResponse(sugges_form_html(nickname, lang, csrf_token or "", error="CSRF Error"))
+    
+    if not sugg_name.strip() or not content.strip():
+        return HTMLResponse(sugges_form_html(nickname, lang, csrf_token or "", error="Fill all fields"))
+    
+    try:
+        u = sb.table('users').select('nickname').eq('nickname', nickname).execute()
+        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
+        
+        data = {
+            "author_nickname": nickname,
+            "suggested_by_name": sugg_name.strip()[:60],
+            "content": content.strip()[:500],
+            "status": "pending"
+        }
+        sb.table('suggestions').insert(data).execute()
+    except Exception as e:
+        return HTMLResponse(sugges_form_html(nickname, lang, csrf_token or "", error=str(e)))
+    
+    return RedirectResponse(f"/{nickname}/sugges?success=1", 303)
+
 @app.post("/rpc")
 async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
     if not check_csrf(r): raise HTTPException(status_code=403, detail="CSRF Error")
@@ -922,6 +1325,41 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             ns = not x.data[0].get('is_pinned', False)
             sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute()
             return {"status": "ok", "is_pinned": ns}
+        
+        elif req.method == "approve_suggestion":
+            sid = req.params.get("suggestion_id")
+            s = sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).eq('status', 'pending').execute()
+            if not s.data or not isinstance(s.data, list) or len(s.data) == 0:
+                raise HTTPException(404, "Suggestion not found")
+            
+            sugg = s.data[0]
+            i = str(uuid.uuid4())
+            n = datetime.now(timezone.utc).isoformat()
+            
+            new_post = {
+                "id": i,
+                "user_nickname": nickname,
+                "content": sugg.get('content', ''),
+                "is_pinned": False,
+                "created_at": n,
+                "suggested_by": sugg.get('suggested_by_name', '')
+            }
+            
+            try:
+                sb.table('posts').insert(new_post).execute()
+            except Exception:
+                # Если колонки suggested_by нет - вставляем без нее
+                new_post.pop("suggested_by", None)
+                sb.table('posts').insert(new_post).execute()
+            
+            sb.table('suggestions').update({"status": "approved"}).eq('id', sid).execute()
+            await manager.broadcast({"type": "new_record", "post_id": i})
+            return {"status": "ok", "id": i}
+        
+        elif req.method == "reject_suggestion":
+            sid = req.params.get("suggestion_id")
+            sb.table('suggestions').update({"status": "rejected"}).eq('id', sid).eq('author_nickname', nickname).execute()
+            return {"status": "ok"}
             
         raise HTTPException(400, "Unknown method")
     except HTTPException:
