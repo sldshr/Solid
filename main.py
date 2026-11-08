@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from supabase import create_client, Client
-import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, random
+import uvicorn, html, bcrypt, secrets, uuid, hashlib
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,56 +19,9 @@ deleted_records = set()
 pinned_records = {}
 pending_records = {}
 
-# --- БЕЗОПАСНЫЙ HTML И BB-КОДЫ ---
+# --- БЕЗОПАСНЫЙ HTML ---
 def esc(val):
     return html.escape(str(val)) if val is not None else ""
-
-def parse_bb(text: str) -> str:
-    if not text: return ""
-    # 1. Экранируем весь HTML для безопасности
-    t = html.escape(text)
-    
-    # 2. Простые теги
-    t = re.sub(r'\[b\](.*?)\[/b\]', r'<b>\1</b>', t, flags=re.IGNORECASE|re.DOTALL)
-    t = re.sub(r'\[i\](.*?)\[/i\]', r'<i>\1</i>', t, flags=re.IGNORECASE|re.DOTALL)
-    t = re.sub(r'\[u\](.*?)\[/u\]', r'<u>\1</u>', t, flags=re.IGNORECASE|re.DOTALL)
-    t = re.sub(r'\[s\](.*?)\[/s\]', r'<s>\1</s>', t, flags=re.IGNORECASE|re.DOTALL)
-    
-    # 3. Цвет (поддерживаем hex и названия)
-    def replace_color(m):
-        color = m.group(1)
-        if re.match(r'^#[0-9a-fA-F]{3,6}$', color) or re.match(r'^[a-zA-Z]+$', color):
-            return f'<span style="color:{color}">' + m.group(2) + '</span>'
-        return m.group(0)
-    t = re.sub(r'\[color=([^\]]+)\](.*?)\[/color\]', replace_color, t, flags=re.IGNORECASE|re.DOTALL)
-    
-    # 4. Размер (только цифры)
-    def replace_size(m):
-        size = m.group(1)
-        if size.isdigit():
-            return f'<span style="font-size:{size}px">' + m.group(2) + '</span>'
-        return m.group(0)
-    t = re.sub(r'\[size=([^\]]+)\](.*?)\[/size\]', replace_size, t, flags=re.IGNORECASE|re.DOTALL)
-    
-    # 5. Свечение (Glow)
-    def replace_glow(m):
-        color = m.group(1)
-        if re.match(r'^#[0-9a-fA-F]{3,6}$', color) or re.match(r'^[a-zA-Z]+$', color):
-            return f'<span style="text-shadow: 0 0 5px {color}, 0 0 10px {color}, 0 0 15px {color}">' + m.group(2) + '</span>'
-        return m.group(0)
-    t = re.sub(r'\[glow=([^\]]+)\](.*?)\[/glow\]', replace_glow, t, flags=re.IGNORECASE|re.DOTALL)
-    
-    # 6. Ссылки
-    def replace_url(m):
-        url = m.group(1)
-        if url.startswith('http://') or url.startswith('https://'):
-            return f'<a href="{url}" target="_blank" style="color:#4da6ff;text-decoration:underline">' + m.group(2) + '</a>'
-        return m.group(0)
-    t = re.sub(r'\[url=([^\]]+)\](.*?)\[/url\]', replace_url, t, flags=re.IGNORECASE|re.DOTALL)
-    
-    # 7. Переносы строк
-    t = t.replace('\n', '<br>')
-    return t
 
 # --- WEBSOCKET МЕНЕДЖЕР (REAL-TIME) ---
 class ConnectionManager:
@@ -100,6 +53,36 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+# --- PWA (Progressive Web App) ---
+@app.get("/manifest.json")
+async def manifest():
+    return JSONResponse({
+        "name": "Solid Link",
+        "short_name": "SolidLink",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#f4f4f4",
+        "theme_color": "#000000",
+        "icons": [{
+            "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+",
+            "sizes": "192x192",
+            "type": "image/svg+xml"
+        }]
+    })
+
+@app.get("/sw.js")
+async def sw():
+    js = """
+    self.addEventListener('install', (e) => {
+        e.waitUntil(caches.open('solid-link-v1').then((cache) => cache.addAll(['/'])));
+    });
+    self.addEventListener('fetch', (e) => {
+        if (e.request.method !== 'GET') return;
+        e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request)));
+    });
+    """
+    return Response(content=js, media_type="application/javascript")
 
 # --- БЕЗОПАСНОСТЬ ---
 def hash_password(password: str) -> str:
@@ -173,9 +156,7 @@ LOCALES = {
         "privacy_text": "1. Сбор информации. Мы собираем только ваш юзернейм, никнейм и хеш пароля. Пароли хранятся в зашифрованном виде (bcrypt).<br><br>2. Использование данных. Данные используются для аутентификации и отображения профиля. Мы не передаем данные третьим лицам.<br><br>3. Контент. Ваши записи и лайки хранятся на серверах Supabase.<br><br>4. Cookies. Сайт использует cookies для сессии и выбранного языка.<br><br>5. Ваши права. Вы можете изменить профиль или удалить записи в любой момент.",
         "privacy_agree": "Я согласен с", "privacy_link": "Политикой конфиденциальности",
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
-        "record_page": "Запись", "vote_err": "Вы уже голосовали!", "copy_link": "Ссылка",
-        "nickgen_title": "Генератор никнеймов", "nickgen_desc": "Выберите стиль и нажмите кнопку, чтобы сгенерировать красивые никнеймы.",
-        "gen_btn": "Сгенерировать", "copy": "Копировать", "bb_help": "Поддерживаются BB-коды: [b]жирный[/b], [i]курсив[/i], [u]подчеркнутый[/u], [s]зачеркнутый[/s], [color=red]цвет[/color], [size=24]размер[/size], [glow=#00ff00]свечение[/glow], [url=http://link]ссылка[/url]"
+        "record_page": "Запись", "vote_err": "Вы уже голосовали!", "copy_link": "Ссылка"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -198,9 +179,7 @@ LOCALES = {
         "privacy_text": "1. Data Collection. We collect only your username, nickname, and hashed password (bcrypt).<br><br>2. Data Usage. Data is used for authentication and profile display. We do not share data with third parties.<br><br>3. Content. Your records and votes are stored on Supabase.<br><br>4. Cookies. The site uses cookies for session and language preferences.<br><br>5. Your Rights. You can edit your profile or delete records at any time.",
         "privacy_agree": "I agree to the", "privacy_link": "Privacy Policy",
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
-        "record_page": "Record", "vote_err": "You already voted!", "copy_link": "Link",
-        "nickgen_title": "Nickname Generator", "nickgen_desc": "Choose a style and click the button to generate beautiful nicknames.",
-        "gen_btn": "Generate", "copy": "Copy", "bb_help": "Supported BB codes: [b]bold[/b], [i]italic[/i], [u]underline[/u], [s]strike[/s], [color=red]color[/color], [size=24]size[/size], [glow=#00ff00]glow[/glow], [url=http://link]link[/url]"
+        "record_page": "Record", "vote_err": "You already voted!", "copy_link": "Link"
     }
 }
 
@@ -262,24 +241,19 @@ def get_css():
         .logout-btn:hover { background: #cc0000; }
         .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
         .edit-btn:hover { background: #1a82e2; }
-        .gen-btn { background: #9b59b6; color: white; margin-top: 5px; }
-        .gen-btn:hover { background: #8e44ad; }
         
         .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
         
         .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
         .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
 
-        .tabs-container { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; }
-
-        .posts-area { padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .posts-area { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; min-height: 300px;}
         .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
         
         .post-wrapper { position: relative; transition: opacity 0.3s ease; }
         .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         
-        .post-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #333; border-bottom: 1px solid #888; padding-bottom: 5px; flex-wrap: wrap; gap: 5px; }
         .post-content { margin-bottom: 10px; font-size: 18px; }
         .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
         .post-date { font-size: 12px; color: #555; }
@@ -323,29 +297,15 @@ def get_css():
         .btn-danger { background: #ff4d4d; color: white; }
         .btn-danger:hover { background: #cc0000; }
 
-        /* Nickname Generator Styles */
-        .nickgen-container { background: black; padding: 20px; border-radius: 5px; color: white; text-align: center; }
-        .nickgen-title { font-size: 28px; margin-bottom: 10px; color: #9b59b6; text-shadow: 0 0 10px #9b59b6; }
-        .nickgen-desc { font-size: 16px; margin-bottom: 20px; color: #ccc; }
-        .nickgen-styles { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-        .style-btn { background: #333; color: white; border: 2px solid #555; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; width: auto; }
-        .style-btn.active { background: #9b59b6; border-color: #9b59b6; }
-        .style-btn:hover { border-color: #9b59b6; }
-        .nickgen-output { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
-        .nick-item { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 15px; border-radius: 5px; border-left: 5px solid #9b59b6; font-family: monospace; font-size: 20px; }
-        .copy-nick-btn { background: #4da6ff; color: white; border: none; padding: 8px 15px; border-radius: 3px; cursor: pointer; font-weight: bold; width: auto; }
-        .copy-nick-btn:hover { background: #1a82e2; }
-
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
             .auth-wrapper { width: 100%; }
             .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
-            .label-text { font-size: 28px; text-align: center; margin: 10px 0 0 0; order: -1; }
+            .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
             .dashboard-container { flex-direction: column; gap: 15px; }
             .sidebar { width: 100%; }
             .main-content { width: 100%; }
-            .tabs-container { padding: 10px; }
             .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
             .error-msg { text-align: center; }
             .login-lang-wrapper { justify-content: center; }
@@ -353,9 +313,13 @@ def get_css():
             .post-item { padding: 10px; }
             .post-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
             .vote-btns { width: 100%; justify-content: space-between; }
-            .vote-btn { width: 48%; justify-content: center; }
-            .nick-item { flex-direction: column; gap: 10px; text-align: center; }
-            .copy-nick-btn { width: 100%; }
+            .vote-btn { width: 48%; justify-content: center; padding: 12px; }
+            
+            /* Mobile Font Adjustments to prevent iOS zoom */
+            input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
+            button, .btn { font-size: 16px; padding: 14px; }
+            .post-content { font-size: 16px; }
+            .sidebar h2 { font-size: 20px; }
         }
     </style>
     """
@@ -368,8 +332,17 @@ def get_js(lang, token):
         const L = {{
             d: "{t('delete', lang)}", p: "{t('pin', lang)}", u: "{t('unpin', lang)}",
             c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}",
-            ve: "{t('vote_err', lang)}", copy: "{t('copy', lang)}"
+            ve: "{t('vote_err', lang)}"
         }};
+
+        // PWA Registration
+        if ('serviceWorker' in navigator) {{
+            window.addEventListener('load', () => {{
+                navigator.serviceWorker.register('/sw.js').catch(err => {{
+                    console.log('SW registration failed', err);
+                }});
+            }});
+        }}
 
         let ws;
         function connectWS() {{
@@ -388,6 +361,8 @@ def get_js(lang, token):
                 }} else if (d.type === 'delete_record') {{
                     const p = document.getElementById('post-' + d.post_id);
                     if (p) p.remove();
+                }} else if (d.type === 'new_record') {{
+                    showToast("New record added!");
                 }}
             }};
             ws.onclose = () => setTimeout(connectWS, 3000);
@@ -457,7 +432,6 @@ def get_js(lang, token):
             const m = a.querySelector('.post-item:not(.post-wrapper)');
             if (m) m.remove();
 
-            // Временно выводим сырой текст (без BB), сервер отрендерит при перезагрузке
             const w = document.createElement('div');
             w.className = 'post-wrapper'; w.id = 'post-' + i;
             w.innerHTML = `
@@ -480,7 +454,6 @@ def get_js(lang, token):
 
             try {{
                 await rpc('create_record', {{ content: c, client_id: i }});
-                setTimeout(() => window.location.reload(), 500); // Перезагрузка для отображения BB-кодов
             }} catch (x) {{
                 w.remove(); showToast('Failed: ' + x.message);
             }}
@@ -586,71 +559,6 @@ def get_js(lang, token):
                 }}
             }}, 600);
         }}
-
-        // --- NICKNAME GENERATOR ---
-        const nickData = {{
-            anime: {{
-                pre: ["Dark", "Light", "Kawaii", "Shadow", "Neon", "Sakura", "Zero", "Shinobi"],
-                root: ["Sword", "Soul", "Spirit", "Blade", "Fox", "Cat", "Kitsune", "Oni"],
-                suf: ["Chan", "Kun", "Senpai", "Sama", "Desu", "San"]
-            }},
-            cyber: {{
-                pre: ["Cyber", "Neon", "Glitch", "Tech", "Data", "Hex", "Net", "Synth"],
-                root: ["Runner", "Punk", "Hacker", "Ghost", "City", "Wave", "Core", "Drive"],
-                suf: ["77", "2077", "X", "Zero", "Prime", "Protocol"]
-            }},
-            fantasy: {{
-                pre: ["Dark", "Blood", "Iron", "Storm", "Shadow", "Fire", "Ice", "Frost"],
-                root: ["Lord", "Knight", "Mage", "Rogue", "Hunter", "Slayer", "King", "Dragon"],
-                suf: ["I", "II", "III", "The Great", "The Brave", "The Wise"]
-            }},
-            cute: {{
-                pre: ["Sweet", "Little", "Fluffy", "Bunny", "Honey", "Star", "Moon", "Berry"],
-                root: ["Bear", "Cat", "Fox", "Cloud", "Dream", "Sparkle", "Pie", "Cake"],
-                suf: ["Chan", "Bear", "Nya", "Meow", "Sama", "Kawaii"]
-            }}
-        }};
-        let currentStyle = 'anime';
-
-        function setStyle(style, btn) {{
-            currentStyle = style;
-            document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            generateNicks();
-        }}
-
-        function generateNicks() {{
-            const out = document.getElementById('nick-output');
-            out.innerHTML = '';
-            const data = nickData[currentStyle];
-            
-            for (let i = 0; i < 5; i++) {{
-                const p = data.pre[Math.floor(Math.random() * data.pre.length)];
-                const r = data.root[Math.floor(Math.random() * data.root.length)];
-                const s = data.suf[Math.floor(Math.random() * data.suf.length)];
-                
-                // Иногда добавляем BB-код для красоты
-                let nick = p + r + s;
-                if (Math.random() > 0.7) nick = `[color=#9b59b6]${{nick}}[/color]`;
-                if (Math.random() > 0.8) nick = `[b]${{nick}}[/b]`;
-                
-                const item = document.createElement('div');
-                item.className = 'nick-item';
-                item.innerHTML = `<span>${{nick}}</span><button class="copy-nick-btn" onclick="copyNick('${{nick}}')">${{L.copy}}</button>`;
-                out.appendChild(item);
-            }}
-        }}
-
-        function copyNick(nick) {{
-            // Убираем BB-коды при копировании
-            const clean = nick.replace(/\\[[^\\]]+\\]/g, '');
-            navigator.clipboard.writeText(clean).then(() => showToast("Copied!"));
-        }}
-        
-        // Инициализация генератора, если мы на его странице
-        if (document.getElementById('nick-output')) {{
-            generateNicks();
-        }}
     </script>
     """
 
@@ -682,6 +590,8 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
     eb = f"<div class='error-msg'>{error_msg}</div>" if error_msg else "<div class='error-msg'></div>"
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('login', lang)} / {t('reg', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="container">
         <div class="auth-wrapper"><div class="label-text">{t('reg', lang)}</div><div class="form-box"><form action="/register" method="post">
@@ -705,7 +615,7 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
         {eb}</div>
     </div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
-def render_records(records, lang, own=False, feed=False, uid=None):
+def render_records(records, lang, own=False, uid=None):
     if not records or not isinstance(records, list): 
         return f"<div class='post-item'>{t('no_posts', lang)}</div>"
     out = ""
@@ -715,10 +625,11 @@ def render_records(records, lang, own=False, feed=False, uid=None):
         if not rid: continue
         
         pinned = bool(x.get('is_pinned', False))
-        content = parse_bb(x.get('content'))
+        content = esc(x.get('content')).replace('\n', '<br>')
         date = format_date(esc(x.get('created_at')))
         
         pc = "pinned" if pinned else ""
+        
         likes = x.get('likes') or 0
         dislikes = x.get('dislikes') or 0
         
@@ -739,23 +650,16 @@ def render_records(records, lang, own=False, feed=False, uid=None):
             vb += f"<span style='color:red;font-weight:bold'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></span>"
         vb += "</div>"
             
-        head = ""
-        if feed:
-            user_nick = esc(x.get('user_nickname')) # Никнеймы не парсим!
-            head = f"<div class='post-header'><span><b><a href='/{user_nick}'>{user_nick}</a></b></span><span>{date}</span></div>"
-            date = "" 
-            
         out += f"""
         <div class="post-wrapper" id="post-{rid}">{acts}
             <div class="post-item {pc}">
-                {head}
                 <div class="post-content">{content}</div>
                 <div class="post-footer">{vb}<div class="post-date">{date}</div></div>
             </div>
         </div>"""
     return out
 
-def merge_memory(db_records, nickname, is_owner=False):
+def merge_memory(db_records, nickname):
     f = []
     if not db_records or not isinstance(db_records, list):
         db_records = []
@@ -790,61 +694,34 @@ def merge_memory(db_records, nickname, is_owner=False):
         pass
     return f
 
-def dashboard_html(nickname, user, my_p, lang, token):
-    rh_my = render_records(my_p, lang, own=True, feed=False, uid=nickname)
+def dashboard_html(nickname, user, my_p, lang, token, viewer):
+    rh_my = render_records(my_p, lang, own=True, uid=viewer)
     user_username = esc(user.get('username'))
-    desc = parse_bb(user.get('description')) # Описание с BB-кодами
+    desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('cabinet', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>{t('cabinet', lang)}</h2>
         <div class="info-card"><b>{t('username_label', lang)}:</b><br>{user_username}</div>
         <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}" target="_blank">{esc(nickname)} {t('link_profile', lang)}</a></div>{db}
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(my_p)}</div>
-        <a href="/cabinet/nickgen" class="btn gen-btn">{t('nickgen_title', lang)}</a>
         <a href="/cabinet/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
         <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">{t('logout', lang)}</button></form>
         <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div>
     <div class="main-content">
-        <div class="create-post-box">
-            <div style="color:#a9a9a9; font-size:12px; text-align:left; margin-bottom:5px;">{t('bb_help', lang)}</div>
-            <form id="create-form" onsubmit="hc(event)">
-                <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="1000"></textarea>
-                <button type="submit">{t('create_post_btn', lang)}</button>
-            </form>
-        </div>
+        <div class="create-post-box"><form id="create-form" onsubmit="hc(event)">
+            <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500"></textarea>
+            <button type="submit">{t('create_post_btn', lang)}</button>
+        </form></div>
         
-        <div class="tabs-container">
-            <div class="posts-area" id="my-records-container"><h2>{t('my_posts', lang)}</h2>{rh_my}</div>
-        </div>
-    </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
-
-def nickgen_html(nickname, user, lang, token):
-    return f"""
-    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{t('nickgen_title', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>{t('cabinet', lang)}</h2>
-        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{esc(nickname)}</div>
-        <a href="/cabinet" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content">
-        <div class="nickgen-container">
-            <div class="nickgen-title">{t('nickgen_title', lang)}</div>
-            <div class="nickgen-desc">{t('nickgen_desc', lang)}</div>
-            
-            <div class="nickgen-styles">
-                <button class="style-btn active" onclick="setStyle('anime', this)">Anime</button>
-                <button class="style-btn" onclick="setStyle('cyber', this)">Cyberpunk</button>
-                <button class="style-btn" onclick="setStyle('fantasy', this)">Fantasy</button>
-                <button class="style-btn" onclick="setStyle('cute', this)">Cute</button>
-            </div>
-            
-            <button class="btn" style="background:#9b59b6;color:white;margin-bottom:20px;" onclick="generateNicks()">{t('gen_btn', lang)}</button>
-            
-            <div id="nick-output" class="nickgen-output"></div>
+        <div class="posts-area" id="my-records-container">
+            <h2>{t('my_posts', lang)}</h2>
+            {rh_my}
         </div>
     </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
@@ -853,10 +730,11 @@ def edit_html(nickname, user, lang, token):
     user_username = esc(user.get('username'))
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('edit_profile', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="tabs-container" style="padding:20px">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
         <h2 style="color:#fff;text-align:center">{t('edit_profile', lang)}</h2>
-        <div style="color:#a9a9a9; font-size:12px; text-align:left; margin-bottom:5px;">{t('bb_help', lang)}</div>
         <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
             <input type="hidden" name="csrf_token" value="{token}">
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('username_label', lang)}</div>
@@ -871,12 +749,15 @@ def edit_html(nickname, user, lang, token):
     </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def public_html(nickname, user, records, lang, token, viewer):
-    rh = render_records(records, lang, own=False, feed=True, uid=viewer)
+    is_owner = (viewer == nickname)
+    rh = render_records(records, lang, own=is_owner, uid=viewer)
     user_username = esc(user.get('username'))
-    desc = parse_bb(user.get('description'))
+    desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('profile', lang)} {esc(nickname)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>{t('profile', lang)}</h2>
@@ -885,23 +766,26 @@ def public_html(nickname, user, records, lang, token, viewer):
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(records)}</div>
         <div class="lang-switch"><a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content"><div class="tabs-container">
-        <div class="posts-area" id="feed-records-container" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div>
+    </div><div class="main-content"><div class="posts-area" style="min-height:500px">
+        <h2>{t('user_posts', lang)}</h2>
+        {rh}
     </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def record_page_html(nickname, user, record, lang, token, viewer):
-    rh = render_records([record], lang, own=False, feed=True, uid=viewer)
+    rh = render_records([record], lang, own=False, uid=viewer)
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('record_page', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>{t('profile', lang)}</h2>
         <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}">{esc(nickname)}</a></div>
         <div class="info-card"><b>{t('username_label', lang)}:</b><br>{esc(user.get('username'))}</div>
         <a href="/{nickname}" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
-    </div><div class="main-content"><div class="tabs-container"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
+    </div><div class="main-content"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
         {rh}
-    </div></div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
 def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else "".join([f"""
@@ -914,6 +798,8 @@ def bugreport_html(username, reports, lang, token):
         </div>""" for x in reports])
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('bugreport_title', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
     <div class="main-content" style="max-width:800px;margin:0 auto">
@@ -925,7 +811,7 @@ def bugreport_html(username, reports, lang, token):
                 <button type="submit" style="background:#f1c40f;color:#000">{t('bugreport_send', lang)}</button>
             </form>
         </div>
-        <div class="tabs-container"><div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div></div>
+        <div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div>
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">{t('cancel', lang)}</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
@@ -933,8 +819,10 @@ def bugreport_html(username, reports, lang, token):
 def privacy_html(lang, token):
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
     <title>{t('privacy_title', lang)}</title>{get_css()}</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="tabs-container" style="padding:20px">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area" style="padding:20px">
         <h2 style="color:#fff;text-align:center;margin-bottom:20px">{t('privacy_title', lang)}</h2>
         <div class="privacy-content">{t('privacy_text', lang)}</div>
         <a href="/" class="btn" style="background:#a9a9a9;margin-top:20px">{t('back_home', lang)}</a>
@@ -1025,17 +913,10 @@ async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = 
     except Exception:
         pass
             
-    po = merge_memory(p_data, user, True)
+    po = merge_memory(p_data, user)
     
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(user, user_data, po, lang, token))
-    set_csrf_cookie(res, token, r)
-    return res
-
-@app.get("/cabinet/nickgen", response_class=HTMLResponse)
-async def nickgen(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
-    token = get_csrf_token(r)
-    res = HTMLResponse(nickgen_html(user, {}, lang, token))
+    res = HTMLResponse(dashboard_html(user, user_data, po, lang, token, user))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -1060,6 +941,7 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
                 pd.pop("dislikes", None)
                 sb.table('posts').insert(pd).execute()
             
+            await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
             
         elif req.method == "delete_record":
@@ -1221,7 +1103,7 @@ async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
     
     viewer = r.cookies.get("nickname")
-    po = merge_memory(p_data, nickname, True)
+    po = merge_memory(p_data, nickname)
     
     token = get_csrf_token(r)
     res = HTMLResponse(public_html(nickname, u_data, po, lang, token, viewer))
