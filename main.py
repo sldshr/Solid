@@ -9,7 +9,7 @@ from typing import Optional
 
 app = FastAPI()
 
-APP_VERSION = "0.08"
+APP_VERSION = "0.09"
 SERVER_START_DATE = datetime.now().strftime("%d.%m.%y")
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
@@ -20,7 +20,7 @@ deleted_records = set()
 pinned_records = {}
 pending_records = {}
 
-MAX_B64_LEN = 900000  # ~700KB лимит base64
+MAX_B64_LEN = 900000
 
 def esc(val):
     return html.escape(str(val)) if val is not None else ""
@@ -38,9 +38,15 @@ def valid_b64(s):
     if not s.startswith("data:image/"): return ""
     return s
 
-# --- АСИНХРОННЫЕ ЗАПРОСЫ ---
+# --- ЗАПРОСЫ ---
 async def _fetch_user(nickname):
-    for sel in ['username,description,sugges_rules,avatar_data', 'username,description,sugges_rules', 'username,description']:
+    selections = [
+        'username,description,sugges_rules,avatar_data,sugges_enabled',
+        'username,description,sugges_rules,avatar_data',
+        'username,description,sugges_rules',
+        'username,description',
+    ]
+    for sel in selections:
         try:
             res = await asyncio.to_thread(lambda: sb.table('users').select(sel).eq('nickname', nickname).execute())
             return res.data[0] if res.data else None
@@ -61,6 +67,11 @@ async def _fetch_suggestions(nickname):
         return res.data or []
     except Exception:
         return []
+
+def user_sugges_enabled(user_data):
+    if not user_data: return True
+    v = user_data.get('sugges_enabled')
+    return v is not False and v != False
 
 # --- WEBSOCKET ---
 class ConnectionManager:
@@ -197,9 +208,12 @@ LOCALES = {
         "rules_title": "Правила для предложки", "rules_placeholder": "Напишите правила для тех, кто предлагает посты...",
         "rules_edit_label": "Правила предложки (до 1000 символов)", "rules_alert_long": "Правила > 1000 символов!",
         "rules_none": "Правила не установлены",
-        "attach_photo": "Прикрепить фото", "attach_avatar": "Аватар (до 300px)", "remove_photo": "Убрать фото",
+        "attach_photo": "Прикрепить фото", "attach_avatar": "Аватар (квадрат)", "remove_photo": "Убрать фото",
         "img_compressing": "Сжатие фото...", "img_ready": "Фото готово", "img_error": "Ошибка фото",
-        "img_too_big": "Фото слишком большое"
+        "img_too_big": "Фото слишком большое", "view_photo": "Просмотр фото",
+        "sugges_disabled": "Предложка отключена у этого пользователя",
+        "sugges_enable_label": "Разрешить предложку (люди смогут предлагать посты)",
+        "sugges_enabled_label": "Предложка включена"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -236,9 +250,12 @@ LOCALES = {
         "rules_title": "Suggestion rules", "rules_placeholder": "Write rules for people who suggest posts...",
         "rules_edit_label": "Suggestion rules (max 1000 chars)", "rules_alert_long": "Rules > 1000 chars!",
         "rules_none": "No rules set",
-        "attach_photo": "Attach photo", "attach_avatar": "Avatar (up to 300px)", "remove_photo": "Remove photo",
+        "attach_photo": "Attach photo", "attach_avatar": "Avatar (square)", "remove_photo": "Remove photo",
         "img_compressing": "Compressing photo...", "img_ready": "Photo ready", "img_error": "Photo error",
-        "img_too_big": "Photo is too big"
+        "img_too_big": "Photo is too big", "view_photo": "View photo",
+        "sugges_disabled": "Suggestions are disabled for this user",
+        "sugges_enable_label": "Enable suggestions (people can suggest posts)",
+        "sugges_enabled_label": "Suggestions enabled"
     }
 }
 
@@ -290,7 +307,8 @@ def get_css():
             .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
             .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
             .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
-            .avatar { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 10px auto; border: 3px solid #a9a9a9; background: #333; }
+            /* КВАДРАТНАЯ АВАТАРКА */
+            .avatar { width: 120px; height: 120px; border-radius: 8px; object-fit: cover; display: block; margin: 0 auto 10px auto; border: 3px solid #a9a9a9; background: #333; cursor: zoom-in; }
             .logout-btn { margin-top: 10px; background: #ff4d4d; }
             .logout-btn:hover { background: #cc0000; }
             .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
@@ -301,12 +319,12 @@ def get_css():
             .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
             .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
             .create-post-box label { color: #fff; font-size: 14px; font-weight: bold; display: block; margin-top: 5px;}
-            .img-preview { max-width: 100%; max-height: 200px; border-radius: 5px; margin-top: 8px; display: block; margin-left: auto; margin-right: auto;}
+            .img-preview { max-width: 100%; max-height: 200px; border-radius: 5px; margin-top: 8px; display: block; margin-left: auto; margin-right: auto; cursor: zoom-in;}
             .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
             .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
             .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
             .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
-            .post-image { max-width: 100%; max-height: 500px; object-fit: contain; border-radius: 5px; margin: 10px auto; display: block; }
+            .post-image { max-width: 100%; max-height: 500px; object-fit: contain; border-radius: 5px; margin: 10px auto; display: block; cursor: zoom-in; }
             .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
             .post-date { font-size: 12px; color: #555; margin-left: auto; }
             .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; }
@@ -332,6 +350,8 @@ def get_css():
             .rules-box { background: #fff9e6; border-left: 5px solid #f1c40f; padding: 15px; border-radius: 5px; margin-bottom: 15px; color: #000; }
             .rules-box b { display: block; margin-bottom: 8px; font-size: 15px; }
             .rules-content { font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
+            .toggle-row { background: #a9a9a9; padding: 12px; border-radius: 3px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: bold; cursor: pointer; }
+            .toggle-row input[type="checkbox"] { width: 24px; height: 24px; cursor: pointer; }
             .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
             .status-Принято, .status-Accepted { background: #4da6ff; }
             .status-В-работе, .status-In-Progress { background: #f1c40f; }
@@ -356,6 +376,12 @@ def get_css():
             .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
             .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
             .og-desc { margin: 0; font-size: 14px; color: #555; }
+            /* ПРОСМОТРЩИК ФОТО */
+            #img-viewer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 20000; display: none; justify-content: center; align-items: center; cursor: zoom-out; padding: 10px; }
+            #img-viewer.show { display: flex; }
+            #img-viewer-img { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 5px; }
+            .img-viewer-close { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+            .img-viewer-close:hover { background: rgba(255,255,255,0.4); }
             @media (max-width: 768px) {
                 body { padding: 8px; }
                 .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -402,7 +428,22 @@ def get_js(lang, token, current_user=""):
             ic: "__IMG_COMPRESSING__", ir: "__IMG_READY__", ie: "__IMG_ERROR__", ib: "__IMG_BIG__"
         };
         
-        // ============ СЖАТИЕ ИЗОБРАЖЕНИЙ ============
+        // ============ ПРОСМОТРЩИК ФОТО ============
+        function viewImage(src) {
+            if (!src) return;
+            document.getElementById('img-viewer-img').src = src;
+            document.getElementById('img-viewer').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeImgViewer() {
+            document.getElementById('img-viewer').classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeImgViewer();
+        });
+        
+        // ============ СЖАТИЕ ============
         async function compressImage(file, maxWidth = 1000, quality = 0.75) {
             return new Promise((resolve, reject) => {
                 if (!file.type.startsWith('image/')) return reject('Not an image');
@@ -416,15 +457,12 @@ def get_js(lang, token, current_user=""):
                             if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
                             canvas.width = w; canvas.height = h;
                             const ctx = canvas.getContext('2d');
-                            ctx.fillStyle = '#fff';
-                            ctx.fillRect(0, 0, w, h);
+                            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
                             ctx.drawImage(img, 0, 0, w, h);
                             let b64 = canvas.toDataURL('image/jpeg', quality);
-                            // Если всё ещё слишком большое - сжимаем сильнее
                             let q = quality;
                             while (b64.length > 800000 && q > 0.3) {
-                                q -= 0.1;
-                                b64 = canvas.toDataURL('image/jpeg', q);
+                                q -= 0.1; b64 = canvas.toDataURL('image/jpeg', q);
                             }
                             if (b64.length > 850000) return reject('Image too big');
                             resolve(b64);
@@ -438,7 +476,6 @@ def get_js(lang, token, current_user=""):
             });
         }
         
-        // Кэш base64 для постов/предложек/аватаров
         window.postImageCache = "";
         window.suggImageCache = "";
         
@@ -447,21 +484,17 @@ def get_js(lang, token, current_user=""):
             const preview = document.getElementById('post-img-preview');
             const btn = document.getElementById('create-post-btn');
             if (!file) { window.postImageCache = ""; if(preview) preview.style.display='none'; return; }
-            showToast(L.ic);
-            btn.disabled = true;
+            showToast(L.ic); btn.disabled = true;
             try {
                 const b64 = await compressImage(file, 1000, 0.75);
                 window.postImageCache = b64;
-                if (preview) { preview.src = b64; preview.style.display = 'block'; }
+                if (preview) { preview.src = b64; preview.style.display = 'block'; preview.onclick = () => viewImage(b64); }
                 showToast(L.ir);
             } catch (e) {
                 window.postImageCache = "";
                 showToast(e === 'Image too big' ? L.ib : L.ie);
-                input.value = '';
-                if(preview) preview.style.display='none';
-            } finally {
-                btn.disabled = false;
-            }
+                input.value = ''; if(preview) preview.style.display='none';
+            } finally { btn.disabled = false; }
         }
         
         async function handleSuggImage(input) {
@@ -469,21 +502,17 @@ def get_js(lang, token, current_user=""):
             const preview = document.getElementById('sugg-img-preview');
             const btn = document.getElementById('sugg-submit-btn');
             if (!file) { window.suggImageCache = ""; if(preview) preview.style.display='none'; return; }
-            showToast(L.ic);
-            if(btn) btn.disabled = true;
+            showToast(L.ic); if(btn) btn.disabled = true;
             try {
                 const b64 = await compressImage(file, 1000, 0.75);
                 window.suggImageCache = b64;
-                if (preview) { preview.src = b64; preview.style.display = 'block'; }
+                if (preview) { preview.src = b64; preview.style.display = 'block'; preview.onclick = () => viewImage(b64); }
                 showToast(L.ir);
             } catch (e) {
                 window.suggImageCache = "";
                 showToast(e === 'Image too big' ? L.ib : L.ie);
-                input.value = '';
-                if(preview) preview.style.display='none';
-            } finally {
-                if(btn) btn.disabled = false;
-            }
+                input.value = ''; if(preview) preview.style.display='none';
+            } finally { if(btn) btn.disabled = false; }
         }
         
         async function handleAvatarChange(input) {
@@ -503,7 +532,7 @@ def get_js(lang, token, current_user=""):
             }
         }
         
-        // ============ ОБЩИЕ ФУНКЦИИ ============
+        // ============ ОБЩИЕ ============
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
@@ -615,7 +644,7 @@ def get_js(lang, token, current_user=""):
                 </div>
                 <div class="post-item">
                     <div class="post-content">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-                    ${img ? `<img class="post-image" src="${img}">` : ''}
+                    ${img ? `<img class="post-image" src="${img}" onclick="viewImage(this.src)">` : ''}
                     <div class="post-footer"><div class="post-date">${d}</div></div>
                 </div>`;
             let inserted = false;
@@ -685,7 +714,7 @@ def get_js(lang, token, current_user=""):
                 await rpc('approve_suggestion', { suggestion_id: suggId });
                 const card = document.getElementById('sugg-' + suggId);
                 if (card) card.remove();
-                showToast("Approved!");
+                showToast("Approved & removed!");
             } catch (x) { showToast('Failed: ' + x.message); }
         }
         async function rejectSugg(suggId) {
@@ -693,7 +722,7 @@ def get_js(lang, token, current_user=""):
                 await rpc('reject_suggestion', { suggestion_id: suggId });
                 const card = document.getElementById('sugg-' + suggId);
                 if (card) card.remove();
-                showToast("Rejected!");
+                showToast("Rejected & removed!");
             } catch (x) { showToast('Failed: ' + x.message); }
         }
     </script>
@@ -740,6 +769,10 @@ def get_overlay(lang):
                 <a id="link-modal-confirm" href="#" target="_blank" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">__EXT_CONTINUE__</a>
             </div>
         </div>
+    </div>
+    <div id="img-viewer" onclick="if(event.target===this)closeImgViewer()">
+        <button class="img-viewer-close" onclick="closeImgViewer()">&times;</button>
+        <img id="img-viewer-img" src="" alt="">
     </div>
     """
     html = html.replace("__CANCEL__", t('cancel', lang))
@@ -802,7 +835,7 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
         html = html.replace(k, v)
     return html
 
-def render_records(records, lang, own=False, uid=None, avatar=""):
+def render_records(records, lang, own=False, uid=None):
     if not records or not isinstance(records, list): 
         return f"<div class='post-item empty-state'>{t('no_posts', lang)}</div>"
     out = ""
@@ -824,7 +857,7 @@ def render_records(records, lang, own=False, uid=None, avatar=""):
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
         sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
-        img_html = f'<img class="post-image" src="{img}" alt="">' if img else ""
+        img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
         item_html = """
         <div class="post-wrapper" id="post-__RID__">__ACTS__
             <div class="post-item __PC__">
@@ -861,7 +894,7 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar">' if avatar else ""
+    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -912,7 +945,7 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             content = linkify(s.get('content'))
             date = format_date(esc(s.get('created_at')))
             img = esc(s.get('image_data', ''))
-            img_html = f'<img class="post-image" src="{img}" alt="">' if img else ""
+            img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
             card = """
             <div class="suggestion-card" id="sugg-__SID__">
                 <div class="sugg-author"><span class="sugg-name">__NAME__</span><span class="sugg-date">__DATE__</span></div>
@@ -945,11 +978,13 @@ def suggestions_page_html(nickname, suggestions, lang, token):
         html = html.replace(k, v)
     return html
 
-def sugges_form_html(nickname, lang, token, error="", viewer="", rules=""):
+def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabled=True):
     msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{error}</div>" if error else ""
     is_own = (viewer == nickname)
     if is_own:
         form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_own', lang)}</div>"
+    elif not enabled:
+        form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_disabled', lang)}</div>"
     else:
         form_block = """
             <form data-nickname="__NICK_ATTR__" onsubmit="submitSuggestion(event)" style="display:flex;flex-direction:column;gap:10px">
@@ -989,8 +1024,9 @@ def edit_html(nickname, user, lang, token):
     desc = esc(user.get('description'))
     rules = esc(user.get('sugges_rules', ''))
     avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img id="avatar-preview" class="avatar" src="{avatar}" alt="avatar">' if avatar else '<img id="avatar-preview" class="avatar" style="display:none;" alt="avatar">'
+    avatar_html = f'<img id="avatar-preview" class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else '<img id="avatar-preview" class="avatar" style="display:none;" alt="avatar">'
     user_username = esc(user.get('username'))
+    sugges_checked = "checked" if user_sugges_enabled(user) else ""
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
@@ -1008,6 +1044,10 @@ def edit_html(nickname, user, lang, token):
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">__DESCRIPTION__</div>
             <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__DESC__</textarea>
             <div id="char-count" style="color:#fff;text-align:right;font-size:14px">__DESC_LEN__ / 300</div>
+            <label class="toggle-row">
+                <span>__SUGGES_ENABLE_LABEL__</span>
+                <input type="checkbox" name="sugges_enabled" __SUGGES_CHECKED__>
+            </label>
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">__RULES_LABEL__</div>
             <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__RULES__</textarea>
             <div id="rules-count" style="color:#fff;text-align:right;font-size:14px">__RULES_LEN__ / 1000</div>
@@ -1021,6 +1061,7 @@ def edit_html(nickname, user, lang, token):
                  ("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),
                  ("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),
                  ("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),
+                 ("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),
                  ("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),
                  ("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),
                  ("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),
@@ -1034,10 +1075,10 @@ def public_html(nickname, user, records, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar">' if avatar else ""
+    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     sugg_btn = ""
-    if not is_owner:
+    if not is_owner and user_sugges_enabled(user):
         sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1069,9 +1110,9 @@ def public_html(nickname, user, records, lang, token, viewer):
 def record_page_html(nickname, user, record, lang, token, viewer):
     rh = render_records([record], lang, own=False, uid=viewer)
     avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar">' if avatar else ""
+    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
     sugg_btn = ""
-    if not viewer or viewer != nickname:
+    if (not viewer or viewer != nickname) and user_sugges_enabled(user):
         sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1254,7 +1295,8 @@ async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
     if not user_data:
         return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
     rules = user_data.get('sugges_rules', '') or ''
-    res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer, rules=rules))
+    enabled = user_sugges_enabled(user_data)
+    res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer, rules=rules, enabled=enabled))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -1269,8 +1311,10 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
         if not target or not sugg_name or not content: raise HTTPException(400, "Missing fields")
         if nickname and target == nickname: raise HTTPException(400, "Cannot suggest to yourself")
         try:
-            u = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', target).execute())
+            u = await asyncio.to_thread(lambda: sb.table('users').select('nickname,sugges_enabled').eq('nickname', target).execute())
             if not u.data: raise HTTPException(404, "User not found")
+            tgt_user = u.data[0]
+            if not user_sugges_enabled(tgt_user): raise HTTPException(400, "Suggestions disabled")
         except HTTPException: raise
         except Exception as e: raise HTTPException(500, str(e))
         data = {"author_nickname": target, "suggested_by_name": sugg_name, "content": content, "status": "pending", "image_data": image_data}
@@ -1310,8 +1354,9 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             return {"status": "ok", "is_pinned": ns}
         elif req.method == "approve_suggestion":
             sid = req.params.get("suggestion_id")
-            s = await asyncio.to_thread(lambda: sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).eq('status', 'pending').execute())
-            if not s.data or not isinstance(s.data, list) or len(s.data) == 0: raise HTTPException(404, "Suggestion not found")
+            s = await asyncio.to_thread(lambda: sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).execute())
+            if not s.data or not isinstance(s.data, list) or len(s.data) == 0:
+                raise HTTPException(404, "Suggestion not found")
             sugg = s.data[0]
             i = str(uuid.uuid4())
             n = datetime.now(timezone.utc).isoformat()
@@ -1322,12 +1367,14 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             except Exception:
                 new_post.pop("suggested_by", None); new_post.pop("image_data", None)
                 await asyncio.to_thread(lambda: sb.table('posts').insert(new_post).execute())
-            await asyncio.to_thread(lambda: sb.table('suggestions').update({"status": "approved"}).eq('id', sid).execute())
+            # DELETE from suggestions (по требованию)
+            await asyncio.to_thread(lambda: sb.table('suggestions').delete().eq('id', sid).execute())
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
         elif req.method == "reject_suggestion":
             sid = req.params.get("suggestion_id")
-            await asyncio.to_thread(lambda: sb.table('suggestions').update({"status": "rejected"}).eq('id', sid).eq('author_nickname', nickname).execute())
+            # DELETE from suggestions
+            await asyncio.to_thread(lambda: sb.table('suggestions').delete().eq('id', sid).eq('author_nickname', nickname).execute())
             return {"status": "ok"}
         raise HTTPException(400, "Unknown method")
     except HTTPException: raise
@@ -1344,18 +1391,18 @@ async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru"
     return res
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
-async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), sugges_enabled: str = Form(None), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
     if len(sugges_rules) > 1000: return HTMLResponse(f"<script>showToast('{t('rules_alert_long', lang)}');window.history.back()</script>")
-    update = {"username": username, "description": description, "sugges_rules": sugges_rules}
+    update = {"username": username, "description": description, "sugges_rules": sugges_rules, "sugges_enabled": bool(sugges_enabled)}
     av = valid_b64(avatar_data)
     if av: update["avatar_data"] = av
     try:
         await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
     except Exception:
-        update.pop("avatar_data", None); update.pop("sugges_rules", None)
+        update.pop("avatar_data", None); update.pop("sugges_enabled", None)
         try:
             await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
         except Exception: pass
@@ -1395,7 +1442,7 @@ async def logout():
 async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("ru")):
     try:
         u, x = await asyncio.gather(
-            asyncio.to_thread(lambda: sb.table('users').select('username,avatar_data').eq('nickname', nickname).execute()),
+            asyncio.to_thread(lambda: sb.table('users').select('username,avatar_data,sugges_enabled').eq('nickname', nickname).execute()),
             asyncio.to_thread(lambda: sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute())
         )
         if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
