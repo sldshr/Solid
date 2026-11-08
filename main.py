@@ -1,15 +1,15 @@
-from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from supabase import create_client, Client
-import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, httpx
+import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, httpx, asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
 app = FastAPI()
 
-APP_VERSION = "0.6"
+APP_VERSION = "0.07"
 SERVER_START_DATE = datetime.now().strftime("%d.%m.%y")
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
@@ -29,6 +29,43 @@ def linkify(text):
     url_pattern = re.compile(r'(https?://[^\s]+)')
     return url_pattern.sub(r'<a href="#" class="ext-link" data-url="\1" onclick="showLinkWarning(event, this)">\1</a>', safe_text).replace('\n', '<br>')
 
+# --- БЫСТРЫЕ ФУНКЦИИ ПОЛУЧЕНИЯ ДАННЫХ ---
+async def _fetch_user(nickname, include_rules=True):
+    try:
+        if include_rules:
+            try:
+                res = await asyncio.to_thread(
+                    lambda: sb.table('users').select('username,description,sugges_rules').eq('nickname', nickname).execute()
+                )
+                return res.data[0] if res.data else None
+            except Exception:
+                pass
+        res = await asyncio.to_thread(
+            lambda: sb.table('users').select('username,description').eq('nickname', nickname).execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+async def _fetch_posts(nickname):
+    try:
+        res = await asyncio.to_thread(
+            lambda: sb.table('posts').select('*').eq('user_nickname', nickname).execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+async def _fetch_suggestions(nickname):
+    try:
+        res = await asyncio.to_thread(
+            lambda: sb.table('suggestions').select('*').eq('author_nickname', nickname).eq('status', 'pending').order('created_at', desc=True).execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+# --- WEBSOCKET ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -56,19 +93,24 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+# --- PWA ---
 @app.get("/manifest.json")
 async def manifest():
-    return JSONResponse({
-        "name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
-        "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
-        "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]
-    })
+    return JSONResponse(
+        {
+            "name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
+            "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
+            "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]
+        },
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
 
 @app.get("/sw.js")
 async def sw():
     js = "self.addEventListener('install', (e) => { e.waitUntil(caches.open('solid-link-v1').then((cache) => cache.addAll(['/']))); }); self.addEventListener('fetch', (e) => { if (e.request.method !== 'GET') return; e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request))); });"
-    return Response(content=js, media_type="application/javascript")
+    return Response(content=js, media_type="application/javascript", headers={"Cache-Control": "public, max-age=3600"})
 
+# --- OPENGRAPH ---
 @app.get("/api/og")
 async def get_og(url: str):
     if not url.startswith("http://") and not url.startswith("https://"):
@@ -90,6 +132,7 @@ async def get_og(url: str):
     except Exception:
         return {"title": "", "description": "", "image": ""}
 
+# --- БЕЗОПАСНОСТЬ ---
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -127,6 +170,7 @@ class RPCRequest(BaseModel):
     method: str
     params: dict = {}
 
+# --- ЛОКАЛИЗАЦИЯ ---
 LOCALES = {
     "ru": {
         "reg": "Регистрация", "login": "Вход", "username": "юзернейм", "nickname": "никнейм",
@@ -159,7 +203,10 @@ LOCALES = {
         "sugges_empty": "Предложек пока нет...",
         "sugges_approve": "Одобрить", "sugges_reject": "Отклонить",
         "suggested_by": "Предложено:", "sugges_own": "Вы не можете предложить пост самому себе.",
-        "sugges_error_fill": "Заполните все поля!", "sugges_error_self": "Нельзя предложить самому себе"
+        "sugges_error_fill": "Заполните все поля!", "sugges_error_self": "Нельзя предложить самому себе",
+        "rules_title": "Правила для предложки", "rules_placeholder": "Напишите правила для тех, кто предлагает посты...",
+        "rules_edit_label": "Правила предложки (до 1000 символов)", "rules_alert_long": "Правила > 1000 символов!",
+        "rules_none": "Правила не установлены"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -192,7 +239,10 @@ LOCALES = {
         "sugges_empty": "No suggestions yet...",
         "sugges_approve": "Approve", "sugges_reject": "Reject",
         "suggested_by": "Suggested by:", "sugges_own": "You can't suggest to yourself.",
-        "sugges_error_fill": "Fill all fields!", "sugges_error_self": "Can't suggest to yourself"
+        "sugges_error_fill": "Fill all fields!", "sugges_error_self": "Can't suggest to yourself",
+        "rules_title": "Suggestion rules", "rules_placeholder": "Write rules for people who suggest posts...",
+        "rules_edit_label": "Suggestion rules (max 1000 chars)", "rules_alert_long": "Rules > 1000 chars!",
+        "rules_none": "No rules set"
     }
 }
 
@@ -209,115 +259,126 @@ def format_date(iso_str: str) -> str:
 SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
 SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
 
+# --- CSS КЭШ ---
+_CSS_CACHE = None
 def get_css():
-    return """
-    <style>
-        * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        a { color: black; text-decoration: none; font-weight: bold; }
-        a:hover { text-decoration: underline; }
-        .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
-        .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
-        .footer a { color: #000; border-bottom: 2px solid #000; }
-        .footer-links { font-size: 14px; color: #777; }
-        .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
-        .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
-        .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
-        .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
-        .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
-        .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-        input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
-        textarea { text-align: left; resize: vertical; }
-        button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
-        button:hover, .btn:hover { background-color: #8c8c8c; }
-        .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
-        .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
-        .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
-        .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
-        .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
-        .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
-        .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
-        .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
-        .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
-        .logout-btn { margin-top: 10px; background: #ff4d4d; }
-        .logout-btn:hover { background: #cc0000; }
-        .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
-        .edit-btn:hover { background: #1a82e2; }
-        .sugges-btn { background: #f1c40f; color: black; margin-top: 5px; }
-        .sugges-btn:hover { background: #d4ac0d; }
-        .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-        .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
-        .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
-        .posts-area { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; min-height: 300px;}
-        .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
-        .post-wrapper { position: relative; transition: opacity 0.3s ease; }
-        .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
-        .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-        .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
-        .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
-        .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
-        .post-date { font-size: 12px; color: #555; }
-        .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; margin-top: 5px; text-align: right; border-top: 1px dashed #888; padding-top: 5px;}
-        .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
-        .post-wrapper:hover .post-actions { opacity: 1; }
-        .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
-        .action-btn:hover { background: #ff4d4d; }
-        .action-btn.pin-btn:hover { background: #4da6ff; }
-        .action-btn.link-btn:hover { background: #f1c40f; color: black; }
-        .suggestion-card { background: #a9a9a9; padding: 15px; border-radius: 5px; border-left: 5px solid #f1c40f; margin-bottom: 10px; }
-        .sugg-author { font-weight: bold; color: #333; font-size: 14px; margin-bottom: 5px; }
-        .sugg-content { font-size: 16px; margin-bottom: 10px; text-align: center; }
-        .sugg-actions { display: flex; gap: 10px; }
-        .sugg-approve { background: #2ecc71; color: white; padding: 8px; }
-        .sugg-approve:hover { background: #27ae60; }
-        .sugg-reject { background: #e74c3c; color: white; padding: 8px; }
-        .sugg-reject:hover { background: #c0392b; }
-        .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
-        .status-Принято, .status-Accepted { background: #4da6ff; }
-        .status-В-работе, .status-In-Progress { background: #f1c40f; }
-        .status-Исправлено, .status-Fixed { background: #2ecc71; }
-        .status-Отклонено, .status-Rejected { background: #e74c3c; }
-        .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-        .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
-        .lang-btn:hover { background: #a9a9a9; color: black; }
-        .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
-        .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
-        .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
-        .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
-        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
-        #toast.show { opacity: 1; }
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
-        .modal-overlay.show { display: flex; }
-        .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 90%; text-align: center; border: 5px solid #000; }
-        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-        .btn-danger { background: #ff4d4d; color: white; }
-        .btn-danger:hover { background: #cc0000; }
-        .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left;}
-        .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
-        .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
-        .og-desc { margin: 0; font-size: 14px; color: #555; }
-        @media (max-width: 768px) {
-            body { padding: 10px; }
-            .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
-            .auth-wrapper { width: 100%; }
-            .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
-            .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
-            .dashboard-container { flex-direction: column; gap: 15px; }
-            .sidebar { width: 100%; }
-            .main-content { width: 100%; }
-            .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
-            .error-msg { text-align: center; }
-            .login-lang-wrapper { justify-content: center; }
-            .create-post-box { padding: 10px; }
-            .post-item { padding: 10px; }
-            .post-footer { flex-direction: column; align-items: center; gap: 10px; }
-            input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
-            button, .btn { font-size: 16px; padding: 14px; }
-            .post-content { font-size: 16px; }
-            .sidebar h2 { font-size: 20px; }
-        }
-    </style>
-    """
+    global _CSS_CACHE
+    if _CSS_CACHE is None:
+        _CSS_CACHE = """
+        <style>
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+            a { color: black; text-decoration: none; font-weight: bold; }
+            a:hover { text-decoration: underline; }
+            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
+            .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+            .footer a { color: #000; border-bottom: 2px solid #000; }
+            .footer-links { font-size: 14px; color: #777; }
+            .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
+            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
+            .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
+            .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
+            .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
+            .input-group { position: relative; display: flex; align-items: center; width: 100%; }
+            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
+            textarea { text-align: left; resize: vertical; }
+            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
+            button:hover, .btn:hover { background-color: #8c8c8c; }
+            .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
+            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
+            .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
+            .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
+            .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
+            .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
+            .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+            .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
+            .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
+            .logout-btn { margin-top: 10px; background: #ff4d4d; }
+            .logout-btn:hover { background: #cc0000; }
+            .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
+            .edit-btn:hover { background: #1a82e2; }
+            .sugges-btn { background: #f1c40f; color: black; margin-top: 5px; }
+            .sugges-btn:hover { background: #d4ac0d; }
+            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+            .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
+            .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
+            .posts-area { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; min-height: 300px;}
+            .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
+            .post-wrapper { position: relative; transition: opacity 0.3s ease; }
+            .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
+            .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
+            .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
+            .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
+            .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
+            .post-date { font-size: 12px; color: #555; margin-left: auto; }
+            .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; }
+            .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
+            .post-wrapper:hover .post-actions { opacity: 1; }
+            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
+            .action-btn:hover { background: #ff4d4d; }
+            .action-btn.pin-btn:hover { background: #4da6ff; }
+            .action-btn.link-btn:hover { background: #f1c40f; color: black; }
+            .suggestion-card { background: #a9a9a9; padding: 15px; border-radius: 5px; border-left: 5px solid #f1c40f; margin-bottom: 10px; }
+            .sugg-author { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #888; }
+            .sugg-name { font-weight: bold; color: #333; font-size: 14px; }
+            .sugg-date { font-size: 12px; color: #666; }
+            .sugg-content { font-size: 16px; margin-bottom: 10px; text-align: center; }
+            .sugg-actions { display: flex; gap: 10px; }
+            .sugg-approve { background: #2ecc71; color: white; padding: 8px; }
+            .sugg-approve:hover { background: #27ae60; }
+            .sugg-reject { background: #e74c3c; color: white; padding: 8px; }
+            .sugg-reject:hover { background: #c0392b; }
+            .rules-box { background: #fff9e6; border-left: 5px solid #f1c40f; padding: 15px; border-radius: 5px; margin-bottom: 15px; color: #000; }
+            .rules-box b { display: block; margin-bottom: 8px; font-size: 15px; }
+            .rules-content { font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
+            .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
+            .status-Принято, .status-Accepted { background: #4da6ff; }
+            .status-В-работе, .status-In-Progress { background: #f1c40f; }
+            .status-Исправлено, .status-Fixed { background: #2ecc71; }
+            .status-Отклонено, .status-Rejected { background: #e74c3c; }
+            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
+            .lang-btn:hover { background: #a9a9a9; color: black; }
+            .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
+            .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
+            .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
+            .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
+            #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
+            #toast.show { opacity: 1; }
+            .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
+            .modal-overlay.show { display: flex; }
+            .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 90%; text-align: center; border: 5px solid #000; }
+            .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+            .btn-danger { background: #ff4d4d; color: white; }
+            .btn-danger:hover { background: #cc0000; }
+            .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left;}
+            .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
+            .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
+            .og-desc { margin: 0; font-size: 14px; color: #555; }
+            @media (max-width: 768px) {
+                body { padding: 10px; }
+                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
+                .auth-wrapper { width: 100%; }
+                .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
+                .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
+                .dashboard-container { flex-direction: column; gap: 15px; }
+                .sidebar { width: 100%; }
+                .main-content { width: 100%; }
+                .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
+                .error-msg { text-align: center; }
+                .login-lang-wrapper { justify-content: center; }
+                .create-post-box { padding: 10px; }
+                .post-item { padding: 10px; }
+                .post-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
+                .post-date { margin-left: 0; }
+                input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
+                button, .btn { font-size: 16px; padding: 14px; }
+                .post-content { font-size: 16px; }
+                .sidebar h2 { font-size: 20px; }
+            }
+        </style>
+        """
+    return _CSS_CACHE
 
 def get_js(lang, token, current_user=""):
     js = """
@@ -418,6 +479,7 @@ def get_js(lang, token, current_user=""):
             else { x.type = 'password'; b.innerHTML = `__SVG_EYE__`; }
         }
         function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
+        function ucRules(e) { document.getElementById('rules-count').innerText = e.value.length + ' / 1000'; }
         async function hc(e) {
             e.preventDefault();
             const f = e.target, c = f.querySelector('textarea').value.trim();
@@ -665,13 +727,16 @@ def render_records(records, lang, own=False, uid=None):
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
+        # suggested_by и date в одном ряду (flex space-between)
         sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
         item_html = """
         <div class="post-wrapper" id="post-__RID__">__ACTS__
             <div class="post-item __PC__">
                 <div class="post-content">__CONTENT__</div>
-                <div class="post-footer"><div class="post-date">__DATE__</div></div>
-                __SUGG__
+                <div class="post-footer">
+                    __SUGG__
+                    <div class="post-date">__DATE__</div>
+                </div>
             </div>
         </div>"""
         item_html = item_html.replace("__RID__", rid).replace("__ACTS__", acts).replace("__PC__", pc).replace("__CONTENT__", content).replace("__DATE__", date).replace("__SUGG__", sugg_html)
@@ -767,16 +832,20 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             sugg_by = esc(s.get('suggested_by_name'))
             content = linkify(s.get('content'))
             date = format_date(esc(s.get('created_at')))
+            # имя слева, дата справа — на одном уровне
             card = """
             <div class="suggestion-card" id="sugg-__SID__">
-                <div class="sugg-author">__SUGG_BY__: __NAME__ (__DATE__)</div>
+                <div class="sugg-author">
+                    <span class="sugg-name">__NAME__</span>
+                    <span class="sugg-date">__DATE__</span>
+                </div>
                 <div class="sugg-content">__CONTENT__</div>
                 <div class="sugg-actions">
                     <button class="btn sugg-approve" onclick="approveSugg('__SID__')">__APPROVE__</button>
                     <button class="btn sugg-reject" onclick="rejectSugg('__SID__')">__REJECT__</button>
                 </div>
             </div>"""
-            card = card.replace("__SID__", sid).replace("__SUGG_BY__", t('suggested_by', lang)).replace("__NAME__", sugg_by).replace("__DATE__", date).replace("__CONTENT__", content).replace("__APPROVE__", t('sugges_approve', lang)).replace("__REJECT__", t('sugges_reject', lang))
+            card = card.replace("__SID__", sid).replace("__NAME__", sugg_by).replace("__DATE__", date).replace("__CONTENT__", content).replace("__APPROVE__", t('sugges_approve', lang)).replace("__REJECT__", t('sugges_reject', lang))
             rh += card
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -805,7 +874,7 @@ def suggestions_page_html(nickname, suggestions, lang, token):
     html = html.replace("__OVERLAY__", get_overlay(lang))
     return html
 
-def sugges_form_html(nickname, lang, token, error="", viewer=""):
+def sugges_form_html(nickname, lang, token, error="", viewer="", rules=""):
     msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{error}</div>" if error else ""
     is_own = (viewer == nickname)
     if is_own:
@@ -819,6 +888,11 @@ def sugges_form_html(nickname, lang, token, error="", viewer=""):
             </form>
         """
         form_block = form_block.replace("__NICK_ATTR__", esc(nickname)).replace("__SUGG_NAME__", t('sugges_name', lang)).replace("__SUGG_CONTENT__", t('sugges_content', lang)).replace("__SEND__", t('sugges_send', lang))
+    
+    rules_block = ""
+    if rules:
+        rules_block = f'<div class="rules-box"><b>{t("rules_title", lang)}</b><div class="rules-content">{esc(rules)}</div></div>'
+    
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
@@ -827,6 +901,7 @@ def sugges_form_html(nickname, lang, token, error="", viewer=""):
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
         <div class="posts-area" style="padding:20px;">
             <h2>__TITLE__ __NICKNAME__</h2>
+            __RULES_BLOCK__
             __MSG__
             __FORM_BLOCK__
             <a href="/__NICKNAME__" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
@@ -839,6 +914,7 @@ def sugges_form_html(nickname, lang, token, error="", viewer=""):
     html = html.replace("__NICKNAME__", esc(nickname))
     html = html.replace("__CSS__", get_css())
     html = html.replace("__JS__", get_js(lang, token, viewer))
+    html = html.replace("__RULES_BLOCK__", rules_block)
     html = html.replace("__MSG__", msg_html)
     html = html.replace("__FORM_BLOCK__", form_block)
     html = html.replace("__BACK__", t('back_home', lang))
@@ -850,6 +926,7 @@ def sugges_form_html(nickname, lang, token, error="", viewer=""):
 
 def edit_html(nickname, user, lang, token):
     desc = esc(user.get('description'))
+    rules = esc(user.get('sugges_rules', ''))
     user_username = esc(user.get('username'))
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -863,8 +940,11 @@ def edit_html(nickname, user, lang, token):
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">__USERNAME_LABEL__</div>
             <input type="text" name="username" value="__USERNAME__" required style="background:#a9a9a9;padding:12px;font-size:18px">
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">__DESCRIPTION__</div>
-            <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="background:#a9a9a9;height:150px;padding:12px;font-size:18px">__DESC__</textarea>
+            <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__DESC__</textarea>
             <div id="char-count" style="color:#fff;text-align:right;font-size:14px">__DESC_LEN__ / 300</div>
+            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__RULES_LABEL__</div>
+            <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__RULES__</textarea>
+            <div id="rules-count" style="color:#fff;text-align:right;font-size:14px">__RULES_LEN__ / 1000</div>
             <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
             <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
         </form>
@@ -882,6 +962,10 @@ def edit_html(nickname, user, lang, token):
     html = html.replace("__DESC_PLACEHOLDER__", t('desc_placeholder', lang))
     html = html.replace("__DESC__", desc)
     html = html.replace("__DESC_LEN__", str(len(desc)))
+    html = html.replace("__RULES_LABEL__", t('rules_edit_label', lang))
+    html = html.replace("__RULES_PLACEHOLDER__", t('rules_placeholder', lang))
+    html = html.replace("__RULES__", rules)
+    html = html.replace("__RULES_LEN__", str(len(rules)))
     html = html.replace("__SAVE_CHANGES__", t('save_changes', lang))
     html = html.replace("__CANCEL__", t('cancel', lang))
     html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
@@ -1060,8 +1144,8 @@ async def index(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru
     token = get_csrf_token(r)
     if nickname:
         try:
-            x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-            if x.data:
+            res = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
+            if res.data:
                 resp = RedirectResponse("/cabinet", 303)
                 set_csrf_cookie(resp, token, r)
                 return resp
@@ -1088,9 +1172,9 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
     if password != re_pass: return auth_html(lang, t('alert_pass_mismatch', lang), token)
     try:
-        x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
+        x = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
         if x.data: return auth_html(lang, t('alert_nick_taken', lang), token)
-        sb.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute()
+        await asyncio.to_thread(lambda: sb.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute())
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
     resp = RedirectResponse("/cabinet", 303)
@@ -1107,11 +1191,11 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
         return resp
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     try:
-        x = sb.table('users').select('password').eq('nickname', nickname).execute()
+        x = await asyncio.to_thread(lambda: sb.table('users').select('password').eq('nickname', nickname).execute())
         user = x.data[0] if x.data else None
         if user and verify_password(password, user.get("password", "")):
             if len(user["password"]) == 64:
-                sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute()
+                await asyncio.to_thread(lambda: sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute())
             resp = RedirectResponse("/cabinet", 303)
             resp.set_cookie("nickname", nickname, httponly=True, samesite="lax")
             set_csrf_cookie(resp, token, r)
@@ -1123,20 +1207,18 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
 @app.get("/cabinet", response_class=HTMLResponse)
 async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
-    try:
-        u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
-        if not u.data: 
-            response = RedirectResponse("/", 303)
-            response.delete_cookie("nickname")
-            return response
-        user_data = u.data[0]
-    except Exception:
-        return RedirectResponse("/", 303)
-    p_data = []
-    try:
-        p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
-        if p.data and isinstance(p.data, list): p_data = p.data
-    except Exception: pass
+    
+    # ПАРАЛЛЕЛЬНЫЕ ЗАПРОСЫ
+    user_data, p_data = await asyncio.gather(
+        _fetch_user(nickname),
+        _fetch_posts(nickname)
+    )
+    
+    if not user_data:
+        resp = RedirectResponse("/", 303)
+        resp.delete_cookie("nickname")
+        return resp
+    
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname))
@@ -1146,11 +1228,7 @@ async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("
 @app.get("/cabinet/suggestions", response_class=HTMLResponse)
 async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
-    s_data = []
-    try:
-        s = sb.table('suggestions').select('*').eq('author_nickname', nickname).eq('status', 'pending').order('created_at', desc=True).execute()
-        if s.data and isinstance(s.data, list): s_data = s.data
-    except Exception: pass
+    s_data = await _fetch_suggestions(nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(suggestions_page_html(nickname, s_data, lang, token))
     set_csrf_cookie(res, token, r)
@@ -1160,12 +1238,11 @@ async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: st
 async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
-    try:
-        u = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
-    except Exception:
-        return HTMLResponse(f"<h2>DB Error</h2>", 500)
-    res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer))
+    user_data = await _fetch_user(nickname, include_rules=True)
+    if not user_data:
+        return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
+    rules = user_data.get('sugges_rules', '') or ''
+    res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer, rules=rules))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -1173,38 +1250,31 @@ async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
 async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
     if not check_csrf(r): raise HTTPException(status_code=403, detail="CSRF Error")
     
-    # --- ПУБЛИЧНЫЕ МЕТОДЫ (без авторизации) ---
+    # --- ПУБЛИЧНЫЕ МЕТОДЫ ---
     if req.method == "submit_suggestion":
         target = req.params.get("target_nickname", "").strip()
         sugg_name = req.params.get("sugg_name", "").strip()[:60]
         content = req.params.get("content", "").strip()[:500]
-        
         if not target or not sugg_name or not content:
             raise HTTPException(400, "Missing fields")
         if nickname and target == nickname:
             raise HTTPException(400, "Cannot suggest to yourself")
-        
         try:
-            u = sb.table('users').select('nickname').eq('nickname', target).execute()
-            if not u.data: 
-                raise HTTPException(404, "User not found")
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(500, str(e))
-        
+            u = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', target).execute())
+            if not u.data: raise HTTPException(404, "User not found")
+        except HTTPException: raise
+        except Exception as e: raise HTTPException(500, str(e))
         try:
-            sb.table('suggestions').insert({
+            await asyncio.to_thread(lambda: sb.table('suggestions').insert({
                 "author_nickname": target,
                 "suggested_by_name": sugg_name,
                 "content": content,
                 "status": "pending"
-            }).execute()
-        except Exception as e:
-            raise HTTPException(500, str(e))
+            }).execute())
+        except Exception as e: raise HTTPException(500, str(e))
         return {"status": "ok"}
     
-    # --- МЕТОДЫ, ТРЕБУЮЩИЕ АВТОРИЗАЦИИ ---
+    # --- АВТОРИЗАЦИЯ ---
     if not nickname: raise HTTPException(status_code=401, detail="Unauthorized")
     
     try:
@@ -1215,27 +1285,27 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             n = datetime.now(timezone.utc).isoformat()
             pd = {"id": i, "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "created_at": n}
             try:
-                sb.table('posts').insert(pd).execute()
+                await asyncio.to_thread(lambda: sb.table('posts').insert(pd).execute())
             except Exception:
-                sb.table('posts').insert(pd).execute()
+                await asyncio.to_thread(lambda: sb.table('posts').insert(pd).execute())
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
         elif req.method == "delete_record":
             rid = req.params.get("post_id")
-            sb.table('posts').delete().eq('id', rid).eq('user_nickname', nickname).execute()
+            await asyncio.to_thread(lambda: sb.table('posts').delete().eq('id', rid).eq('user_nickname', nickname).execute())
             await manager.broadcast({"type": "delete_record", "post_id": rid})
             return {"status": "ok"}
         elif req.method == "pin_record":
             rid = req.params.get("post_id")
-            x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', nickname).execute()
+            x = await asyncio.to_thread(lambda: sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', nickname).execute())
             if not x.data or not isinstance(x.data, list) or len(x.data) == 0: 
                 raise HTTPException(404, "Not found")
             ns = not x.data[0].get('is_pinned', False)
-            sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute()
+            await asyncio.to_thread(lambda: sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute())
             return {"status": "ok", "is_pinned": ns}
         elif req.method == "approve_suggestion":
             sid = req.params.get("suggestion_id")
-            s = sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).eq('status', 'pending').execute()
+            s = await asyncio.to_thread(lambda: sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).eq('status', 'pending').execute())
             if not s.data or not isinstance(s.data, list) or len(s.data) == 0:
                 raise HTTPException(404, "Suggestion not found")
             sugg = s.data[0]
@@ -1243,47 +1313,43 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             n = datetime.now(timezone.utc).isoformat()
             new_post = {"id": i, "user_nickname": nickname, "content": sugg.get('content', ''), "is_pinned": False, "created_at": n, "suggested_by": sugg.get('suggested_by_name', '')}
             try:
-                sb.table('posts').insert(new_post).execute()
+                await asyncio.to_thread(lambda: sb.table('posts').insert(new_post).execute())
             except Exception:
                 new_post.pop("suggested_by", None)
-                sb.table('posts').insert(new_post).execute()
-            sb.table('suggestions').update({"status": "approved"}).eq('id', sid).execute()
+                await asyncio.to_thread(lambda: sb.table('posts').insert(new_post).execute())
+            await asyncio.to_thread(lambda: sb.table('suggestions').update({"status": "approved"}).eq('id', sid).execute())
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
         elif req.method == "reject_suggestion":
             sid = req.params.get("suggestion_id")
-            sb.table('suggestions').update({"status": "rejected"}).eq('id', sid).eq('author_nickname', nickname).execute()
+            await asyncio.to_thread(lambda: sb.table('suggestions').update({"status": "rejected"}).eq('id', sid).eq('author_nickname', nickname).execute())
             return {"status": "ok"}
         raise HTTPException(400, "Unknown method")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(500, str(e))
 
 @app.get("/cabinet/edit", response_class=HTMLResponse)
 async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
-    try:
-        u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
-        if not u.data: return RedirectResponse("/", 303)
-        user_data = u.data[0]
-    except Exception:
-        return RedirectResponse("/", 303)
+    user_data = await _fetch_user(nickname, include_rules=True)
+    if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
     res = HTMLResponse(edit_html(nickname, user_data, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
-async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
+    if len(sugges_rules) > 1000: return HTMLResponse(f"<script>showToast('{t('rules_alert_long', lang)}');window.history.back()</script>")
+    
     try:
-        sb.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute()
+        await asyncio.to_thread(lambda: sb.table('users').update({"username": username, "description": description, "sugges_rules": sugges_rules}).eq('nickname', nickname).execute())
     except Exception:
         try:
-            sb.table('users').update({"username": username}).eq('nickname', nickname).execute()
+            await asyncio.to_thread(lambda: sb.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute())
         except Exception: pass
     return RedirectResponse("/cabinet", 303)
 
@@ -1293,9 +1359,9 @@ async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie
     rp = []
     if nickname:
         try:
-            x = sb.table('users').select('username').eq('nickname', nickname).execute()
+            x = await asyncio.to_thread(lambda: sb.table('users').select('username').eq('nickname', nickname).execute())
             if x.data: u = x.data[0].get('username') or ""
-            y = sb.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute()
+            y = await asyncio.to_thread(lambda: sb.table('bug_reports').select('*').eq('user_nickname', nickname).order('created_at', desc=True).execute())
             rp = y.data or []
         except Exception: pass
     token = get_csrf_token(r)
@@ -1308,7 +1374,7 @@ async def bugreport_submit(r: Request, res: Response, name: str = Form(...), con
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     d = {"name": name, "content": content, "status": "Принято" if lang == "ru" else "Accepted"}
     if nickname: d["user_nickname"] = nickname
-    sb.table('bug_reports').insert(d).execute()
+    await asyncio.to_thread(lambda: sb.table('bug_reports').insert(d).execute())
     return RedirectResponse("/bugreport", 303)
 
 @app.get("/logout")
@@ -1319,14 +1385,14 @@ async def logout():
 
 @app.get("/{nickname}/{rid}", response_class=HTMLResponse)
 async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("ru")):
-    u_data = {}
-    rec = None
     try:
-        u = sb.table('users').select('username').eq('nickname', nickname).execute()
-        if u.data: u_data = u.data[0]
-        else: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
-        x = sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute()
+        u, x = await asyncio.gather(
+            asyncio.to_thread(lambda: sb.table('users').select('username').eq('nickname', nickname).execute()),
+            asyncio.to_thread(lambda: sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute())
+        )
+        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
         if not x.data: return HTMLResponse(f"<h2>{t('no_posts', lang)}</h2>", 404)
+        u_data = u.data[0]
         rec = x.data[0]
     except Exception:
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
@@ -1338,20 +1404,16 @@ async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("r
 
 @app.get("/{nickname}", response_class=HTMLResponse)
 async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
-    u_data = {}
-    p_data = []
-    try:
-        u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
-        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
-        u_data = u.data[0]
-        p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
-        p_data = p.data or []
-    except Exception:
-        return HTMLResponse(f"<h2>DB Error</h2>", 500)
+    user_data, p_data = await asyncio.gather(
+        _fetch_user(nickname),
+        _fetch_posts(nickname)
+    )
+    if not user_data:
+        return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
     viewer = r.cookies.get("nickname") or ""
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(public_html(nickname, u_data, po, lang, token, viewer))
+    res = HTMLResponse(public_html(nickname, user_data, po, lang, token, viewer))
     set_csrf_cookie(res, token, r)
     return res
 
