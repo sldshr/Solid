@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from supabase import create_client, Client
-import uvicorn, html, bcrypt, secrets, uuid, hashlib
+import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, httpx
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -23,7 +23,17 @@ pending_records = {}
 def esc(val):
     return html.escape(str(val)) if val is not None else ""
 
-# --- WEBSOCKET МЕНЕДЖЕР (REAL-TIME) ---
+# --- ПРЕОБРАЗОВАНИЕ ССЫЛОК В КЛИКАБЕЛЬНЫЕ ---
+def linkify(text):
+    if not text: return ""
+    # Сначала экранируем HTML
+    safe_text = html.escape(text)
+    # Ищем ссылки http/https
+    url_pattern = re.compile(r'(https?://[^\s]+)')
+    # Заменяем на тег <a> с вызовом модального окна
+    return url_pattern.sub(r'<a href="#" class="ext-link" data-url="\1" onclick="showLinkWarning(event, this)">\1</a>', safe_text).replace('\n', '<br>')
+
+# --- WEBSOCKET МЕНЕДЖЕР ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -54,35 +64,44 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# --- PWA (Progressive Web App) ---
+# --- PWA ---
 @app.get("/manifest.json")
 async def manifest():
     return JSONResponse({
-        "name": "Solid Link",
-        "short_name": "SolidLink",
-        "start_url": "/",
-        "display": "standalone",
-        "background_color": "#f4f4f4",
-        "theme_color": "#000000",
-        "icons": [{
-            "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+",
-            "sizes": "192x192",
-            "type": "image/svg+xml"
-        }]
+        "name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
+        "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
+        "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]
     })
 
 @app.get("/sw.js")
 async def sw():
-    js = """
-    self.addEventListener('install', (e) => {
-        e.waitUntil(caches.open('solid-link-v1').then((cache) => cache.addAll(['/'])));
-    });
-    self.addEventListener('fetch', (e) => {
-        if (e.request.method !== 'GET') return;
-        e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request)));
-    });
-    """
+    js = "self.addEventListener('install', (e) => { e.waitUntil(caches.open('solid-link-v1').then((cache) => cache.addAll(['/']))); }); self.addEventListener('fetch', (e) => { if (e.request.method !== 'GET') return; e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request))); });"
     return Response(content=js, media_type="application/javascript")
+
+# --- OPENGRAPH API ---
+@app.get("/api/og")
+async def get_og(url: str):
+    if not url.startswith("http://") and not url.startswith("https://"):
+        return {"title": "", "description": "", "image": ""}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=5.0, follow_redirects=True)
+            html_content = resp.text
+            
+            def get_meta(prop):
+                m = re.search(fr'<meta[^>]+(?:property|name)=["\']og:{prop}["\'][^>]+content=["\']([^"\']*)["\']', html_content, re.IGNORECASE)
+                if not m:
+                    m = re.search(fr'<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:property|name)=["\']og:{prop}["\']', html_content, re.IGNORECASE)
+                return m.group(1) if m else ""
+            
+            title = get_meta("title") or ""
+            if not title:
+                tm = re.search(r'<title>([^<]*)</title>', html_content, re.IGNORECASE)
+                if tm: title = tm.group(1)
+                
+            return {"title": title, "description": get_meta("description"), "image": get_meta("image")}
+    except Exception:
+        return {"title": "", "description": "", "image": ""}
 
 # --- БЕЗОПАСНОСТЬ ---
 def hash_password(password: str) -> str:
@@ -108,17 +127,6 @@ def set_csrf_cookie(response: Response, token: str, request: Request):
     if not request.cookies.get("csrf_token"):
         response.set_cookie("csrf_token", token, httponly=True, samesite="lax")
 
-async def auth_middleware(r: Request, nickname: Optional[str] = Cookie(None)):
-    if not nickname:
-        raise HTTPException(status_code=401)
-    try:
-        x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-        if not x.data or not isinstance(x.data, list) or len(x.data) == 0:
-            raise HTTPException(status_code=401)
-    except Exception:
-        raise HTTPException(status_code=401)
-    return nickname
-
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     lang = request.cookies.get("lang", "ru")
@@ -128,7 +136,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     set_csrf_cookie(response, token, request)
     return response
 
-# --- RPC МОДЕЛЬ ---
 class RPCRequest(BaseModel):
     method: str
     params: dict = {}
@@ -153,10 +160,12 @@ LOCALES = {
         "username_label": "Имя", "nickname_label": "Никнейм", "bugreport_title": "Баг-репорт", 
         "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы", "bugreport_send": "Отправить", 
         "bugreport_my": "Мои заявки", "privacy_title": "Политика конфиденциальности",
-        "privacy_text": "1. Сбор информации. Мы собираем только ваш юзернейм, никнейм и хеш пароля. Пароли хранятся в зашифрованном виде (bcrypt).<br><br>2. Использование данных. Данные используются для аутентификации и отображения профиля. Мы не передаем данные третьим лицам.<br><br>3. Контент. Ваши записи и лайки хранятся на серверах Supabase.<br><br>4. Cookies. Сайт использует cookies для сессии и выбранного языка.<br><br>5. Ваши права. Вы можете изменить профиль или удалить записи в любой момент.",
+        "privacy_text": "1. Сбор информации. Мы собираем только ваш юзернейм, никнейм и хеш пароля.<br><br>2. Использование данных. Данные используются для аутентификации.<br><br>3. Контент. Ваши записи хранятся на серверах Supabase.<br><br>4. Cookies. Сайт использует cookies для сессии и языка.<br><br>5. Ваши права. Вы можете изменить профиль или удалить записи.",
         "privacy_agree": "Я согласен с", "privacy_link": "Политикой конфиденциальности",
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
-        "record_page": "Запись", "vote_err": "Вы уже голосовали!", "copy_link": "Ссылка"
+        "record_page": "Запись", "copy_link": "Ссылка", 
+        "ext_title": "Переход на внешний сайт", "ext_desc": "Вы покидаете наш сайт и переходите по ссылке:", 
+        "ext_continue": "Перейти", "ext_loading": "Загрузка превью..."
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -176,10 +185,12 @@ LOCALES = {
         "username_label": "Name", "nickname_label": "Nickname", "bugreport_title": "Bug Report", 
         "bugreport_name": "Your Name", "bugreport_desc": "Issue Description", "bugreport_send": "Send", 
         "bugreport_my": "My Reports", "privacy_title": "Privacy Policy",
-        "privacy_text": "1. Data Collection. We collect only your username, nickname, and hashed password (bcrypt).<br><br>2. Data Usage. Data is used for authentication and profile display. We do not share data with third parties.<br><br>3. Content. Your records and votes are stored on Supabase.<br><br>4. Cookies. The site uses cookies for session and language preferences.<br><br>5. Your Rights. You can edit your profile or delete records at any time.",
+        "privacy_text": "1. Data Collection. We collect only your username, nickname, and hashed password.<br><br>2. Data Usage. Data is used for authentication.<br><br>3. Content. Your records are stored on Supabase.<br><br>4. Cookies. The site uses cookies for session and language.<br><br>5. Your Rights. You can edit your profile or delete records.",
         "privacy_agree": "I agree to the", "privacy_link": "Privacy Policy",
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
-        "record_page": "Record", "vote_err": "You already voted!", "copy_link": "Link"
+        "record_page": "Record", "copy_link": "Link", 
+        "ext_title": "Leaving site", "ext_desc": "You are leaving our site and going to:", 
+        "ext_continue": "Continue", "ext_loading": "Loading preview..."
     }
 }
 
@@ -196,8 +207,6 @@ def format_date(iso_str: str) -> str:
 # --- SVG ИКОНКИ ---
 SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
 SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
-SVG_LIKE = """<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='green' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3'></path></svg>"""
-SVG_DISLIKE = """<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='red' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2'></path></svg>"""
 
 # --- CSS ---
 def get_css():
@@ -254,16 +263,12 @@ def get_css():
         .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         
-        .post-content { margin-bottom: 10px; font-size: 18px; }
+        /* Центрирование текста в постах */
+        .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
+        .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
+        
         .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
         .post-date { font-size: 12px; color: #555; }
-        
-        .vote-btns { display: flex; gap: 10px; }
-        .vote-btn { background: #888; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: bold; font-size: 14px; }
-        .vote-btn:hover { background: #666; }
-        .vote-btn.active { background: #4da6ff !important; }
-        .vote-btn.like.active { background: #2ecc71 !important; }
-        .vote-btn.dislike.active { background: #e74c3c !important; }
 
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
         .post-wrapper:hover .post-actions { opacity: 1; }
@@ -290,12 +295,20 @@ def get_css():
 
         #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
         #toast.show { opacity: 1; }
+        
+        /* Модальные окна */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
         .modal-overlay.show { display: flex; }
         .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 90%; text-align: center; border: 5px solid #000; }
         .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
         .btn-danger { background: #ff4d4d; color: white; }
         .btn-danger:hover { background: #cc0000; }
+
+        /* OG Preview Box */
+        .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left;}
+        .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
+        .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
+        .og-desc { margin: 0; font-size: 14px; color: #555; }
 
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -311,11 +324,8 @@ def get_css():
             .login-lang-wrapper { justify-content: center; }
             .create-post-box { padding: 10px; }
             .post-item { padding: 10px; }
-            .post-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
-            .vote-btns { width: 100%; justify-content: space-between; }
-            .vote-btn { width: 48%; justify-content: center; padding: 12px; }
+            .post-footer { flex-direction: column; align-items: center; gap: 10px; }
             
-            /* Mobile Font Adjustments to prevent iOS zoom */
             input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
             button, .btn { font-size: 16px; padding: 14px; }
             .post-content { font-size: 16px; }
@@ -331,16 +341,13 @@ def get_js(lang, token):
         const T = "{token}";
         const L = {{
             d: "{t('delete', lang)}", p: "{t('pin', lang)}", u: "{t('unpin', lang)}",
-            c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}",
-            ve: "{t('vote_err', lang)}"
+            c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}"
         }};
 
-        // PWA Registration
+        // PWA
         if ('serviceWorker' in navigator) {{
             window.addEventListener('load', () => {{
-                navigator.serviceWorker.register('/sw.js').catch(err => {{
-                    console.log('SW registration failed', err);
-                }});
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
             }});
         }}
 
@@ -350,15 +357,7 @@ def get_js(lang, token):
             ws = new WebSocket(proto + window.location.host + '/ws');
             ws.onmessage = (e) => {{
                 const d = JSON.parse(e.data);
-                if (d.type === 'vote') {{
-                    const p = document.getElementById('post-' + d.post_id);
-                    if (p && p.dataset.pendingVote !== "true") {{
-                        const likeSpan = p.querySelector('.v-l');
-                        const dislikeSpan = p.querySelector('.v-d');
-                        if (likeSpan) likeSpan.innerText = d.likes;
-                        if (dislikeSpan) dislikeSpan.innerText = d.dislikes;
-                    }}
-                }} else if (d.type === 'delete_record') {{
+                if (d.type === 'delete_record') {{
                     const p = document.getElementById('post-' + d.post_id);
                     if (p) p.remove();
                 }} else if (d.type === 'new_record') {{
@@ -403,6 +402,39 @@ def get_js(lang, token):
             nX.onclick = () => {{ m.classList.remove('show'); cb(false); }};
         }}
 
+        // Модальное окно для внешних ссылок
+        let pendingUrl = "";
+        async function showLinkWarning(e, el) {{
+            e.preventDefault();
+            pendingUrl = el.getAttribute('data-url');
+            if (!pendingUrl) return;
+            
+            document.getElementById('link-modal-confirm').href = pendingUrl;
+            const ogBox = document.getElementById('og-preview');
+            ogBox.innerHTML = `<p style="margin:0; font-size:14px; color:#666;">{t('ext_loading', lang)}</p>`;
+            document.getElementById('link-modal').classList.add('show');
+            
+            try {{
+                const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl));
+                const data = await res.json();
+                if (data.title || data.description || data.image) {{
+                    let html = '';
+                    if (data.image) html += `<img src="${{data.image}}" class="og-img">`;
+                    if (data.title) html += `<h4 class="og-title">${{data.title}}</h4>`;
+                    if (data.description) html += `<p class="og-desc">${{data.description}}</p>`;
+                    ogBox.innerHTML = html;
+                }} else {{
+                    ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">No preview available.</p>';
+                }}
+            }} catch (err) {{
+                ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">Failed to load preview.</p>';
+            }}
+        }}
+
+        function closeLinkModal() {{
+            document.getElementById('link-modal').classList.remove('show');
+        }}
+
         async function rpc(method, params) {{
             const res = await fetch('/rpc', {{
                 method: 'POST',
@@ -441,13 +473,7 @@ def get_js(lang, token):
                 </div>
                 <div class="post-item">
                     <div class="post-content">${{c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}}</div>
-                    <div class="post-footer">
-                        <div class="vote-btns">
-                            <button onclick="toggleVote('${{i}}',1,this)" class="vote-btn like">{SVG_LIKE} <span class="v-l">0</span></button>
-                            <button onclick="toggleVote('${{i}}',-1,this)" class="vote-btn dislike">{SVG_DISLIKE} <span class="v-d">0</span></button>
-                        </div>
-                        <div class="post-date">${{d}}</div>
-                    </div>
+                    <div class="post-footer"><div class="post-date">${{d}}</div></div>
                 </div>`;
             a.insertBefore(w, a.children[1]);
             f.reset();
@@ -488,89 +514,32 @@ def get_js(lang, token):
                 showToast('Failed: ' + x.message);
             }}
         }}
-
-        const voteTimers = {{}};
-        async function toggleVote(postId, type, btn) {{
-            const wrapper = document.getElementById('post-' + postId);
-            if (!wrapper) return;
-            
-            const likeBtn = wrapper.querySelector('.vote-btn.like');
-            const dislikeBtn = wrapper.querySelector('.vote-btn.dislike');
-            const likeSpan = wrapper.querySelector('.v-l');
-            const dislikeSpan = wrapper.querySelector('.v-d');
-            
-            if (!likeSpan || !dislikeSpan || !likeBtn || !dislikeBtn) return;
-
-            wrapper.dataset.pendingVote = "true";
-
-            let likes = parseInt(likeSpan.innerText) || 0;
-            let dislikes = parseInt(dislikeSpan.innerText) || 0;
-            
-            const isLiked = likeBtn.classList.contains('active');
-            const isDisliked = dislikeBtn.classList.contains('active');
-            
-            if (type === 1) {{
-                if (isLiked) {{
-                    likeBtn.classList.remove('active');
-                    likes = Math.max(0, likes - 1);
-                }} else {{
-                    likeBtn.classList.add('active');
-                    likes += 1;
-                    if (isDisliked) {{
-                        dislikeBtn.classList.remove('active');
-                        dislikes = Math.max(0, dislikes - 1);
-                    }}
-                }}
-            }} else {{
-                if (isDisliked) {{
-                    dislikeBtn.classList.remove('active');
-                    dislikes = Math.max(0, dislikes - 1);
-                }} else {{
-                    dislikeBtn.classList.add('active');
-                    dislikes += 1;
-                    if (isLiked) {{
-                        likeBtn.classList.remove('active');
-                        likes = Math.max(0, likes - 1);
-                    }}
-                }}
-            }}
-            
-            likeSpan.innerText = likes;
-            dislikeSpan.innerText = dislikes;
-            
-            if (voteTimers[postId]) clearTimeout(voteTimers[postId]);
-            
-            voteTimers[postId] = setTimeout(async () => {{
-                const finalLiked = likeBtn.classList.contains('active');
-                const finalDisliked = dislikeBtn.classList.contains('active');
-                
-                let voteType = 0;
-                if (finalLiked) voteType = 1;
-                if (finalDisliked) voteType = -1;
-                
-                try {{
-                    const res = await rpc('vote', {{ post_id: postId, vote_type: voteType }});
-                    likeSpan.innerText = res.likes;
-                    dislikeSpan.innerText = res.dislikes;
-                }} catch (e) {{
-                    showToast(e.message);
-                }} finally {{
-                    wrapper.dataset.pendingVote = "false";
-                }}
-            }}, 600);
-        }}
     </script>
     """
 
-def get_overlay():
-    return """
+def get_overlay(lang):
+    return f"""
     <div id="toast"></div>
     <div id="modal-overlay" class="modal-overlay">
         <div class="modal-box">
             <p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p>
             <div class="modal-actions">
-                <button id="modal-cancel" class="btn" style="background:#aaa;color:black;">Cancel</button>
-                <button id="modal-confirm" class="btn btn-danger">Confirm</button>
+                <button id="modal-cancel" class="btn" style="background:#aaa;color:black;">{t('cancel', lang)}</button>
+                <button id="modal-confirm" class="btn btn-danger">OK</button>
+            </div>
+        </div>
+    </div>
+    <!-- Модальное окно для внешних ссылок -->
+    <div id="link-modal" class="modal-overlay">
+        <div class="modal-box" style="text-align: left;">
+            <h3 style="margin-top:0;">{t('ext_title', lang)}</h3>
+            <p style="font-size:14px; color:#555; margin-bottom:10px;">{t('ext_desc', lang)}</p>
+            <div id="og-preview" class="og-box">
+                <p style="margin:0; font-size:14px; color:#666;">{t('ext_loading', lang)}</p>
+            </div>
+            <div class="modal-actions">
+                <button onclick="closeLinkModal()" class="btn" style="background:#aaa;color:black;">{t('cancel', lang)}</button>
+                <a id="link-modal-confirm" href="#" target="_blank" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">{t('ext_continue', lang)}</a>
             </div>
         </div>
     </div>
@@ -613,7 +582,7 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
         </form></div><div class="label-text">{t('login', lang)}</div></div>
         <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div></div>
         {eb}</div>
-    </div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
 
 def render_records(records, lang, own=False, uid=None):
     if not records or not isinstance(records, list): 
@@ -625,13 +594,11 @@ def render_records(records, lang, own=False, uid=None):
         if not rid: continue
         
         pinned = bool(x.get('is_pinned', False))
-        content = esc(x.get('content')).replace('\n', '<br>')
+        # Применяем linkify для превращения ссылок в теги <a>
+        content = linkify(x.get('content'))
         date = format_date(esc(x.get('created_at')))
         
         pc = "pinned" if pinned else ""
-        
-        likes = x.get('likes') or 0
-        dislikes = x.get('dislikes') or 0
         
         acts = "<div class='post-actions'>"
         if uid:
@@ -640,21 +607,12 @@ def render_records(records, lang, own=False, uid=None):
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
-        
-        vb = "<div class='vote-btns'>"
-        if uid:
-            vb += f"<button onclick='toggleVote(\"{rid}\",1,this)' class='vote-btn like'>{SVG_LIKE} <span class='v-l'>{likes}</span></button>"
-            vb += f"<button onclick='toggleVote(\"{rid}\",-1,this)' class='vote-btn dislike'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></button>"
-        else:
-            vb += f"<span style='color:green;font-weight:bold'>{SVG_LIKE} <span class='v-l'>{likes}</span></span>"
-            vb += f"<span style='color:red;font-weight:bold'>{SVG_DISLIKE} <span class='v-d'>{dislikes}</span></span>"
-        vb += "</div>"
             
         out += f"""
         <div class="post-wrapper" id="post-{rid}">{acts}
             <div class="post-item {pc}">
                 <div class="post-content">{content}</div>
-                <div class="post-footer">{vb}<div class="post-date">{date}</div></div>
+                <div class="post-footer"><div class="post-date">{date}</div></div>
             </div>
         </div>"""
     return out
@@ -723,7 +681,7 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer):
             <h2>{t('my_posts', lang)}</h2>
             {rh_my}
         </div>
-    </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
 
 def edit_html(nickname, user, lang, token):
     desc = esc(user.get('description'))
@@ -746,7 +704,7 @@ def edit_html(nickname, user, lang, token):
             <a href="/cabinet" class="btn" style="background:#a9a9a9">{t('cancel', lang)}</a>
         </form>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div></div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
 
 def public_html(nickname, user, records, lang, token, viewer):
     is_owner = (viewer == nickname)
@@ -769,7 +727,7 @@ def public_html(nickname, user, records, lang, token, viewer):
     </div><div class="main-content"><div class="posts-area" style="min-height:500px">
         <h2>{t('user_posts', lang)}</h2>
         {rh}
-    </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div></div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
 
 def record_page_html(nickname, user, record, lang, token, viewer):
     rh = render_records([record], lang, own=False, uid=viewer)
@@ -785,7 +743,7 @@ def record_page_html(nickname, user, record, lang, token, viewer):
         <a href="/{nickname}" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
     </div><div class="main-content"><div class="posts-area"><h2>{t('record_page', lang)}</h2>
         {rh}
-    </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div></div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
 
 def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else "".join([f"""
@@ -793,7 +751,7 @@ def bugreport_html(username, reports, lang, token):
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
                 <b>{t('bugreport_title', lang)}</b><span class="status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}">{esc(x.get('status','Принято'))}</span>
             </div>
-            <div class="post-content">{esc(x.get('content'))}</div>
+            <div class="post-content" style="text-align:left;">{esc(x.get('content'))}</div>
             <div class="post-date">{format_date(esc(x.get('created_at')))}</div>
         </div>""" for x in reports])
     return f"""
@@ -814,7 +772,7 @@ def bugreport_html(username, reports, lang, token):
         <div class="posts-area"><h2>{t('bugreport_my', lang)}</h2>{rh}</div>
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">{t('cancel', lang)}</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
-    </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+    </div></div>{get_footer(lang)}{get_overlay(lang)}</body></html>"""
 
 def privacy_html(lang, token):
     return f"""
@@ -895,35 +853,36 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
     return auth_html(lang, t('alert_bad_login', lang), token)
 
 @app.get("/cabinet", response_class=HTMLResponse)
-async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
-    user_data = {"username": user, "description": ""}
+async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    # Строгий редирект для неавторизованных
+    if not nickname: return RedirectResponse("/", 303)
+    
+    try:
+        u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
+        if not u.data: 
+            response = RedirectResponse("/", 303)
+            response.delete_cookie("nickname")
+            return response
+        user_data = u.data[0]
+    except Exception:
+        return RedirectResponse("/", 303)
+    
     p_data = []
-    
     try:
-        u = sb.table('users').select('username,description').eq('nickname', user).execute()
-        if u.data and isinstance(u.data, list) and len(u.data) > 0:
-            user_data = u.data[0]
-    except Exception:
-        pass
-    
-    try:
-        p = sb.table('posts').select('*').eq('user_nickname', user).execute()
-        if p.data and isinstance(p.data, list):
-            p_data = p.data
-    except Exception:
-        pass
+        p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
+        if p.data and isinstance(p.data, list): p_data = p.data
+    except Exception: pass
             
-    po = merge_memory(p_data, user)
-    
+    po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(user, user_data, po, lang, token, user))
+    res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname))
     set_csrf_cookie(res, token, r)
     return res
 
 @app.post("/rpc")
-async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_middleware)):
-    if not check_csrf(r):
-        raise HTTPException(status_code=403, detail="CSRF Error")
+async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
+    if not check_csrf(r): raise HTTPException(status_code=403, detail="CSRF Error")
+    if not nickname: raise HTTPException(status_code=401, detail="Unauthorized")
     
     try:
         if req.method == "create_record":
@@ -933,12 +892,10 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
             i = client_id or str(uuid.uuid4())
             n = datetime.now(timezone.utc).isoformat()
             
-            pd = {"id": i, "user_nickname": user, "content": content.strip(), "is_pinned": False, "created_at": n, "likes": 0, "dislikes": 0}
+            pd = {"id": i, "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "created_at": n}
             try:
                 sb.table('posts').insert(pd).execute()
             except Exception:
-                pd.pop("likes", None)
-                pd.pop("dislikes", None)
                 sb.table('posts').insert(pd).execute()
             
             await manager.broadcast({"type": "new_record", "post_id": i})
@@ -946,65 +903,19 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
             
         elif req.method == "delete_record":
             rid = req.params.get("post_id")
-            sb.table('posts').delete().eq('id', rid).eq('user_nickname', user).execute()
+            sb.table('posts').delete().eq('id', rid).eq('user_nickname', nickname).execute()
             await manager.broadcast({"type": "delete_record", "post_id": rid})
             return {"status": "ok"}
             
         elif req.method == "pin_record":
             rid = req.params.get("post_id")
-            x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', user).execute()
+            x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', nickname).execute()
             if not x.data or not isinstance(x.data, list) or len(x.data) == 0: 
                 raise HTTPException(404, "Not found")
             
             ns = not x.data[0].get('is_pinned', False)
-            sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', user).execute()
+            sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute()
             return {"status": "ok", "is_pinned": ns}
-            
-        elif req.method == "vote":
-            rid = req.params.get("post_id")
-            vote_type = int(req.params.get("vote_type", 0))
-            if vote_type not in [-1, 0, 1]: raise HTTPException(400, "Bad type")
-            
-            try:
-                ex = sb.table('post_votes').select('vote_type').eq('post_id', rid).eq('user_nickname', user).execute()
-            except Exception:
-                ex = type('obj', (object,), {'data': []})
-                
-            p = sb.table('posts').select('likes,dislikes').eq('id', rid).execute()
-            if not p.data or not isinstance(p.data, list) or len(p.data) == 0: 
-                raise HTTPException(404, "Not found")
-            
-            likes = p.data[0].get('likes') or 0
-            dislikes = p.data[0].get('dislikes') or 0
-            
-            if vote_type == 0:
-                if ex.data:
-                    try: sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
-                    except Exception: pass
-                    if ex.data[0].get('vote_type') == 1: likes = max(0, likes - 1)
-                    else: dislikes = max(0, dislikes - 1)
-            else:
-                if ex.data:
-                    old = ex.data[0].get('vote_type')
-                    if old == vote_type:
-                        try: sb.table('post_votes').delete().eq('post_id', rid).eq('user_nickname', user).execute()
-                        except Exception: pass
-                        if vote_type == 1: likes = max(0, likes - 1)
-                        else: dislikes = max(0, dislikes - 1)
-                    else:
-                        try: sb.table('post_votes').update({"vote_type": vote_type}).eq('post_id', rid).eq('user_nickname', user).execute()
-                        except Exception: pass
-                        if vote_type == 1: likes += 1; dislikes = max(0, dislikes - 1)
-                        else: dislikes += 1; likes = max(0, likes - 1)
-                else:
-                    try: sb.table('post_votes').insert({"post_id": rid, "user_nickname": user, "vote_type": vote_type}).execute()
-                    except Exception: pass
-                    if vote_type == 1: likes += 1
-                    else: dislikes += 1
-                    
-            sb.table('posts').update({"likes": likes, "dislikes": dislikes}).eq('id', rid).execute()
-            await manager.broadcast({"type": "vote", "post_id": rid, "likes": likes, "dislikes": dislikes})
-            return {"status": "ok", "likes": likes, "dislikes": dislikes}
             
         raise HTTPException(400, "Unknown method")
     except HTTPException:
@@ -1013,27 +924,31 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
         raise HTTPException(500, str(e))
 
 @app.get("/cabinet/edit", response_class=HTMLResponse)
-async def edit(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
-    user_data = {"username": user, "description": ""}
+async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if not nickname: return RedirectResponse("/", 303)
     try:
-        u = sb.table('users').select('username,description').eq('nickname', user).execute()
-        if u.data and isinstance(u.data, list) and len(u.data) > 0: user_data = u.data[0]
-    except Exception: pass
+        u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
+        if not u.data: return RedirectResponse("/", 303)
+        user_data = u.data[0]
+    except Exception:
+        return RedirectResponse("/", 303)
+        
     token = get_csrf_token(r)
-    res = HTMLResponse(edit_html(user, user_data, lang, token))
+    res = HTMLResponse(edit_html(nickname, user_data, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
-async def edit_action(r: Request, res: Response, user: str = Depends(auth_middleware), username: str = Form(...), description: str = Form(""), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if not nickname: return RedirectResponse("/", 303)
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
     
     try:
-        sb.table('users').update({"username": username, "description": description}).eq('nickname', user).execute()
+        sb.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute()
     except Exception:
         try:
-            sb.table('users').update({"username": username}).eq('nickname', user).execute()
+            sb.table('users').update({"username": username}).eq('nickname', nickname).execute()
         except Exception: pass
     return RedirectResponse("/cabinet", 303)
 
