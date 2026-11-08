@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from supabase import create_client, Client
-import uvicorn, html, bcrypt, secrets, uuid, hashlib
+import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, random
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,9 +19,56 @@ deleted_records = set()
 pinned_records = {}
 pending_records = {}
 
-# --- БЕЗОПАСНЫЙ HTML ---
+# --- БЕЗОПАСНЫЙ HTML И BB-КОДЫ ---
 def esc(val):
     return html.escape(str(val)) if val is not None else ""
+
+def parse_bb(text: str) -> str:
+    if not text: return ""
+    # 1. Экранируем весь HTML для безопасности
+    t = html.escape(text)
+    
+    # 2. Простые теги
+    t = re.sub(r'\[b\](.*?)\[/b\]', r'<b>\1</b>', t, flags=re.IGNORECASE|re.DOTALL)
+    t = re.sub(r'\[i\](.*?)\[/i\]', r'<i>\1</i>', t, flags=re.IGNORECASE|re.DOTALL)
+    t = re.sub(r'\[u\](.*?)\[/u\]', r'<u>\1</u>', t, flags=re.IGNORECASE|re.DOTALL)
+    t = re.sub(r'\[s\](.*?)\[/s\]', r'<s>\1</s>', t, flags=re.IGNORECASE|re.DOTALL)
+    
+    # 3. Цвет (поддерживаем hex и названия)
+    def replace_color(m):
+        color = m.group(1)
+        if re.match(r'^#[0-9a-fA-F]{3,6}$', color) or re.match(r'^[a-zA-Z]+$', color):
+            return f'<span style="color:{color}">' + m.group(2) + '</span>'
+        return m.group(0)
+    t = re.sub(r'\[color=([^\]]+)\](.*?)\[/color\]', replace_color, t, flags=re.IGNORECASE|re.DOTALL)
+    
+    # 4. Размер (только цифры)
+    def replace_size(m):
+        size = m.group(1)
+        if size.isdigit():
+            return f'<span style="font-size:{size}px">' + m.group(2) + '</span>'
+        return m.group(0)
+    t = re.sub(r'\[size=([^\]]+)\](.*?)\[/size\]', replace_size, t, flags=re.IGNORECASE|re.DOTALL)
+    
+    # 5. Свечение (Glow)
+    def replace_glow(m):
+        color = m.group(1)
+        if re.match(r'^#[0-9a-fA-F]{3,6}$', color) or re.match(r'^[a-zA-Z]+$', color):
+            return f'<span style="text-shadow: 0 0 5px {color}, 0 0 10px {color}, 0 0 15px {color}">' + m.group(2) + '</span>'
+        return m.group(0)
+    t = re.sub(r'\[glow=([^\]]+)\](.*?)\[/glow\]', replace_glow, t, flags=re.IGNORECASE|re.DOTALL)
+    
+    # 6. Ссылки
+    def replace_url(m):
+        url = m.group(1)
+        if url.startswith('http://') or url.startswith('https://'):
+            return f'<a href="{url}" target="_blank" style="color:#4da6ff;text-decoration:underline">' + m.group(2) + '</a>'
+        return m.group(0)
+    t = re.sub(r'\[url=([^\]]+)\](.*?)\[/url\]', replace_url, t, flags=re.IGNORECASE|re.DOTALL)
+    
+    # 7. Переносы строк
+    t = t.replace('\n', '<br>')
+    return t
 
 # --- WEBSOCKET МЕНЕДЖЕР (REAL-TIME) ---
 class ConnectionManager:
@@ -113,7 +160,7 @@ LOCALES = {
         "save_changes": "Сохранить изменения", "description": "Описание", 
         "desc_placeholder": "Расскажите о себе...",
         "create_post_btn": "Создать запись", "create_post_placeholder": "Напишите что-нибудь...",
-        "my_posts": "МОИ ЗАПИСИ", "user_posts": "ЗАПИСИ ПОЛЬЗОВАТЕЛЯ", "feed": "ОБЩАЯ ЛЕНТА", 
+        "my_posts": "МОИ ЗАПИСИ", "user_posts": "ЗАПИСИ ПОЛЬЗОВАТЕЛЯ", 
         "no_posts": "Записей пока нет...", "pin": "Закрепить", "unpin": "Открепить", "delete": "Удалить", 
         "confirm_delete": "Удалить запись?", "created_by": "Создано:", "hosting": "Хостинг:", 
         "back_home": "На главную", "user_not_found": "Пользователь не найден.", 
@@ -127,7 +174,8 @@ LOCALES = {
         "privacy_agree": "Я согласен с", "privacy_link": "Политикой конфиденциальности",
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
         "record_page": "Запись", "vote_err": "Вы уже голосовали!", "copy_link": "Ссылка",
-        "search_placeholder": "Поиск по записям..."
+        "nickgen_title": "Генератор никнеймов", "nickgen_desc": "Выберите стиль и нажмите кнопку, чтобы сгенерировать красивые никнеймы.",
+        "gen_btn": "Сгенерировать", "copy": "Копировать", "bb_help": "Поддерживаются BB-коды: [b]жирный[/b], [i]курсив[/i], [u]подчеркнутый[/u], [s]зачеркнутый[/s], [color=red]цвет[/color], [size=24]размер[/size], [glow=#00ff00]свечение[/glow], [url=http://link]ссылка[/url]"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -137,7 +185,7 @@ LOCALES = {
         "save_changes": "Save changes", "description": "Description", 
         "desc_placeholder": "Tell about yourself...",
         "create_post_btn": "Create record", "create_post_placeholder": "Write something...",
-        "my_posts": "MY RECORDS", "user_posts": "USER RECORDS", "feed": "GLOBAL FEED", 
+        "my_posts": "MY RECORDS", "user_posts": "USER RECORDS", 
         "no_posts": "No records yet...", "pin": "Pin", "unpin": "Unpin", "delete": "Delete", 
         "confirm_delete": "Delete record?", "created_by": "Created by:", "hosting": "Hosting:", 
         "back_home": "Back to home", "user_not_found": "User not found.", 
@@ -151,7 +199,8 @@ LOCALES = {
         "privacy_agree": "I agree to the", "privacy_link": "Privacy Policy",
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
         "record_page": "Record", "vote_err": "You already voted!", "copy_link": "Link",
-        "search_placeholder": "Search records..."
+        "nickgen_title": "Nickname Generator", "nickgen_desc": "Choose a style and click the button to generate beautiful nicknames.",
+        "gen_btn": "Generate", "copy": "Copy", "bb_help": "Supported BB codes: [b]bold[/b], [i]italic[/i], [u]underline[/u], [s]strike[/s], [color=red]color[/color], [size=24]size[/size], [glow=#00ff00]glow[/glow], [url=http://link]link[/url]"
     }
 }
 
@@ -213,6 +262,8 @@ def get_css():
         .logout-btn:hover { background: #cc0000; }
         .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
         .edit-btn:hover { background: #1a82e2; }
+        .gen-btn { background: #9b59b6; color: white; margin-top: 5px; }
+        .gen-btn:hover { background: #8e44ad; }
         
         .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
         
@@ -220,16 +271,6 @@ def get_css():
         .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
 
         .tabs-container { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; }
-        .tabs-header { display: flex; gap: 5px; margin-bottom: 5px; }
-        .tab-btn { background: #555; border: none; padding: 10px; cursor: pointer; font-weight: bold; font-size: 16px; color: white; border-radius: 5px 5px 0 0; flex: 1; transition: 0.2s; }
-        .tab-btn:hover { background: #777; }
-        .tab-btn.active { background: #4da6ff; color: white; }
-        .tab-content { display: none; flex-direction: column; gap: 10px; min-height: 300px; }
-        .tab-content.active { display: flex; }
-
-        /* Стили поиска */
-        .search-input { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #555; background: #222; color: white; border-radius: 5px; margin-bottom: 10px; outline: none; }
-        .search-input:focus { border-color: #4da6ff; }
 
         .posts-area { padding: 0; display: flex; flex-direction: column; gap: 10px; }
         .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
@@ -237,10 +278,6 @@ def get_css():
         .post-wrapper { position: relative; transition: opacity 0.3s ease; }
         .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-        
-        .post-item.my-post { border-left: 5px solid #2ecc71; background: #e8f8f5; }
-        .post-item.my-post.pinned { border-left: 5px solid #ff4d4d; background: #e8f8f5; }
-        .post-item.my-post .post-header { color: #1e8449; }
         
         .post-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #333; border-bottom: 1px solid #888; padding-bottom: 5px; flex-wrap: wrap; gap: 5px; }
         .post-content { margin-bottom: 10px; font-size: 18px; }
@@ -286,6 +323,19 @@ def get_css():
         .btn-danger { background: #ff4d4d; color: white; }
         .btn-danger:hover { background: #cc0000; }
 
+        /* Nickname Generator Styles */
+        .nickgen-container { background: black; padding: 20px; border-radius: 5px; color: white; text-align: center; }
+        .nickgen-title { font-size: 28px; margin-bottom: 10px; color: #9b59b6; text-shadow: 0 0 10px #9b59b6; }
+        .nickgen-desc { font-size: 16px; margin-bottom: 20px; color: #ccc; }
+        .nickgen-styles { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .style-btn { background: #333; color: white; border: 2px solid #555; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; width: auto; }
+        .style-btn.active { background: #9b59b6; border-color: #9b59b6; }
+        .style-btn:hover { border-color: #9b59b6; }
+        .nickgen-output { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+        .nick-item { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 15px; border-radius: 5px; border-left: 5px solid #9b59b6; font-family: monospace; font-size: 20px; }
+        .copy-nick-btn { background: #4da6ff; color: white; border: none; padding: 8px 15px; border-radius: 3px; cursor: pointer; font-weight: bold; width: auto; }
+        .copy-nick-btn:hover { background: #1a82e2; }
+
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -296,7 +346,6 @@ def get_css():
             .sidebar { width: 100%; }
             .main-content { width: 100%; }
             .tabs-container { padding: 10px; }
-            .tab-btn { font-size: 14px; padding: 8px; }
             .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
             .error-msg { text-align: center; }
             .login-lang-wrapper { justify-content: center; }
@@ -305,6 +354,8 @@ def get_css():
             .post-footer { flex-direction: column; align-items: flex-start; gap: 10px; }
             .vote-btns { width: 100%; justify-content: space-between; }
             .vote-btn { width: 48%; justify-content: center; }
+            .nick-item { flex-direction: column; gap: 10px; text-align: center; }
+            .copy-nick-btn { width: 100%; }
         }
     </style>
     """
@@ -317,7 +368,7 @@ def get_js(lang, token):
         const L = {{
             d: "{t('delete', lang)}", p: "{t('pin', lang)}", u: "{t('unpin', lang)}",
             c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}",
-            ve: "{t('vote_err', lang)}"
+            ve: "{t('vote_err', lang)}", copy: "{t('copy', lang)}"
         }};
 
         let ws;
@@ -337,8 +388,6 @@ def get_js(lang, token):
                 }} else if (d.type === 'delete_record') {{
                     const p = document.getElementById('post-' + d.post_id);
                     if (p) p.remove();
-                }} else if (d.type === 'new_record') {{
-                    showToast("New record added!");
                 }}
             }};
             ws.onclose = () => setTimeout(connectWS, 3000);
@@ -390,34 +439,6 @@ def get_js(lang, token):
             return data;
         }}
 
-        function switchTab(tab) {{
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            if (tab === 'my') {{
-                document.getElementById('btn-my').classList.add('active');
-                document.getElementById('tab-my').classList.add('active');
-            }} else {{
-                document.getElementById('btn-feed').classList.add('active');
-                document.getElementById('tab-feed').classList.add('active');
-            }}
-        }}
-
-        // --- МОЩНЫЙ ПОИСК ---
-        function filterPosts(tab) {{
-            const query = document.getElementById('search-' + tab).value.toLowerCase().trim();
-            const container = document.getElementById(tab === 'my' ? 'my-records-container' : 'feed-records-container');
-            const posts = container.querySelectorAll('.post-wrapper');
-            
-            posts.forEach(post => {{
-                const text = post.textContent.toLowerCase() || "";
-                if (text.includes(query)) {{
-                    post.style.display = 'block';
-                }} else {{
-                    post.style.display = 'none';
-                }}
-            }});
-        }}
-
         function tp(i, b) {{
             const x = document.getElementById(i);
             if (x.type === 'password') {{ x.type = 'text'; b.innerHTML = `{SVG_EYE_OFF}`; }}
@@ -436,6 +457,7 @@ def get_js(lang, token):
             const m = a.querySelector('.post-item:not(.post-wrapper)');
             if (m) m.remove();
 
+            // Временно выводим сырой текст (без BB), сервер отрендерит при перезагрузке
             const w = document.createElement('div');
             w.className = 'post-wrapper'; w.id = 'post-' + i;
             w.innerHTML = `
@@ -455,13 +477,10 @@ def get_js(lang, token):
                 </div>`;
             a.insertBefore(w, a.children[1]);
             f.reset();
-            
-            // Сброс поиска, чтобы новый пост точно был виден
-            document.getElementById('search-my').value = '';
-            filterPosts('my');
 
             try {{
                 await rpc('create_record', {{ content: c, client_id: i }});
+                setTimeout(() => window.location.reload(), 500); // Перезагрузка для отображения BB-кодов
             }} catch (x) {{
                 w.remove(); showToast('Failed: ' + x.message);
             }}
@@ -567,6 +586,71 @@ def get_js(lang, token):
                 }}
             }}, 600);
         }}
+
+        // --- NICKNAME GENERATOR ---
+        const nickData = {{
+            anime: {{
+                pre: ["Dark", "Light", "Kawaii", "Shadow", "Neon", "Sakura", "Zero", "Shinobi"],
+                root: ["Sword", "Soul", "Spirit", "Blade", "Fox", "Cat", "Kitsune", "Oni"],
+                suf: ["Chan", "Kun", "Senpai", "Sama", "Desu", "San"]
+            }},
+            cyber: {{
+                pre: ["Cyber", "Neon", "Glitch", "Tech", "Data", "Hex", "Net", "Synth"],
+                root: ["Runner", "Punk", "Hacker", "Ghost", "City", "Wave", "Core", "Drive"],
+                suf: ["77", "2077", "X", "Zero", "Prime", "Protocol"]
+            }},
+            fantasy: {{
+                pre: ["Dark", "Blood", "Iron", "Storm", "Shadow", "Fire", "Ice", "Frost"],
+                root: ["Lord", "Knight", "Mage", "Rogue", "Hunter", "Slayer", "King", "Dragon"],
+                suf: ["I", "II", "III", "The Great", "The Brave", "The Wise"]
+            }},
+            cute: {{
+                pre: ["Sweet", "Little", "Fluffy", "Bunny", "Honey", "Star", "Moon", "Berry"],
+                root: ["Bear", "Cat", "Fox", "Cloud", "Dream", "Sparkle", "Pie", "Cake"],
+                suf: ["Chan", "Bear", "Nya", "Meow", "Sama", "Kawaii"]
+            }}
+        }};
+        let currentStyle = 'anime';
+
+        function setStyle(style, btn) {{
+            currentStyle = style;
+            document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            generateNicks();
+        }}
+
+        function generateNicks() {{
+            const out = document.getElementById('nick-output');
+            out.innerHTML = '';
+            const data = nickData[currentStyle];
+            
+            for (let i = 0; i < 5; i++) {{
+                const p = data.pre[Math.floor(Math.random() * data.pre.length)];
+                const r = data.root[Math.floor(Math.random() * data.root.length)];
+                const s = data.suf[Math.floor(Math.random() * data.suf.length)];
+                
+                // Иногда добавляем BB-код для красоты
+                let nick = p + r + s;
+                if (Math.random() > 0.7) nick = `[color=#9b59b6]${{nick}}[/color]`;
+                if (Math.random() > 0.8) nick = `[b]${{nick}}[/b]`;
+                
+                const item = document.createElement('div');
+                item.className = 'nick-item';
+                item.innerHTML = `<span>${{nick}}</span><button class="copy-nick-btn" onclick="copyNick('${{nick}}')">${{L.copy}}</button>`;
+                out.appendChild(item);
+            }}
+        }}
+
+        function copyNick(nick) {{
+            // Убираем BB-коды при копировании
+            const clean = nick.replace(/\\[[^\\]]+\\]/g, '');
+            navigator.clipboard.writeText(clean).then(() => showToast("Copied!"));
+        }}
+        
+        // Инициализация генератора, если мы на его странице
+        if (document.getElementById('nick-output')) {{
+            generateNicks();
+        }}
     </script>
     """
 
@@ -630,21 +714,18 @@ def render_records(records, lang, own=False, feed=False, uid=None):
         rid = esc(x.get('id'))
         if not rid: continue
         
-        is_my_post = (uid and x.get('user_nickname') == uid)
         pinned = bool(x.get('is_pinned', False))
-        content = esc(x.get('content')).replace('\n', '<br>')
+        content = parse_bb(x.get('content'))
         date = format_date(esc(x.get('created_at')))
         
         pc = "pinned" if pinned else ""
-        if feed and is_my_post: pc += " my-post"
-        
         likes = x.get('likes') or 0
         dislikes = x.get('dislikes') or 0
         
         acts = "<div class='post-actions'>"
         if uid:
             acts += f"<button onclick='copyLink(\"{x.get('user_nickname','')}\",\"{rid}\", this)' class='action-btn link-btn'>{t('copy_link', lang)}</button>"
-        if own or (feed and is_my_post):
+        if own:
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
@@ -660,7 +741,7 @@ def render_records(records, lang, own=False, feed=False, uid=None):
             
         head = ""
         if feed:
-            user_nick = esc(x.get('user_nickname'))
+            user_nick = esc(x.get('user_nickname')) # Никнеймы не парсим!
             head = f"<div class='post-header'><span><b><a href='/{user_nick}'>{user_nick}</a></b></span><span>{date}</span></div>"
             date = "" 
             
@@ -709,11 +790,10 @@ def merge_memory(db_records, nickname, is_owner=False):
         pass
     return f
 
-def dashboard_html(nickname, user, my_p, feed_p, lang, token, viewer):
-    rh_my = render_records(my_p, lang, own=True, feed=False, uid=viewer)
-    rh_feed = render_records(feed_p, lang, own=False, feed=True, uid=viewer)
+def dashboard_html(nickname, user, my_p, lang, token):
+    rh_my = render_records(my_p, lang, own=True, feed=False, uid=nickname)
     user_username = esc(user.get('username'))
-    desc = esc(user.get('description'))
+    desc = parse_bb(user.get('description')) # Описание с BB-кодами
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -723,31 +803,48 @@ def dashboard_html(nickname, user, my_p, feed_p, lang, token, viewer):
         <div class="info-card"><b>{t('username_label', lang)}:</b><br>{user_username}</div>
         <div class="info-card"><b>{t('nickname_label', lang)}:</b><br><a href="/{nickname}" target="_blank">{esc(nickname)} {t('link_profile', lang)}</a></div>{db}
         <div class="info-card"><b>{t('total_posts', lang)}:</b><br>{len(my_p)}</div>
+        <a href="/cabinet/nickgen" class="btn gen-btn">{t('nickgen_title', lang)}</a>
         <a href="/cabinet/edit" class="btn edit-btn">{t('edit_profile', lang)}</a>
         <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">{t('logout', lang)}</button></form>
         <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
     </div>
     <div class="main-content">
-        <div class="create-post-box"><form id="create-form" onsubmit="hc(event)">
-            <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="500"></textarea>
-            <button type="submit">{t('create_post_btn', lang)}</button>
-        </form></div>
+        <div class="create-post-box">
+            <div style="color:#a9a9a9; font-size:12px; text-align:left; margin-bottom:5px;">{t('bb_help', lang)}</div>
+            <form id="create-form" onsubmit="hc(event)">
+                <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="1000"></textarea>
+                <button type="submit">{t('create_post_btn', lang)}</button>
+            </form>
+        </div>
         
         <div class="tabs-container">
-            <div class="tabs-header">
-                <button id="btn-my" class="tab-btn active" onclick="switchTab('my')">{t('my_posts', lang)}</button>
-                <button id="btn-feed" class="tab-btn" onclick="switchTab('feed')">{t('feed', lang)}</button>
+            <div class="posts-area" id="my-records-container"><h2>{t('my_posts', lang)}</h2>{rh_my}</div>
+        </div>
+    </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
+
+def nickgen_html(nickname, user, lang, token):
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{t('nickgen_title', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
+    <div class="dashboard-container"><div class="sidebar">
+        <h2>{t('cabinet', lang)}</h2>
+        <div class="info-card"><b>{t('nickname_label', lang)}:</b><br>{esc(nickname)}</div>
+        <a href="/cabinet" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
+    </div><div class="main-content">
+        <div class="nickgen-container">
+            <div class="nickgen-title">{t('nickgen_title', lang)}</div>
+            <div class="nickgen-desc">{t('nickgen_desc', lang)}</div>
+            
+            <div class="nickgen-styles">
+                <button class="style-btn active" onclick="setStyle('anime', this)">Anime</button>
+                <button class="style-btn" onclick="setStyle('cyber', this)">Cyberpunk</button>
+                <button class="style-btn" onclick="setStyle('fantasy', this)">Fantasy</button>
+                <button class="style-btn" onclick="setStyle('cute', this)">Cute</button>
             </div>
             
-            <div id="tab-my" class="tab-content active">
-                <input type="text" id="search-my" class="search-input" placeholder="{t('search_placeholder', lang)}" onkeyup="filterPosts('my')">
-                <div class="posts-area" id="my-records-container">{rh_my}</div>
-            </div>
+            <button class="btn" style="background:#9b59b6;color:white;margin-bottom:20px;" onclick="generateNicks()">{t('gen_btn', lang)}</button>
             
-            <div id="tab-feed" class="tab-content">
-                <input type="text" id="search-feed" class="search-input" placeholder="{t('search_placeholder', lang)}" onkeyup="filterPosts('feed')">
-                <div class="posts-area" id="feed-records-container">{rh_feed}</div>
-            </div>
+            <div id="nick-output" class="nickgen-output"></div>
         </div>
     </div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
@@ -759,6 +856,7 @@ def edit_html(nickname, user, lang, token):
     <title>{t('edit_profile', lang)}</title>{get_css()}{get_js(lang, token)}</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="tabs-container" style="padding:20px">
         <h2 style="color:#fff;text-align:center">{t('edit_profile', lang)}</h2>
+        <div style="color:#a9a9a9; font-size:12px; text-align:left; margin-bottom:5px;">{t('bb_help', lang)}</div>
         <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
             <input type="hidden" name="csrf_token" value="{token}">
             <div style="color:#fff;font-size:18px;margin-bottom:-5px">{t('username_label', lang)}</div>
@@ -775,7 +873,7 @@ def edit_html(nickname, user, lang, token):
 def public_html(nickname, user, records, lang, token, viewer):
     rh = render_records(records, lang, own=False, feed=True, uid=viewer)
     user_username = esc(user.get('username'))
-    desc = esc(user.get('description'))
+    desc = parse_bb(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     return f"""
     <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -788,7 +886,6 @@ def public_html(nickname, user, records, lang, token, viewer):
         <div class="lang-switch"><a href="/set_lang/ru?next=/{nickname}" class="btn lang-btn {'active' if lang=='ru' else ''}">RU</a><a href="/set_lang/en?next=/{nickname}" class="btn lang-btn {'active' if lang=='en' else ''}">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">{t('back_home', lang)}</a>
     </div><div class="main-content"><div class="tabs-container">
-        <input type="text" id="search-feed" class="search-input" placeholder="{t('search_placeholder', lang)}" onkeyup="filterPosts('feed')">
         <div class="posts-area" id="feed-records-container" style="min-height:500px"><h2>{t('user_posts', lang)}</h2>{rh}</div>
     </div></div></div>{get_footer(lang)}{get_overlay()}</body></html>"""
 
@@ -913,7 +1010,6 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
 async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
     user_data = {"username": user, "description": ""}
     p_data = []
-    f_data = []
     
     try:
         u = sb.table('users').select('username,description').eq('nickname', user).execute()
@@ -928,19 +1024,18 @@ async def cabinet(r: Request, user: str = Depends(auth_middleware), lang: str = 
             p_data = p.data
     except Exception:
         pass
-    
-    try:
-        f = sb.table('posts').select('*').order('created_at', desc=True).limit(50).execute()
-        if f.data and isinstance(f.data, list):
-            f_data = f.data
-    except Exception:
-        pass
             
     po = merge_memory(p_data, user, True)
-    pf = merge_memory(f_data, user, False)
     
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(user, user_data, po, pf, lang, token, user))
+    res = HTMLResponse(dashboard_html(user, user_data, po, lang, token))
+    set_csrf_cookie(res, token, r)
+    return res
+
+@app.get("/cabinet/nickgen", response_class=HTMLResponse)
+async def nickgen(r: Request, user: str = Depends(auth_middleware), lang: str = Cookie("ru")):
+    token = get_csrf_token(r)
+    res = HTMLResponse(nickgen_html(user, {}, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
@@ -965,7 +1060,6 @@ async def rpc_endpoint(req: RPCRequest, r: Request, user: str = Depends(auth_mid
                 pd.pop("dislikes", None)
                 sb.table('posts').insert(pd).execute()
             
-            await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
             
         elif req.method == "delete_record":
