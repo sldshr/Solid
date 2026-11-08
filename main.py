@@ -9,44 +9,35 @@ from typing import Optional
 
 app = FastAPI()
 
-# --- ВЕРСИЯ ПРИЛОЖЕНИЯ И ДАТА ---
-APP_VERSION = "0.4"
+APP_VERSION = "0.5"
 SERVER_START_DATE = datetime.now().strftime("%d.%m.%y")
 
-# --- НАСТРОЙКИ SUPABASE ---
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
 
-# --- ОПЕРАТИВНАЯ ПАМЯТЬ ---
 deleted_records = set()
 pinned_records = {}
 pending_records = {}
 
-# --- БЕЗОПАСНЫЙ HTML ---
 def esc(val):
     return html.escape(str(val)) if val is not None else ""
 
-# --- ПРЕОБРАЗОВАНИЕ ССЫЛОК В КЛИКАБЕЛЬНЫЕ ---
 def linkify(text):
     if not text: return ""
     safe_text = html.escape(text)
     url_pattern = re.compile(r'(https?://[^\s]+)')
     return url_pattern.sub(r'<a href="#" class="ext-link" data-url="\1" onclick="showLinkWarning(event, this)">\1</a>', safe_text).replace('\n', '<br>')
 
-# --- WEBSOCKET МЕНЕДЖЕР ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
-
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-
     async def broadcast(self, message: dict):
         for connection in self.active_connections:
             try:
@@ -65,7 +56,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# --- PWA ---
 @app.get("/manifest.json")
 async def manifest():
     return JSONResponse({
@@ -79,7 +69,6 @@ async def sw():
     js = "self.addEventListener('install', (e) => { e.waitUntil(caches.open('solid-link-v1').then((cache) => cache.addAll(['/']))); }); self.addEventListener('fetch', (e) => { if (e.request.method !== 'GET') return; e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request))); });"
     return Response(content=js, media_type="application/javascript")
 
-# --- OPENGRAPH API ---
 @app.get("/api/og")
 async def get_og(url: str):
     if not url.startswith("http://") and not url.startswith("https://"):
@@ -88,23 +77,19 @@ async def get_og(url: str):
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, timeout=5.0, follow_redirects=True)
             html_content = resp.text
-            
             def get_meta(prop):
                 m = re.search(fr'<meta[^>]+(?:property|name)=["\']og:{prop}["\'][^>]+content=["\']([^"\']*)["\']', html_content, re.IGNORECASE)
                 if not m:
                     m = re.search(fr'<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:property|name)=["\']og:{prop}["\']', html_content, re.IGNORECASE)
                 return m.group(1) if m else ""
-            
             title = get_meta("title") or ""
             if not title:
                 tm = re.search(r'<title>([^<]*)</title>', html_content, re.IGNORECASE)
                 if tm: title = tm.group(1)
-                
             return {"title": title, "description": get_meta("description"), "image": get_meta("image")}
     except Exception:
         return {"title": "", "description": "", "image": ""}
 
-# --- БЕЗОПАСНОСТЬ ---
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -121,12 +106,14 @@ def get_csrf_token(request: Request) -> str:
 
 def check_csrf(request: Request, form_token: str = None) -> bool:
     cookie_token = request.cookies.get("csrf_token")
+    if not cookie_token:
+        return False
     header_token = request.headers.get("X-CSRF-Token")
-    return cookie_token and (cookie_token == form_token or cookie_token == header_token)
+    return cookie_token == form_token or cookie_token == header_token
 
 def set_csrf_cookie(response: Response, token: str, request: Request):
-    if not request.cookies.get("csrf_token"):
-        response.set_cookie("csrf_token", token, httponly=True, samesite="lax")
+    # Всегда ставим куку, чтобы избежать проблем с устаревшими/потерянными куками
+    response.set_cookie("csrf_token", token, httponly=True, samesite="lax", max_age=86400*365)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -141,7 +128,6 @@ class RPCRequest(BaseModel):
     method: str
     params: dict = {}
 
-# --- ПЕРЕВОДЫ ---
 LOCALES = {
     "ru": {
         "reg": "Регистрация", "login": "Вход", "username": "юзернейм", "nickname": "никнейм",
@@ -173,7 +159,8 @@ LOCALES = {
         "sugges_success": "Предложение отправлено! Спасибо!",
         "sugges_empty": "Предложек пока нет...",
         "sugges_approve": "Одобрить", "sugges_reject": "Отклонить",
-        "suggested_by": "Предложено:", "sugges_own": "Вы не можете предложить пост самому себе."
+        "suggested_by": "Предложено:", "sugges_own": "Вы не можете предложить пост самому себе.",
+        "sugges_error_fill": "Заполните все поля!", "sugges_error_self": "Нельзя предложить самому себе"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -205,7 +192,8 @@ LOCALES = {
         "sugges_success": "Suggestion sent! Thank you!",
         "sugges_empty": "No suggestions yet...",
         "sugges_approve": "Approve", "sugges_reject": "Reject",
-        "suggested_by": "Suggested by:", "sugges_own": "You can't suggest to yourself."
+        "suggested_by": "Suggested by:", "sugges_own": "You can't suggest to yourself.",
+        "sugges_error_fill": "Fill all fields!", "sugges_error_self": "Can't suggest to yourself"
     }
 }
 
@@ -219,11 +207,9 @@ def format_date(iso_str: str) -> str:
     except:
         return iso_str[:10]
 
-# --- SVG ИКОНКИ ---
 SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
 SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
 
-# --- CSS ---
 def get_css():
     return """
     <style>
@@ -231,35 +217,28 @@ def get_css():
         body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
         a { color: black; text-decoration: none; font-weight: bold; }
         a:hover { text-decoration: underline; }
-        
         .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
         .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
         .footer a { color: #000; border-bottom: 2px solid #000; }
         .footer-links { font-size: 14px; color: #777; }
         .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
-
         .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
         .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
         .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
         .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
         .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-        
         input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
         textarea { text-align: left; resize: vertical; }
         button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
         button:hover, .btn:hover { background-color: #8c8c8c; }
-        
         .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
         .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
-        
         .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
         .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
         .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
-
         .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
         .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
-        
         .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
         .logout-btn { margin-top: 10px; background: #ff4d4d; }
         .logout-btn:hover { background: #cc0000; }
@@ -267,35 +246,25 @@ def get_css():
         .edit-btn:hover { background: #1a82e2; }
         .sugges-btn { background: #f1c40f; color: black; margin-top: 5px; }
         .sugges-btn:hover { background: #d4ac0d; }
-        
         .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-        
         .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
         .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
-
         .posts-area { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; min-height: 300px;}
         .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
-        
         .post-wrapper { position: relative; transition: opacity 0.3s ease; }
         .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-        
         .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
         .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
-        
         .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
         .post-date { font-size: 12px; color: #555; }
-        
         .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; margin-top: 5px; text-align: right; border-top: 1px dashed #888; padding-top: 5px;}
-
         .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
         .post-wrapper:hover .post-actions { opacity: 1; }
         .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
         .action-btn:hover { background: #ff4d4d; }
         .action-btn.pin-btn:hover { background: #4da6ff; }
         .action-btn.link-btn:hover { background: #f1c40f; color: black; }
-
-        /* Стили для предложек */
         .suggestion-card { background: #a9a9a9; padding: 15px; border-radius: 5px; border-left: 5px solid #f1c40f; margin-bottom: 10px; }
         .sugg-author { font-weight: bold; color: #333; font-size: 14px; margin-bottom: 5px; }
         .sugg-content { font-size: 16px; margin-bottom: 10px; text-align: center; }
@@ -304,38 +273,30 @@ def get_css():
         .sugg-approve:hover { background: #27ae60; }
         .sugg-reject { background: #e74c3c; color: white; padding: 8px; }
         .sugg-reject:hover { background: #c0392b; }
-
         .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
         .status-Принято, .status-Accepted { background: #4da6ff; }
         .status-В-работе, .status-In-Progress { background: #f1c40f; }
         .status-Исправлено, .status-Fixed { background: #2ecc71; }
         .status-Отклонено, .status-Rejected { background: #e74c3c; }
-
         .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
         .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
         .lang-btn:hover { background: #a9a9a9; color: black; }
         .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
         .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
-        
         .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
-
         .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
-
         #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
         #toast.show { opacity: 1; }
-        
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
         .modal-overlay.show { display: flex; }
         .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 90%; text-align: center; border: 5px solid #000; }
         .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
         .btn-danger { background: #ff4d4d; color: white; }
         .btn-danger:hover { background: #cc0000; }
-
         .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left;}
         .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
         .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
         .og-desc { margin: 0; font-size: 14px; color: #555; }
-
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -351,7 +312,6 @@ def get_css():
             .create-post-box { padding: 10px; }
             .post-item { padding: 10px; }
             .post-footer { flex-direction: column; align-items: center; gap: 10px; }
-            
             input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
             button, .btn { font-size: 16px; padding: 14px; }
             .post-content { font-size: 16px; }
@@ -360,7 +320,6 @@ def get_css():
     </style>
     """
 
-# --- JS ---
 def get_js(lang, token, current_user=""):
     js = """
     <script>
@@ -368,15 +327,14 @@ def get_js(lang, token, current_user=""):
         const ME = "__ME__";
         const L = {
             d: "__DEL__", p: "__PIN__", u: "__UNPIN__",
-            c: "__CONFIRM__", n: "__NOPOSTS__", cl: "__COPYLINK__"
+            c: "__CONFIRM__", n: "__NOPOSTS__", cl: "__COPYLINK__",
+            sf: "__SUGG_FILL__", ss: "__SUGG_SELF__", su: "__SUGG_SUCCESS__"
         };
-
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
             });
         }
-
         let ws;
         function connectWS() {
             const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -393,52 +351,39 @@ def get_js(lang, token, current_user=""):
             ws.onclose = () => setTimeout(connectWS, 3000);
         }
         connectWS();
-
         function copyLink(user, rid, btn) {
             if (!user) return;
             const url = window.location.origin + '/' + user + '/' + rid;
-            navigator.clipboard.writeText(url).then(() => {
-                showToast("Link copied!");
-            }).catch(() => {
-                showToast("Failed to copy");
-            });
+            navigator.clipboard.writeText(url).then(() => showToast("Link copied!")).catch(() => showToast("Failed to copy"));
         }
-
         function showToast(msg) {
             const t = document.getElementById('toast');
             t.innerText = msg;
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 3000);
         }
-
         function showConfirm(msg, cb) {
             const m = document.getElementById('modal-overlay');
             document.getElementById('modal-text').innerText = msg;
             m.classList.add('show');
-            
             const cBtn = document.getElementById('modal-confirm');
             const xBtn = document.getElementById('modal-cancel');
-            
             const nC = cBtn.cloneNode(true);
             const nX = xBtn.cloneNode(true);
             cBtn.parentNode.replaceChild(nC, cBtn);
             xBtn.parentNode.replaceChild(nX, xBtn);
-            
             nC.onclick = () => { m.classList.remove('show'); cb(true); };
             nX.onclick = () => { m.classList.remove('show'); cb(false); };
         }
-
         let pendingUrl = "";
         async function showLinkWarning(e, el) {
             e.preventDefault();
             pendingUrl = el.getAttribute('data-url');
             if (!pendingUrl) return;
-            
             document.getElementById('link-modal-confirm').href = pendingUrl;
             const ogBox = document.getElementById('og-preview');
             ogBox.innerHTML = `<p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p>`;
             document.getElementById('link-modal').classList.add('show');
-            
             try {
                 const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl));
                 const data = await res.json();
@@ -455,11 +400,9 @@ def get_js(lang, token, current_user=""):
                 ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">Failed to load preview.</p>';
             }
         }
-
         function closeLinkModal() {
             document.getElementById('link-modal').classList.remove('show');
         }
-
         async function rpc(method, params) {
             const res = await fetch('/rpc', {
                 method: 'POST',
@@ -470,15 +413,12 @@ def get_js(lang, token, current_user=""):
             if (!res.ok) throw new Error(data.detail || data.error || 'RPC Error');
             return data;
         }
-
         function tp(i, b) {
             const x = document.getElementById(i);
             if (x.type === 'password') { x.type = 'text'; b.innerHTML = `__SVG_EYE_OFF__`; }
             else { x.type = 'password'; b.innerHTML = `__SVG_EYE__`; }
         }
-
         function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
-
         async function hc(e) {
             e.preventDefault();
             const f = e.target, c = f.querySelector('textarea').value.trim();
@@ -486,10 +426,8 @@ def get_js(lang, token, current_user=""):
             const i = crypto.randomUUID(), n = new Date();
             const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'});
             const a = document.querySelector('#my-records-container');
-            
             const m = a.querySelector('.empty-state');
             if (m) m.remove();
-
             const w = document.createElement('div');
             w.className = 'post-wrapper'; w.id = 'post-' + i;
             w.innerHTML = `
@@ -502,7 +440,6 @@ def get_js(lang, token, current_user=""):
                     <div class="post-content">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
                     <div class="post-footer"><div class="post-date">${d}</div></div>
                 </div>`;
-            
             let inserted = false;
             const wrappers = a.querySelectorAll('.post-wrapper');
             for (let ww of wrappers) {
@@ -513,16 +450,13 @@ def get_js(lang, token, current_user=""):
                 }
             }
             if (!inserted) a.appendChild(w);
-            
             f.reset();
-
             try {
                 await rpc('create_record', { content: c, client_id: i });
             } catch (x) {
                 w.remove(); showToast('Failed: ' + x.message);
             }
         }
-
         function hd(i) {
             showConfirm(L.c, async (yes) => {
                 if (!yes) return;
@@ -536,7 +470,6 @@ def get_js(lang, token, current_user=""):
                 }
             });
         }
-
         async function hp(i, b) {
             const w = document.getElementById('post-' + i), p = w.querySelector('.post-item'), s = p.classList.contains('pinned');
             if (s) { p.classList.remove('pinned'); b.innerText = L.p; }
@@ -552,8 +485,27 @@ def get_js(lang, token, current_user=""):
                 showToast('Failed: ' + x.message);
             }
         }
-
-        // Работа с предложками
+        // Предложка - через fetch/RPC, чтобы CSRF работал стабильно
+        async function submitSuggestion(event) {
+            event.preventDefault();
+            const f = event.target;
+            const target = f.dataset.nickname;
+            const name = f.querySelector('input[name="sugg_name"]').value.trim();
+            const content = f.querySelector('textarea[name="content"]').value.trim();
+            if (!name || !content) { showToast(L.sf); return; }
+            if (target === ME) { showToast(L.ss); return; }
+            const btn = f.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            try {
+                await rpc('submit_suggestion', { target_nickname: target, sugg_name: name, content: content });
+                showToast(L.su);
+                f.reset();
+            } catch (x) {
+                showToast('Error: ' + x.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
         async function approveSugg(suggId) {
             try {
                 await rpc('approve_suggestion', { suggestion_id: suggId });
@@ -564,7 +516,6 @@ def get_js(lang, token, current_user=""):
                 showToast('Failed: ' + x.message);
             }
         }
-
         async function rejectSugg(suggId) {
             try {
                 await rpc('reject_suggestion', { suggestion_id: suggId });
@@ -586,6 +537,9 @@ def get_js(lang, token, current_user=""):
     js = js.replace("__NOPOSTS__", t('no_posts', lang))
     js = js.replace("__COPYLINK__", t('copy_link', lang))
     js = js.replace("__EXT_LOADING__", t('ext_loading', lang))
+    js = js.replace("__SUGG_FILL__", t('sugges_error_fill', lang))
+    js = js.replace("__SUGG_SELF__", t('sugges_error_self', lang))
+    js = js.replace("__SUGG_SUCCESS__", t('sugges_success', lang))
     js = js.replace("__SVG_EYE_OFF__", SVG_EYE_OFF)
     js = js.replace("__SVG_EYE__", SVG_EYE)
     return js
@@ -701,14 +655,11 @@ def render_records(records, lang, own=False, uid=None):
         if not isinstance(x, dict): continue
         rid = esc(x.get('id'))
         if not rid: continue
-        
         pinned = bool(x.get('is_pinned', False))
         content = linkify(x.get('content'))
         date = format_date(esc(x.get('created_at')))
         sugg_by = esc(x.get('suggested_by', ''))
-        
         pc = "pinned" if pinned else ""
-        
         acts = "<div class='post-actions'>"
         if uid:
             acts += f"<button onclick='copyLink(\"{x.get('user_nickname','')}\",\"{rid}\", this)' class='action-btn link-btn'>{t('copy_link', lang)}</button>"
@@ -716,9 +667,7 @@ def render_records(records, lang, own=False, uid=None):
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
-        
         sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
-        
         item_html = """
         <div class="post-wrapper" id="post-__RID__">__ACTS__
             <div class="post-item __PC__">
@@ -727,12 +676,7 @@ def render_records(records, lang, own=False, uid=None):
                 __SUGG__
             </div>
         </div>"""
-        item_html = item_html.replace("__RID__", rid)
-        item_html = item_html.replace("__ACTS__", acts)
-        item_html = item_html.replace("__PC__", pc)
-        item_html = item_html.replace("__CONTENT__", content)
-        item_html = item_html.replace("__DATE__", date)
-        item_html = item_html.replace("__SUGG__", sugg_html)
+        item_html = item_html.replace("__RID__", rid).replace("__ACTS__", acts).replace("__PC__", pc).replace("__CONTENT__", content).replace("__DATE__", date).replace("__SUGG__", sugg_html)
         out += item_html
     return out
 
@@ -740,35 +684,23 @@ def merge_memory(db_records, nickname):
     f = []
     if not db_records or not isinstance(db_records, list):
         db_records = []
-        
     for x in db_records:
-        if not isinstance(x, dict):
-            continue
+        if not isinstance(x, dict): continue
         x_id = x.get('id')
-        if not x_id:
-            continue
-        if x_id in deleted_records:
-            continue
-            
-        if x_id in pinned_records:
-            x['is_pinned'] = pinned_records[x_id]
+        if not x_id: continue
+        if x_id in deleted_records: continue
+        if x_id in pinned_records: x['is_pinned'] = pinned_records[x_id]
         f.append(x)
-        
     for rid, x in pending_records.items():
-        if not isinstance(x, dict):
-            continue
-        if x.get('user_nickname') == nickname:
-            f.append(x)
-            
+        if not isinstance(x, dict): continue
+        if x.get('user_nickname') == nickname: f.append(x)
     def sort_key(x):
         p = x.get('is_pinned')
         c = x.get('created_at')
         return (bool(p), str(c) if c is not None else '')
-        
     try:
         f.sort(key=sort_key, reverse=True)
-    except Exception:
-        pass
+    except Exception: pass
     return f
 
 def dashboard_html(nickname, user, my_p, lang, token, viewer):
@@ -796,7 +728,6 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer):
             <textarea name="content" placeholder="__CREATE_POST_PLACEHOLDER__" required maxlength="500"></textarea>
             <button type="submit">__CREATE_POST_BTN__</button>
         </form></div>
-        
         <div class="posts-area" id="my-records-container">
             <h2>__MY_POSTS__</h2>
             __RECORDS_HTML__
@@ -838,7 +769,6 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             sugg_by = esc(s.get('suggested_by_name'))
             content = linkify(s.get('content'))
             date = format_date(esc(s.get('created_at')))
-            
             card = """
             <div class="suggestion-card" id="sugg-__SID__">
                 <div class="sugg-author">__SUGG_BY__: __NAME__ (__DATE__)</div>
@@ -848,15 +778,8 @@ def suggestions_page_html(nickname, suggestions, lang, token):
                     <button class="btn sugg-reject" onclick="rejectSugg('__SID__')">__REJECT__</button>
                 </div>
             </div>"""
-            card = card.replace("__SID__", sid)
-            card = card.replace("__SUGG_BY__", t('suggested_by', lang))
-            card = card.replace("__NAME__", sugg_by)
-            card = card.replace("__DATE__", date)
-            card = card.replace("__CONTENT__", content)
-            card = card.replace("__APPROVE__", t('sugges_approve', lang))
-            card = card.replace("__REJECT__", t('sugges_reject', lang))
+            card = card.replace("__SID__", sid).replace("__SUGG_BY__", t('suggested_by', lang)).replace("__NAME__", sugg_by).replace("__DATE__", date).replace("__CONTENT__", content).replace("__APPROVE__", t('sugges_approve', lang)).replace("__REJECT__", t('sugges_reject', lang))
             rh += card
-    
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
@@ -884,14 +807,20 @@ def suggestions_page_html(nickname, suggestions, lang, token):
     html = html.replace("__OVERLAY__", get_overlay(lang))
     return html
 
-def sugges_form_html(nickname, lang, token, error="", success=""):
-    is_own = False
-    msg_html = ""
-    if error:
-        msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{error}</div>"
-    elif success:
-        msg_html = f"<div class='error-msg' style='color:#2ecc71;'>{success}</div>"
-    
+def sugges_form_html(nickname, lang, token, error="", viewer=""):
+    msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{error}</div>" if error else ""
+    is_own = (viewer == nickname)
+    if is_own:
+        form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_own', lang)}</div>"
+    else:
+        form_block = """
+            <form data-nickname="__NICK_ATTR__" onsubmit="submitSuggestion(event)" style="display:flex;flex-direction:column;gap:10px">
+                <input type="text" name="sugg_name" placeholder="__SUGG_NAME__" required maxlength="60" style="background:#a9a9a9;padding:12px;font-size:16px;">
+                <textarea name="content" placeholder="__SUGG_CONTENT__" required maxlength="500" style="background:#a9a9a9;height:150px;padding:12px;font-size:16px;"></textarea>
+                <button type="submit" style="background:#2ecc71;color:white;font-size:18px;">__SEND__</button>
+            </form>
+        """
+        form_block = form_block.replace("__NICK_ATTR__", esc(nickname)).replace("__SUGG_NAME__", t('sugges_name', lang)).replace("__SUGG_CONTENT__", t('sugges_content', lang)).replace("__SEND__", t('sugges_send', lang))
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
@@ -901,12 +830,7 @@ def sugges_form_html(nickname, lang, token, error="", success=""):
         <div class="posts-area" style="padding:20px;">
             <h2>__TITLE__ __NICKNAME__</h2>
             __MSG__
-            <form action="/__NICKNAME__/sugges" method="post" style="display:flex;flex-direction:column;gap:10px">
-                <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="text" name="sugg_name" placeholder="__SUGG_NAME__" required maxlength="60" style="background:#a9a9a9;padding:12px;font-size:16px;">
-                <textarea name="content" placeholder="__SUGG_CONTENT__" required maxlength="500" style="background:#a9a9a9;height:150px;padding:12px;font-size:16px;"></textarea>
-                <button type="submit" style="background:#2ecc71;color:white;font-size:18px;">__SEND__</button>
-            </form>
+            __FORM_BLOCK__
             <a href="/__NICKNAME__" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
             <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/__NICKNAME__/sugges" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICKNAME__/sugges" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
         </div>
@@ -916,13 +840,10 @@ def sugges_form_html(nickname, lang, token, error="", success=""):
     html = html.replace("__TITLE__", t('sugges_title', lang))
     html = html.replace("__NICKNAME__", esc(nickname))
     html = html.replace("__CSS__", get_css())
-    html = html.replace("__JS__", get_js(lang, token, ""))
-    html = html.replace("__TOKEN__", token)
-    html = html.replace("__SUGG_NAME__", t('sugges_name', lang))
-    html = html.replace("__SUGG_CONTENT__", t('sugges_content', lang))
-    html = html.replace("__SEND__", t('sugges_send', lang))
-    html = html.replace("__BACK__", t('back_home', lang))
+    html = html.replace("__JS__", get_js(lang, token, viewer))
     html = html.replace("__MSG__", msg_html)
+    html = html.replace("__FORM_BLOCK__", form_block)
+    html = html.replace("__BACK__", t('back_home', lang))
     html = html.replace("__RU_ACTIVE__", "active" if lang == 'ru' else "")
     html = html.replace("__EN_ACTIVE__", "active" if lang == 'en' else "")
     html = html.replace("__FOOTER__", get_footer(lang))
@@ -977,13 +898,9 @@ def public_html(nickname, user, records, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
-    
     sugg_btn = ""
-    if viewer and not is_owner:
+    if not is_owner:
         sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
-    elif not viewer:
-        sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
-    
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
@@ -1028,7 +945,6 @@ def record_page_html(nickname, user, record, lang, token, viewer):
     sugg_btn = ""
     if not viewer or viewer != nickname:
         sugg_btn = f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
-    
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
@@ -1071,13 +987,8 @@ def bugreport_html(username, reports, lang, token):
             <div class="post-content" style="text-align:left;">__CONTENT__</div>
             <div class="post-date">__DATE__</div>
         </div>"""
-        item = item.replace("__BUGREPORT_TITLE__", t('bugreport_title', lang))
-        item = item.replace("__STATUS_CLASS__", esc(x.get('status','Принято')).replace(' ','-'))
-        item = item.replace("__STATUS__", esc(x.get('status','Принято')))
-        item = item.replace("__CONTENT__", esc(x.get('content')))
-        item = item.replace("__DATE__", format_date(esc(x.get('created_at'))))
+        item = item.replace("__BUGREPORT_TITLE__", t('bugreport_title', lang)).replace("__STATUS_CLASS__", esc(x.get('status','Принято')).replace(' ','-')).replace("__STATUS__", esc(x.get('status','Принято'))).replace("__CONTENT__", esc(x.get('content'))).replace("__DATE__", format_date(esc(x.get('created_at'))))
         rh += item
-    
     html = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json">
@@ -1152,7 +1063,10 @@ async def index(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru
     if nickname:
         try:
             x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-            if x.data: return RedirectResponse("/cabinet", 303)
+            if x.data:
+                resp = RedirectResponse("/cabinet", 303)
+                set_csrf_cookie(resp, token, r)
+                return resp
         except Exception: pass
     res = HTMLResponse(auth_html(lang, "", token))
     set_csrf_cookie(res, token, r)
@@ -1168,46 +1082,49 @@ async def privacy(r: Request, lang: str = Cookie("ru")):
 @app.post("/register", response_class=HTMLResponse)
 async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
     token = get_csrf_token(r)
-    if not check_csrf(r, csrf_token): return auth_html(lang, "CSRF Error", token)
+    if not check_csrf(r, csrf_token): 
+        resp = HTMLResponse(auth_html(lang, "CSRF Error", token))
+        set_csrf_cookie(resp, token, r)
+        return resp
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
     if password != re_pass: return auth_html(lang, t('alert_pass_mismatch', lang), token)
-    
     try:
         x = sb.table('users').select('nickname').eq('nickname', nickname).execute()
         if x.data: return auth_html(lang, t('alert_nick_taken', lang), token)
         sb.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute()
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
-        
-    res = RedirectResponse("/cabinet", 303)
-    res.set_cookie("nickname", nickname, httponly=True, samesite="lax")
-    return res
+    resp = RedirectResponse("/cabinet", 303)
+    resp.set_cookie("nickname", nickname, httponly=True, samesite="lax")
+    set_csrf_cookie(resp, token, r)
+    return resp
 
 @app.post("/login", response_class=HTMLResponse)
 async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
     token = get_csrf_token(r)
-    if not check_csrf(r, csrf_token): return auth_html(lang, "CSRF Error", token)
+    if not check_csrf(r, csrf_token): 
+        resp = HTMLResponse(auth_html(lang, "CSRF Error", token))
+        set_csrf_cookie(resp, token, r)
+        return resp
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
-    
     try:
         x = sb.table('users').select('password').eq('nickname', nickname).execute()
         user = x.data[0] if x.data else None
         if user and verify_password(password, user.get("password", "")):
             if len(user["password"]) == 64:
                 sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute()
-            res = RedirectResponse("/cabinet", 303)
-            res.set_cookie("nickname", nickname, httponly=True, samesite="lax")
-            return res
+            resp = RedirectResponse("/cabinet", 303)
+            resp.set_cookie("nickname", nickname, httponly=True, samesite="lax")
+            set_csrf_cookie(resp, token, r)
+            return resp
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
-        
     return auth_html(lang, t('alert_bad_login', lang), token)
 
 @app.get("/cabinet", response_class=HTMLResponse)
 async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
-    
     try:
         u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
         if not u.data: 
@@ -1217,13 +1134,11 @@ async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("
         user_data = u.data[0]
     except Exception:
         return RedirectResponse("/", 303)
-    
     p_data = []
     try:
         p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
         if p.data and isinstance(p.data, list): p_data = p.data
     except Exception: pass
-            
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname))
@@ -1233,134 +1148,93 @@ async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("
 @app.get("/cabinet/suggestions", response_class=HTMLResponse)
 async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
-    
     s_data = []
     try:
         s = sb.table('suggestions').select('*').eq('author_nickname', nickname).eq('status', 'pending').order('created_at', desc=True).execute()
         if s.data and isinstance(s.data, list): s_data = s.data
     except Exception: pass
-    
     token = get_csrf_token(r)
     res = HTMLResponse(suggestions_page_html(nickname, s_data, lang, token))
     set_csrf_cookie(res, token, r)
     return res
 
 @app.get("/{nickname}/sugges", response_class=HTMLResponse)
-async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru"), success: str = None):
+async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
     token = get_csrf_token(r)
-    viewer = r.cookies.get("nickname")
-    
-    if viewer == nickname:
-        return HTMLResponse(sugges_form_html(nickname, lang, token, error=t('sugges_own', lang)))
-    
+    viewer = r.cookies.get("nickname") or ""
     try:
         u = sb.table('users').select('nickname').eq('nickname', nickname).execute()
         if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
     except Exception:
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
-    
-    success_msg = t('sugges_success', lang) if success else ""
-    res = HTMLResponse(sugges_form_html(nickname, lang, token, success=success_msg))
+    res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer))
     set_csrf_cookie(res, token, r)
     return res
-
-@app.post("/{nickname}/sugges", response_class=HTMLResponse)
-async def sugges_submit(nickname: str, r: Request, res: Response, sugg_name: str = Form(...), content: str = Form(...), csrf_token: str = Form(None), lang: str = Cookie("ru")):
-    if not check_csrf(r, csrf_token):
-        return HTMLResponse(sugges_form_html(nickname, lang, csrf_token or "", error="CSRF Error"))
-    
-    if not sugg_name.strip() or not content.strip():
-        return HTMLResponse(sugges_form_html(nickname, lang, csrf_token or "", error="Fill all fields"))
-    
-    try:
-        u = sb.table('users').select('nickname').eq('nickname', nickname).execute()
-        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
-        
-        data = {
-            "author_nickname": nickname,
-            "suggested_by_name": sugg_name.strip()[:60],
-            "content": content.strip()[:500],
-            "status": "pending"
-        }
-        sb.table('suggestions').insert(data).execute()
-    except Exception as e:
-        return HTMLResponse(sugges_form_html(nickname, lang, csrf_token or "", error=str(e)))
-    
-    return RedirectResponse(f"/{nickname}/sugges?success=1", 303)
 
 @app.post("/rpc")
 async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
     if not check_csrf(r): raise HTTPException(status_code=403, detail="CSRF Error")
     if not nickname: raise HTTPException(status_code=401, detail="Unauthorized")
-    
     try:
         if req.method == "create_record":
             content = req.params.get("content", "")
             client_id = req.params.get("client_id")
-            
             i = client_id or str(uuid.uuid4())
             n = datetime.now(timezone.utc).isoformat()
-            
             pd = {"id": i, "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "created_at": n}
             try:
                 sb.table('posts').insert(pd).execute()
             except Exception:
                 sb.table('posts').insert(pd).execute()
-            
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
-            
         elif req.method == "delete_record":
             rid = req.params.get("post_id")
             sb.table('posts').delete().eq('id', rid).eq('user_nickname', nickname).execute()
             await manager.broadcast({"type": "delete_record", "post_id": rid})
             return {"status": "ok"}
-            
         elif req.method == "pin_record":
             rid = req.params.get("post_id")
             x = sb.table('posts').select('is_pinned').eq('id', rid).eq('user_nickname', nickname).execute()
             if not x.data or not isinstance(x.data, list) or len(x.data) == 0: 
                 raise HTTPException(404, "Not found")
-            
             ns = not x.data[0].get('is_pinned', False)
             sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute()
             return {"status": "ok", "is_pinned": ns}
-        
+        elif req.method == "submit_suggestion":
+            target = req.params.get("target_nickname", "")
+            sugg_name = req.params.get("sugg_name", "").strip()[:60]
+            content = req.params.get("content", "").strip()[:500]
+            if not target or not sugg_name or not content:
+                raise HTTPException(400, "Missing fields")
+            if target == nickname:
+                raise HTTPException(400, "Cannot suggest to yourself")
+            u = sb.table('users').select('nickname').eq('nickname', target).execute()
+            if not u.data: raise HTTPException(404, "User not found")
+            data = {"author_nickname": target, "suggested_by_name": sugg_name, "content": content, "status": "pending"}
+            sb.table('suggestions').insert(data).execute()
+            return {"status": "ok"}
         elif req.method == "approve_suggestion":
             sid = req.params.get("suggestion_id")
             s = sb.table('suggestions').select('*').eq('id', sid).eq('author_nickname', nickname).eq('status', 'pending').execute()
             if not s.data or not isinstance(s.data, list) or len(s.data) == 0:
                 raise HTTPException(404, "Suggestion not found")
-            
             sugg = s.data[0]
             i = str(uuid.uuid4())
             n = datetime.now(timezone.utc).isoformat()
-            
-            new_post = {
-                "id": i,
-                "user_nickname": nickname,
-                "content": sugg.get('content', ''),
-                "is_pinned": False,
-                "created_at": n,
-                "suggested_by": sugg.get('suggested_by_name', '')
-            }
-            
+            new_post = {"id": i, "user_nickname": nickname, "content": sugg.get('content', ''), "is_pinned": False, "created_at": n, "suggested_by": sugg.get('suggested_by_name', '')}
             try:
                 sb.table('posts').insert(new_post).execute()
             except Exception:
-                # Если колонки suggested_by нет - вставляем без нее
                 new_post.pop("suggested_by", None)
                 sb.table('posts').insert(new_post).execute()
-            
             sb.table('suggestions').update({"status": "approved"}).eq('id', sid).execute()
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
-        
         elif req.method == "reject_suggestion":
             sid = req.params.get("suggestion_id")
             sb.table('suggestions').update({"status": "rejected"}).eq('id', sid).eq('author_nickname', nickname).execute()
             return {"status": "ok"}
-            
         raise HTTPException(400, "Unknown method")
     except HTTPException:
         raise
@@ -1376,7 +1250,6 @@ async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru"
         user_data = u.data[0]
     except Exception:
         return RedirectResponse("/", 303)
-        
     token = get_csrf_token(r)
     res = HTMLResponse(edit_html(nickname, user_data, lang, token))
     set_csrf_cookie(res, token, r)
@@ -1387,7 +1260,6 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
     if not nickname: return RedirectResponse("/", 303)
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
-    
     try:
         sb.table('users').update({"username": username, "description": description}).eq('nickname', nickname).execute()
     except Exception:
@@ -1434,15 +1306,13 @@ async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("r
         u = sb.table('users').select('username').eq('nickname', nickname).execute()
         if u.data: u_data = u.data[0]
         else: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
-        
         x = sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute()
         if not x.data: return HTMLResponse(f"<h2>{t('no_posts', lang)}</h2>", 404)
         rec = x.data[0]
     except Exception:
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
-        
     token = get_csrf_token(r)
-    viewer = r.cookies.get("nickname")
+    viewer = r.cookies.get("nickname") or ""
     res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token, viewer))
     set_csrf_cookie(res, token, r)
     return res
@@ -1455,15 +1325,12 @@ async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
         u = sb.table('users').select('username,description').eq('nickname', nickname).execute()
         if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
         u_data = u.data[0]
-        
         p = sb.table('posts').select('*').eq('user_nickname', nickname).execute()
         p_data = p.data or []
     except Exception:
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
-    
-    viewer = r.cookies.get("nickname")
+    viewer = r.cookies.get("nickname") or ""
     po = merge_memory(p_data, nickname)
-    
     token = get_csrf_token(r)
     res = HTMLResponse(public_html(nickname, u_data, po, lang, token, viewer))
     set_csrf_cookie(res, token, r)
