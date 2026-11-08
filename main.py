@@ -26,11 +26,8 @@ def esc(val):
 # --- ПРЕОБРАЗОВАНИЕ ССЫЛОК В КЛИКАБЕЛЬНЫЕ ---
 def linkify(text):
     if not text: return ""
-    # Сначала экранируем HTML
     safe_text = html.escape(text)
-    # Ищем ссылки http/https
     url_pattern = re.compile(r'(https?://[^\s]+)')
-    # Заменяем на тег <a> с вызовом модального окна
     return url_pattern.sub(r'<a href="#" class="ext-link" data-url="\1" onclick="showLinkWarning(event, this)">\1</a>', safe_text).replace('\n', '<br>')
 
 # --- WEBSOCKET МЕНЕДЖЕР ---
@@ -263,7 +260,6 @@ def get_css():
         .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
         .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
         
-        /* Центрирование текста в постах */
         .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
         .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
         
@@ -296,7 +292,6 @@ def get_css():
         #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; }
         #toast.show { opacity: 1; }
         
-        /* Модальные окна */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; }
         .modal-overlay.show { display: flex; }
         .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 90%; text-align: center; border: 5px solid #000; }
@@ -304,7 +299,6 @@ def get_css():
         .btn-danger { background: #ff4d4d; color: white; }
         .btn-danger:hover { background: #cc0000; }
 
-        /* OG Preview Box */
         .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left;}
         .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
         .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
@@ -344,7 +338,6 @@ def get_js(lang, token):
             c: "{t('confirm_delete', lang)}", n: "{t('no_posts', lang)}"
         }};
 
-        // PWA
         if ('serviceWorker' in navigator) {{
             window.addEventListener('load', () => {{
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
@@ -402,7 +395,6 @@ def get_js(lang, token):
             nX.onclick = () => {{ m.classList.remove('show'); cb(false); }};
         }}
 
-        // Модальное окно для внешних ссылок
         let pendingUrl = "";
         async function showLinkWarning(e, el) {{
             e.preventDefault();
@@ -461,7 +453,9 @@ def get_js(lang, token):
             const i = crypto.randomUUID(), n = new Date();
             const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {{hour: '2-digit', minute:'2-digit'}});
             const a = document.querySelector('#my-records-container');
-            const m = a.querySelector('.post-item:not(.post-wrapper)');
+            
+            // Удаляем пустое состояние, только если оно есть
+            const m = a.querySelector('.empty-state');
             if (m) m.remove();
 
             const w = document.createElement('div');
@@ -475,10 +469,22 @@ def get_js(lang, token):
                     <div class="post-content">${{c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}}</div>
                     <div class="post-footer"><div class="post-date">${{d}}</div></div>
                 </div>`;
-            a.insertBefore(w, a.children[1]);
+            
+            // Правильная вставка: после закрепленных постов, но перед остальными
+            let inserted = false;
+            const wrappers = a.querySelectorAll('.post-wrapper');
+            for (let ww of wrappers) {
+                if (!ww.querySelector('.pinned')) {
+                    a.insertBefore(w, ww);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) a.appendChild(w);
+            
             f.reset();
 
-            try {{
+            try {
                 await rpc('create_record', {{ content: c, client_id: i }});
             }} catch (x) {{
                 w.remove(); showToast('Failed: ' + x.message);
@@ -529,7 +535,6 @@ def get_overlay(lang):
             </div>
         </div>
     </div>
-    <!-- Модальное окно для внешних ссылок -->
     <div id="link-modal" class="modal-overlay">
         <div class="modal-box" style="text-align: left;">
             <h3 style="margin-top:0;">{t('ext_title', lang)}</h3>
@@ -586,7 +591,7 @@ def auth_html(lang: str, error_msg: str = "", token: str = ""):
 
 def render_records(records, lang, own=False, uid=None):
     if not records or not isinstance(records, list): 
-        return f"<div class='post-item'>{t('no_posts', lang)}</div>"
+        return f"<div class='post-item empty-state'>{t('no_posts', lang)}</div>"
     out = ""
     for x in records:
         if not isinstance(x, dict): continue
@@ -594,7 +599,6 @@ def render_records(records, lang, own=False, uid=None):
         if not rid: continue
         
         pinned = bool(x.get('is_pinned', False))
-        # Применяем linkify для превращения ссылок в теги <a>
         content = linkify(x.get('content'))
         date = format_date(esc(x.get('created_at')))
         
@@ -854,7 +858,6 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
 
 @app.get("/cabinet", response_class=HTMLResponse)
 async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
-    # Строгий редирект для неавторизованных
     if not nickname: return RedirectResponse("/", 303)
     
     try:
