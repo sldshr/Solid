@@ -1,512 +1,678 @@
 # main.py
-# Минималистичный форум-постов на FastAPI. Всё хранится в оперативной памяти.
-# Запуск:  pip install fastapi uvicorn
-#          uvicorn main:app --reload
-
+import base64
 import hashlib
-import re
 import secrets
-import time
-from typing import Optional
+import uuid
+from datetime import datetime
+from typing import Dict, List, Optional
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="posts")
+app = FastAPI(title="SlideTok")
 
-# ---------------------------------------------------------------- хранилище
-USERS: dict[str, dict] = {}      # key = username.lower()
-SESSIONS: dict[str, str] = {}    # token -> key
-POSTS: list[dict] = []           # новые сверху
-STATE = {"next_id": 1}
-
-SESSION_MAX_AGE = 60 * 60 * 24 * 30
-MAX_POSTS = 5000
+# ============ IN-MEMORY STORAGE ============
+USERS: Dict[str, dict] = {}      # username -> {id, username, salt, password_hash, created}
+SESSIONS: Dict[str, str] = {}    # token -> username
+SLIDESHOWS: List[dict] = []      # list of slideshow dicts
+LIKES: Dict[str, set] = {}       # slideshow_id -> set of user_ids
 
 
-# ---------------------------------------------------------------- утилиты
 def hash_password(password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000
-    ).hex()
+    return hashlib.sha256((salt + password).encode()).hexdigest()
 
 
-def current_user(request: Request) -> Optional[str]:
-    token = request.cookies.get("sid")
+def get_current_user(request: Request) -> Optional[dict]:
+    token = request.cookies.get("session")
     if not token:
         return None
-    return SESSIONS.get(token)
+    username = SESSIONS.get(token)
+    return USERS.get(username) if username else None
 
 
-def start_session(response: Response, key: str) -> None:
+def new_session(response: Response, username: str) -> str:
     token = secrets.token_urlsafe(32)
-    SESSIONS[token] = key
-    response.set_cookie(
-        "sid", token, httponly=True, samesite="lax", max_age=SESSION_MAX_AGE
+    SESSIONS[token] = username
+    response.set_cookie("session", token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
+    return token
+
+
+# ============ DEMO SEED ============
+def svg_data_url(svg: str) -> str:
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+def demo_slide(text: str, c1: str, c2: str) -> str:
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" preserveAspectRatio="xMidYMid slice">'
+        f'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+        f'<stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/>'
+        f'</linearGradient></defs>'
+        f'<rect width="900" height="1600" fill="url(#g)"/>'
+        f'<text x="450" y="820" font-size="110" text-anchor="middle" fill="#fff" '
+        f'font-family="system-ui,sans-serif" font-weight="800">{text}</text>'
+        f'</svg>'
     )
+    return svg_data_url(svg)
 
 
-def find_post(post_id: int) -> dict:
-    for post in POSTS:
-        if post["id"] == post_id:
-            return post
-    raise HTTPException(404, "Пост не найден")
-
-
-def serialize_post(post: dict, viewer: Optional[str]) -> dict:
-    return {
-        "id": post["id"],
-        "title": post["title"],
-        "body": post["body"],
-        "author": post["author"],
-        "created": post["created"],
-        "likes": len(post["likes"]),
-        "liked": bool(viewer and viewer in post["likes"]),
-        "own": bool(viewer and viewer == post["author_key"]),
+def seed_demo():
+    salt = secrets.token_hex(16)
+    demo_id = str(uuid.uuid4())
+    USERS["demo"] = {
+        "id": demo_id, "username": "demo", "salt": salt,
+        "password_hash": hash_password("demo", salt),
+        "created": datetime.utcnow().isoformat(),
     }
+    demos = [
+        ("Рассвет", [
+            demo_slide("Привет", "#ff6b6b", "#ee5a24"),
+            demo_slide("Мир", "#48dbfb", "#0abde3"),
+            demo_slide("Слайдшоу", "#feca57", "#ff9f43"),
+        ]),
+        ("Неон", [
+            demo_slide("Неон", "#5f27cd", "#341f97"),
+            demo_slide("Ночь", "#0abde3", "#006ba6"),
+            demo_slide("Свет", "#f368e0", "#ff9ff3"),
+            demo_slide("Тьма", "#222f3e", "#576574"),
+        ]),
+        ("Закат", [
+            demo_slide("Закат", "#ff9a9e", "#fad0c4"),
+            demo_slide("Море", "#a1c4fd", "#c2e9fb"),
+            demo_slide("Небо", "#fbc2eb", "#a6c1ee"),
+        ]),
+    ]
+    for title, slides in demos:
+        sid = str(uuid.uuid4())
+        SLIDESHOWS.append({
+            "id": sid, "user_id": demo_id, "username": "demo",
+            "title": title, "slides": slides,
+            "created": datetime.utcnow().isoformat(),
+        })
+        LIKES[sid] = set()
 
 
-# ---------------------------------------------------------------- модели
-class Credentials(BaseModel):
+seed_demo()
+
+
+# ============ MODELS ============
+class AuthIn(BaseModel):
     username: str
     password: str
 
 
-class PostIn(BaseModel):
-    title: str
-    body: str
+class SlideshowIn(BaseModel):
+    title: str = ""
+    slides: List[str]
 
 
-# ---------------------------------------------------------------- авторизация
+# ============ AUTH ROUTES ============
 @app.post("/api/register")
-def register(data: Credentials, response: Response):
-    username = data.username.strip()
-    if not re.fullmatch(r"[A-Za-z0-9_]{3,20}", username):
-        raise HTTPException(400, "Ник: 3–20 символов, латиница, цифры и _")
-    if len(data.password) < 6:
-        raise HTTPException(400, "Пароль минимум 6 символов")
-
-    key = username.lower()
-    if key in USERS:
-        raise HTTPException(400, "Такой ник уже занят")
-
+async def register(data: AuthIn, response: Response):
+    username = (data.username or "").strip()
+    if len(username) < 3:
+        raise HTTPException(400, "Имя минимум 3 символа")
+    if len(username) > 32:
+        raise HTTPException(400, "Имя слишком длинное")
+    if len(data.password) < 4:
+        raise HTTPException(400, "Пароль минимум 4 символа")
+    if username in USERS:
+        raise HTTPException(400, "Имя уже занято")
     salt = secrets.token_hex(16)
-    USERS[key] = {
-        "username": username,
-        "salt": salt,
-        "hash": hash_password(data.password, salt),
-        "created": time.time(),
+    USERS[username] = {
+        "id": str(uuid.uuid4()), "username": username, "salt": salt,
+        "password_hash": hash_password(data.password, salt),
+        "created": datetime.utcnow().isoformat(),
     }
-    start_session(response, key)
-    return {"username": username}
+    new_session(response, username)
+    return {"id": USERS[username]["id"], "username": username}
 
 
 @app.post("/api/login")
-def login(data: Credentials, response: Response):
-    key = data.username.strip().lower()
-    user = USERS.get(key)
-    if not user:
-        raise HTTPException(400, "Неверный ник или пароль")
-    if not secrets.compare_digest(hash_password(data.password, user["salt"]), user["hash"]):
-        raise HTTPException(400, "Неверный ник или пароль")
-
-    start_session(response, key)
-    return {"username": user["username"]}
+async def login(data: AuthIn, response: Response):
+    user = USERS.get((data.username or "").strip())
+    if not user or user["password_hash"] != hash_password(data.password, user["salt"]):
+        raise HTTPException(400, "Неверное имя или пароль")
+    new_session(response, user["username"])
+    return {"id": user["id"], "username": user["username"]}
 
 
 @app.post("/api/logout")
-def logout(request: Request, response: Response):
-    token = request.cookies.get("sid")
+async def logout(request: Request, response: Response):
+    token = request.cookies.get("session")
     if token:
         SESSIONS.pop(token, None)
-    response.delete_cookie("sid")
+    response.delete_cookie("session")
     return {"ok": True}
 
 
 @app.get("/api/me")
-def me(request: Request):
-    key = current_user(request)
-    if not key:
-        return {"username": None}
-    return {"username": USERS[key]["username"]}
+async def me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(401, "Не авторизован")
+    return {"id": user["id"], "username": user["username"]}
 
 
-# ---------------------------------------------------------------- посты
-@app.get("/api/posts")
-def list_posts(request: Request):
-    viewer = current_user(request)
-    return {"posts": [serialize_post(post, viewer) for post in POSTS]}
+# ============ SLIDESHOW ROUTES ============
+@app.get("/api/slideshows")
+async def list_slideshows(request: Request):
+    user = get_current_user(request)
+    uid = user["id"] if user else None
+    out = []
+    for s in SLIDESHOWS:
+        likes = LIKES.get(s["id"], set())
+        out.append({
+            "id": s["id"], "username": s["username"], "title": s["title"],
+            "slides": s["slides"], "likes": len(likes),
+            "liked": bool(uid and uid in likes),
+            "created": s["created"],
+        })
+    return out
 
 
-@app.post("/api/posts")
-def create_post(data: PostIn, request: Request):
-    viewer = current_user(request)
-    if not viewer:
-        raise HTTPException(401, "Нужно войти")
-
-    title = data.title.strip()
-    body = data.body.strip()
-    if not title or len(title) > 120:
-        raise HTTPException(400, "Заголовок: от 1 до 120 символов")
-    if not body or len(body) > 5000:
-        raise HTTPException(400, "Текст: от 1 до 5000 символов")
-
-    post = {
-        "id": STATE["next_id"],
-        "author_key": viewer,
-        "author": USERS[viewer]["username"],
-        "title": title,
-        "body": body,
-        "created": time.time(),
-        "likes": set(),
+@app.post("/api/slideshows")
+async def create_slideshow(data: SlideshowIn, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(401, "Войдите, чтобы публиковать")
+    if not data.slides:
+        raise HTTPException(400, "Нужно хотя бы одно изображение")
+    if len(data.slides) > 20:
+        raise HTTPException(400, "Максимум 20 слайдов")
+    for s in data.slides:
+        if not isinstance(s, str) or not s.startswith("data:image/"):
+            raise HTTPException(400, "Некорректный слайд")
+    title = (data.title or "").strip()[:80] or "Без названия"
+    sid = str(uuid.uuid4())
+    show = {
+        "id": sid, "user_id": user["id"], "username": user["username"],
+        "title": title, "slides": data.slides,
+        "created": datetime.utcnow().isoformat(),
     }
-    STATE["next_id"] += 1
-    POSTS.insert(0, post)
-    if len(POSTS) > MAX_POSTS:
-        POSTS.pop()
-
-    return serialize_post(post, viewer)
+    SLIDESHOWS.insert(0, show)
+    LIKES[sid] = set()
+    return {"id": sid}
 
 
-@app.post("/api/posts/{post_id}/like")
-def like_post(post_id: int, request: Request):
-    viewer = current_user(request)
-    if not viewer:
-        raise HTTPException(401, "Нужно войти")
-
-    post = find_post(post_id)
-    if viewer in post["likes"]:
-        post["likes"].remove(viewer)
+@app.post("/api/slideshows/{slideshow_id}/like")
+async def toggle_like(slideshow_id: str, request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(401, "Войдите, чтобы ставить лайки")
+    if not any(s["id"] == slideshow_id for s in SLIDESHOWS):
+        raise HTTPException(404, "Не найдено")
+    likes = LIKES.setdefault(slideshow_id, set())
+    if user["id"] in likes:
+        likes.remove(user["id"])
+        liked = False
     else:
-        post["likes"].add(viewer)
-    return serialize_post(post, viewer)
+        likes.add(user["id"])
+        liked = True
+    return {"liked": liked, "likes": len(likes)}
 
 
-@app.delete("/api/posts/{post_id}")
-def delete_post(post_id: int, request: Request):
-    viewer = current_user(request)
-    if not viewer:
-        raise HTTPException(401, "Нужно войти")
-
-    post = find_post(post_id)
-    if post["author_key"] != viewer:
-        raise HTTPException(403, "Можно удалять только свои посты")
-
-    POSTS.remove(post)
-    return {"ok": True}
-
-
-# ---------------------------------------------------------------- страница
-HTML = r"""<!DOCTYPE html>
+# ============ HTML ============
+HTML_PAGE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>posts</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>SlideTok</title>
 <style>
-:root{
-  --bg:#0c0c0e;
-  --panel:#141417;
-  --panel-2:#19191d;
-  --border:#26262c;
-  --text:#d8d8dc;
-  --muted:#8b8b94;
-  --accent:#4d7cfe;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{
-  background:var(--bg);
-  color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-  -webkit-font-smoothing:antialiased;
-}
-header{
-  position:sticky;top:0;z-index:10;
-  background:rgba(12,12,14,.9);
-  border-bottom:1px solid var(--border);
-  backdrop-filter:blur(6px);
-}
-header .inner{
-  max-width:720px;margin:0 auto;padding:14px 20px;
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-}
-.brand{font-weight:600;font-size:17px}
-.brand .dot{color:var(--accent)}
-.user-area{display:flex;align-items:center;gap:10px}
-.whoami{font-size:13px;color:#c4c4cc}
-.wrap{max-width:720px;margin:0 auto;padding:0 20px 80px}
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:20px}
-.hidden{display:none}
-.field{margin-bottom:10px}
-.field:last-of-type{margin-bottom:12px}
-input,textarea{
-  width:100%;background:var(--panel-2);border:1px solid var(--border);
-  color:var(--text);border-radius:6px;padding:9px 11px;font:inherit;outline:none;
-}
-textarea{resize:vertical;min-height:96px}
-input:focus,textarea:focus{border-color:#3a4a86}
-::placeholder{color:#5f5f69}
-.tabs{display:flex;gap:6px;margin-bottom:14px}
-.tab{background:none;border:1px solid transparent;color:var(--muted);padding:6px 10px;border-radius:6px;font:inherit;cursor:pointer}
-.tab:hover{color:var(--text)}
-.tab.active{background:var(--panel-2);border-color:var(--border);color:var(--text)}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.btn{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
-.btn:hover{background:#202027}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover{background:#3f6cf0}
-.btn.small{padding:5px 10px;font-size:13px}
-.msg{font-size:13px;color:#e08585;min-height:18px}
-.post{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:12px}
-.post-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.author{font-size:13px;font-weight:500;color:#a9b7ff}
-.time{font-size:12px;color:#6f6f79}
-.post-title{margin:0 0 8px;font-size:17px;font-weight:600;line-height:1.35;color:#ececf1}
-.post-body{font-size:14.5px;color:#b9b9c2;white-space:pre-wrap;overflow-wrap:anywhere}
-.post-foot{margin-top:12px}
-.like{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
-.like:hover{color:var(--text)}
-.like.on{color:var(--accent);border-color:#33407a}
-.link{background:none;border:none;padding:0;margin-left:auto;font:inherit;font-size:12px;color:#6f6f79;cursor:pointer}
-.link:hover{color:#e08585}
-.empty{color:var(--muted);text-align:center;padding:48px 0;font-size:14px}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #000; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; }
+  .hidden { display: none !important; }
+
+  #auth { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 20px; background: radial-gradient(circle at 50% 0%, #2a0845, #000 70%); }
+  .auth-box { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 16px; }
+  .logo { font-size: 44px; font-weight: 900; letter-spacing: -1.5px; text-align: center;
+    background: linear-gradient(90deg, #fe2c55, #25f4ee);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tagline { text-align: center; color: #999; font-size: 14px; }
+  .tabs { display: flex; background: #1a1a1a; border-radius: 12px; padding: 4px; }
+  .tab { flex: 1; padding: 10px; background: none; border: none; color: #888;
+    font-weight: 600; cursor: pointer; border-radius: 8px; font-size: 14px; }
+  .tab.active { background: #fe2c55; color: #fff; }
+  #auth-form { display: flex; flex-direction: column; gap: 10px; }
+  #auth-form input { padding: 14px 16px; border-radius: 12px; border: 1px solid #222;
+    background: #111; color: #fff; font-size: 15px; outline: none; }
+  #auth-form input:focus { border-color: #fe2c55; }
+  #auth-form button { padding: 14px; border-radius: 12px; border: none;
+    background: #fe2c55; color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; margin-top: 4px; }
+  #auth-form button:active { opacity: 0.85; }
+  .error { color: #ff5c5c; font-size: 13px; text-align: center; min-height: 18px; }
+
+  #app { position: fixed; inset: 0; }
+  header { position: fixed; top: 0; left: 0; right: 0; height: 56px; display: flex;
+    align-items: center; justify-content: space-between; padding: 0 16px; z-index: 20;
+    background: linear-gradient(180deg, rgba(0,0,0,0.55), transparent); pointer-events: none; }
+  header .logo-sm { font-size: 20px; font-weight: 900;
+    background: linear-gradient(90deg, #fe2c55, #25f4ee);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header button { pointer-events: auto; }
+  .icon-btn { width: 40px; height: 40px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.12); color: #fff; display: grid; place-items: center;
+    cursor: pointer; backdrop-filter: blur(10px); }
+  .icon-btn:active { background: rgba(255,255,255,0.25); }
+
+  #feed { position: absolute; inset: 0; overflow-y: scroll;
+    scroll-snap-type: y mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #feed::-webkit-scrollbar { display: none; }
+
+  .slideshow { position: relative; height: 100vh; scroll-snap-align: start;
+    scroll-snap-stop: always; overflow: hidden; background: #000; }
+  .stage { position: absolute; inset: 0; }
+  .slide { position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0; transition: opacity 0.4s ease; }
+  .slide.active { opacity: 1; }
+
+  .progress { position: absolute; top: 12px; left: 12px; right: 12px;
+    display: flex; gap: 4px; z-index: 5; }
+  .seg { flex: 1; height: 3px; background: rgba(255,255,255,0.25);
+    border-radius: 2px; overflow: hidden; }
+  .fill { height: 100%; width: 0; background: #fff; }
+  @keyframes fillBar { from { width: 0; } to { width: 100%; } }
+
+  .info { position: absolute; left: 16px; right: 90px; bottom: 32px;
+    z-index: 6; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
+  .info .user { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+  .info .title { font-size: 15px; opacity: 0.95; }
+
+  .actions { position: absolute; right: 12px; bottom: 32px; display: flex;
+    flex-direction: column; gap: 16px; align-items: center; z-index: 6; }
+  .like-btn { background: none; border: none; color: #fff; display: flex;
+    flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 4px; }
+  .like-btn svg { width: 34px; height: 34px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6));
+    transition: transform 0.15s ease; }
+  .like-btn:active svg { transform: scale(1.2); }
+  .like-btn .like-count { font-size: 12px; font-weight: 600; }
+  .like-btn.liked svg { color: #fe2c55; }
+
+  .empty { display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100vh; color: #666; gap: 12px; text-align: center; padding: 20px; }
+
+  #create-btn { position: fixed; bottom: 24px; right: 24px; width: 60px; height: 60px;
+    border-radius: 50%; border: none; background: #fe2c55; color: #fff;
+    display: grid; place-items: center; cursor: pointer;
+    box-shadow: 0 6px 24px rgba(254,44,85,0.5); z-index: 15; }
+  #create-btn:active { transform: scale(0.95); }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    z-index: 30; backdrop-filter: blur(6px); }
+  .modal-content { background: #111; border-radius: 16px; padding: 20px; width: 100%;
+    max-width: 440px; display: flex; flex-direction: column; gap: 12px;
+    max-height: 90vh; overflow: auto; border: 1px solid #222; }
+  .modal-content h2 { font-size: 20px; }
+  .modal-content input[type=text] { padding: 12px; border-radius: 10px; border: 1px solid #222;
+    background: #000; color: #fff; font-size: 15px; outline: none; }
+  .modal-content input[type=text]:focus { border-color: #fe2c55; }
+  .file-label { display: block; padding: 14px; border: 2px dashed #333; border-radius: 10px;
+    text-align: center; color: #888; cursor: pointer; font-size: 14px; }
+  .file-label:hover { border-color: #fe2c55; color: #ccc; }
+  .file-label input { display: none; }
+  #preview { display: flex; gap: 6px; flex-wrap: wrap; max-height: 180px; overflow-y: auto; }
+  #preview img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .modal-actions button { padding: 10px 18px; border-radius: 10px; border: none;
+    font-weight: 600; font-size: 14px; cursor: pointer; }
+  #cancel-create { background: #222; color: #fff; }
+  #submit-create { background: #fe2c55; color: #fff; }
+  #submit-create:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="inner">
-    <div class="brand">posts<span class="dot">.</span></div>
-    <div class="user-area" id="userArea"></div>
-  </div>
-</header>
-
-<div class="wrap">
-
-  <section class="panel hidden" id="authPanel">
+<div id="auth" class="hidden">
+  <div class="auth-box">
+    <div class="logo">SlideTok</div>
+    <p class="tagline">Только слайдшоу. Ничего лишнего.</p>
     <div class="tabs">
-      <button class="tab active" id="tabLogin" type="button">Вход</button>
-      <button class="tab" id="tabRegister" type="button">Регистрация</button>
+      <button class="tab active" data-tab="login">Вход</button>
+      <button class="tab" data-tab="register">Регистрация</button>
     </div>
-    <form id="authForm">
-      <div class="field"><input id="authUsername" placeholder="ник" autocomplete="username" maxlength="20"></div>
-      <div class="field"><input id="authPassword" type="password" placeholder="пароль" autocomplete="current-password" maxlength="72"></div>
-      <div class="row">
-        <span class="msg" id="authMsg"></span>
-        <button class="btn primary" id="authSubmit" type="submit">Войти</button>
-      </div>
+    <form id="auth-form">
+      <input id="username" placeholder="Имя пользователя" autocomplete="username" required>
+      <input id="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+      <button type="submit" id="auth-submit">Войти</button>
     </form>
-  </section>
+    <div id="auth-error" class="error"></div>
+    <p class="tagline" style="font-size:12px;margin-top:8px;">Тест: <b>demo</b> / <b>demo</b></p>
+  </div>
+</div>
 
-  <section class="panel hidden" id="composer">
-    <form id="postForm">
-      <div class="field"><input id="postTitle" placeholder="Заголовок" maxlength="120"></div>
-      <div class="field"><textarea id="postBody" placeholder="Текст поста" rows="4" maxlength="5000"></textarea></div>
-      <div class="row">
-        <span class="msg" id="postMsg"></span>
-        <button class="btn primary" type="submit">Опубликовать</button>
+<div id="app" class="hidden">
+  <header>
+    <div class="logo-sm">SlideTok</div>
+    <button id="logout-btn" class="icon-btn" title="Выйти" aria-label="Выйти">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
+  </header>
+
+  <div id="feed"></div>
+
+  <button id="create-btn" title="Создать слайдшоу" aria-label="Создать">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
+
+  <div id="create-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Новое слайдшоу</h2>
+      <input id="new-title" type="text" placeholder="Название (необязательно)" maxlength="80">
+      <label class="file-label">
+        + Добавить изображения
+        <input id="file-input" type="file" accept="image/*" multiple>
+      </label>
+      <div id="preview"></div>
+      <div id="create-error" class="error"></div>
+      <div class="modal-actions">
+        <button id="cancel-create">Отмена</button>
+        <button id="submit-create" disabled>Опубликовать</button>
       </div>
-    </form>
-  </section>
-
-  <section id="feed"></section>
-
+    </div>
+  </div>
 </div>
 
 <script>
-const $ = function(id){ return document.getElementById(id); };
-const state = { user: null, posts: [], tab: 'login' };
+const SVG_HEART = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
 
-function esc(s){
-  return String(s).replace(/[&<>"']/g, function(c){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-  });
+const state = { user: null, players: [], observer: null };
+const $ = (s) => document.querySelector(s);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function fmt(ts){
-  const d = new Date(ts * 1000);
-  const p = function(n){ return String(n).padStart(2, '0'); };
-  return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() +
-         ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-}
-
-async function api(path, opts){
-  opts = opts || {};
-  const init = { method: opts.method || 'GET', credentials: 'same-origin', headers: {} };
-  if (opts.body !== undefined){
-    init.headers['Content-Type'] = 'application/json';
+async function api(path, opts = {}) {
+  const init = { method: opts.method || 'GET', credentials: 'same-origin' };
+  if (opts.body) {
+    init.headers = { 'Content-Type': 'application/json' };
     init.body = JSON.stringify(opts.body);
   }
   const res = await fetch(path, init);
-  let data = null;
-  try { data = await res.json(); } catch (e) { data = null; }
-  if (!res.ok){
-    const detail = data && data.detail;
-    throw new Error(typeof detail === 'string' ? detail : 'Ошибка запроса');
+  if (!res.ok) {
+    let msg = 'Ошибка';
+    try { const j = await res.json(); msg = j.detail || msg; } catch {}
+    throw new Error(msg);
   }
-  return data;
+  return res.json();
 }
 
-function renderUser(){
-  const el = $('userArea');
-  if (state.user){
-    el.innerHTML = '<span class="whoami">' + esc(state.user) + '</span>' +
-                   '<button class="btn small" id="logoutBtn" type="button">Выйти</button>';
-    $('logoutBtn').onclick = logout;
-  } else {
-    el.innerHTML = '<span class="whoami" style="color:#6f6f79">гость</span>';
+class SlideshowPlayer {
+  constructor(el, duration = 3500) {
+    this.el = el;
+    this.slides = Array.from(el.querySelectorAll('.slide'));
+    this.fills = Array.from(el.querySelectorAll('.fill'));
+    this.duration = duration;
+    this.index = 0;
+    this.timer = null;
+    this.active = false;
   }
-  $('authPanel').classList.toggle('hidden', !!state.user);
-  $('composer').classList.toggle('hidden', !state.user);
+  reset() {
+    clearTimeout(this.timer);
+    this.index = 0;
+    this.slides.forEach((s, i) => s.classList.toggle('active', i === 0));
+    this.fills.forEach(f => { f.style.animation = 'none'; f.style.width = '0'; });
+  }
+  play() { this.active = true; this.startSlide(this.index); }
+  pause() { this.active = false; clearTimeout(this.timer); }
+  startSlide(i) {
+    this.index = i;
+    this.slides.forEach((s, j) => s.classList.toggle('active', j === i));
+    this.fills.forEach((f, j) => {
+      f.style.animation = 'none';
+      f.style.width = j < i ? '100%' : '0';
+    });
+    const cur = this.fills[i];
+    if (cur) {
+      void cur.offsetWidth;
+      cur.style.animation = `fillBar ${this.duration}ms linear forwards`;
+    }
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.next(), this.duration);
+  }
+  next() {
+    if (!this.active || !this.slides.length) return;
+    this.startSlide((this.index + 1) % this.slides.length);
+  }
 }
 
-function renderFeed(){
-  const feed = $('feed');
-  if (!state.posts.length){
-    feed.innerHTML = '<div class="empty">Постов пока нет.</div>';
-    return;
-  }
-  feed.innerHTML = state.posts.map(function(p){
-    const del = p.own
-      ? '<button class="link" data-del="' + p.id + '" type="button">удалить</button>'
-      : '';
-    return '<article class="post">' +
-      '<div class="post-head">' +
-        '<span class="author">' + esc(p.author) + '</span>' +
-        '<span class="time">' + fmt(p.created) + '</span>' +
-        del +
-      '</div>' +
-      '<h2 class="post-title">' + esc(p.title) + '</h2>' +
-      '<div class="post-body">' + esc(p.body) + '</div>' +
-      '<div class="post-foot">' +
-        '<button class="like' + (p.liked ? ' on' : '') + '" data-like="' + p.id + '" type="button">' +
-          '▲ <span>' + p.likes + '</span>' +
-        '</button>' +
-      '</div>' +
-    '</article>';
-  }).join('');
+function buildSlideshowEl(s) {
+  const el = document.createElement('div');
+  el.className = 'slideshow';
+  el.dataset.id = s.id;
+
+  const stage = document.createElement('div');
+  stage.className = 'stage';
+  s.slides.forEach((src, i) => {
+    const img = document.createElement('img');
+    img.className = 'slide' + (i === 0 ? ' active' : '');
+    img.src = src;
+    stage.appendChild(img);
+  });
+  el.appendChild(stage);
+
+  const prog = document.createElement('div');
+  prog.className = 'progress';
+  s.slides.forEach(() => {
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    seg.appendChild(fill);
+    prog.appendChild(seg);
+  });
+  el.appendChild(prog);
+
+  const info = document.createElement('div');
+  info.className = 'info';
+  info.innerHTML = `<div class="user">@${escapeHtml(s.username)}</div><div class="title">${escapeHtml(s.title)}</div>`;
+  el.appendChild(info);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const likeBtn = document.createElement('button');
+  likeBtn.className = 'like-btn' + (s.liked ? ' liked' : '');
+  likeBtn.innerHTML = `${SVG_HEART}<span class="like-count">${s.likes}</span>`;
+  likeBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      const r = await api('/api/slideshows/' + s.id + '/like', { method: 'POST' });
+      likeBtn.classList.toggle('liked', r.liked);
+      likeBtn.querySelector('.like-count').textContent = r.likes;
+    } catch (err) { alert(err.message); }
+  });
+  actions.appendChild(likeBtn);
+  el.appendChild(actions);
+
+  const player = new SlideshowPlayer(el);
+  el._player = player;
+  state.players.push(player);
+  return el;
 }
 
-async function loadPosts(){
+function setupObserver() {
+  if (state.observer) state.observer.disconnect();
+  const feed = $('#feed');
+  state.observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const player = entry.target._player;
+      if (!player) return;
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        player.reset();
+        player.play();
+      } else {
+        player.pause();
+      }
+    });
+  }, { root: feed, threshold: [0.5] });
+  state.players.forEach(p => state.observer.observe(p.el));
+}
+
+async function loadFeed() {
+  const feed = $('#feed');
+  state.players.forEach(p => p.pause());
+  state.players = [];
+  if (state.observer) { state.observer.disconnect(); state.observer = null; }
+  feed.innerHTML = '';
+
   try {
-    const data = await api('/api/posts');
-    state.posts = data.posts || [];
+    const list = await api('/api/slideshows');
+    if (!list.length) {
+      feed.innerHTML = '<div class="empty"><div>Пока нет слайдшоу</div>' +
+        '<div style="font-size:13px;color:#444">Нажмите + чтобы создать первое</div></div>';
+      return;
+    }
+    list.forEach(s => feed.appendChild(buildSlideshowEl(s)));
+    setupObserver();
   } catch (e) {
-    state.posts = [];
+    feed.innerHTML = `<div class="empty">Ошибка: ${escapeHtml(e.message)}</div>`;
   }
-  renderFeed();
 }
 
-function flashAuth(text){
-  $('authMsg').textContent = text;
-  $('authPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+function showAuth() {
+  $('#auth').classList.remove('hidden');
+  $('#app').classList.add('hidden');
+}
+async function showApp() {
+  $('#auth').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  await loadFeed();
 }
 
-function setTab(tab){
-  state.tab = tab;
-  $('tabLogin').classList.toggle('active', tab === 'login');
-  $('tabRegister').classList.toggle('active', tab === 'register');
-  $('authSubmit').textContent = tab === 'login' ? 'Войти' : 'Создать аккаунт';
-  $('authPassword').setAttribute('autocomplete', tab === 'login' ? 'current-password' : 'new-password');
-  $('authMsg').textContent = '';
-}
+let authMode = 'login';
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    authMode = tab.dataset.tab;
+    $('#auth-submit').textContent = authMode === 'login' ? 'Войти' : 'Создать аккаунт';
+    $('#auth-error').textContent = '';
+  });
+});
 
-async function logout(){
-  try { await api('/api/logout', { method: 'POST' }); } catch (e) {}
+$('#auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = $('#username').value.trim();
+  const password = $('#password').value;
+  $('#auth-error').textContent = '';
+  try {
+    const path = authMode === 'login' ? '/api/login' : '/api/register';
+    const user = await api(path, { method: 'POST', body: { username, password } });
+    state.user = user;
+    $('#auth-form').reset();
+    await showApp();
+  } catch (err) {
+    $('#auth-error').textContent = err.message;
+  }
+});
+
+$('#logout-btn').addEventListener('click', async () => {
+  try { await api('/api/logout', { method: 'POST' }); } catch {}
   state.user = null;
-  setTab('login');
-  renderUser();
-  await loadPosts();
+  state.players.forEach(p => p.pause());
+  showAuth();
+});
+
+const createState = { slides: [] };
+
+$('#create-btn').addEventListener('click', () => {
+  $('#create-modal').classList.remove('hidden');
+  $('#new-title').value = '';
+  $('#preview').innerHTML = '';
+  $('#create-error').textContent = '';
+  createState.slides = [];
+  $('#submit-create').disabled = true;
+});
+$('#cancel-create').addEventListener('click', () => {
+  $('#create-modal').classList.add('hidden');
+});
+
+function readImageFile(file, maxSize = 1200) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Не удалось открыть изображение'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          const scale = maxSize / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
-$('tabLogin').onclick = function(){ setTab('login'); };
-$('tabRegister').onclick = function(){ setTab('register'); };
-
-$('authForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  const username = $('authUsername').value.trim();
-  const password = $('authPassword').value;
-  $('authMsg').textContent = '';
-  try {
-    const path = state.tab === 'login' ? '/api/login' : '/api/register';
-    const data = await api(path, { method: 'POST', body: { username: username, password: password } });
-    state.user = data.username;
-    $('authPassword').value = '';
-    $('authMsg').textContent = '';
-    renderUser();
-    await loadPosts();
-  } catch (err) {
-    $('authMsg').textContent = err.message;
-  }
-});
-
-$('postForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  const title = $('postTitle').value.trim();
-  const body = $('postBody').value.trim();
-  $('postMsg').textContent = '';
-  if (!title || !body){
-    $('postMsg').textContent = 'Заполните заголовок и текст';
-    return;
-  }
-  try {
-    const post = await api('/api/posts', { method: 'POST', body: { title: title, body: body } });
-    state.posts.unshift(post);
-    $('postTitle').value = '';
-    $('postBody').value = '';
-    renderFeed();
-    $('feed').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (err) {
-    $('postMsg').textContent = err.message;
-  }
-});
-
-$('feed').addEventListener('click', async function(e){
-  const likeBtn = e.target.closest('[data-like]');
-  const delBtn = e.target.closest('[data-del]');
-
-  if (likeBtn){
-    if (!state.user){ flashAuth('Войдите, чтобы ставить отметки'); return; }
-    const id = Number(likeBtn.dataset.like);
+$('#file-input').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  $('#create-error').textContent = '';
+  const preview = $('#preview');
+  for (const file of files) {
     try {
-      const post = await api('/api/posts/' + id + '/like', { method: 'POST' });
-      const i = state.posts.findIndex(function(x){ return x.id === id; });
-      if (i >= 0) state.posts[i] = post;
-      renderFeed();
+      const dataUrl = await readImageFile(file);
+      createState.slides.push(dataUrl);
+      const thumb = document.createElement('img');
+      thumb.src = dataUrl;
+      preview.appendChild(thumb);
     } catch (err) {
-      flashAuth(err.message);
-    }
-    return;
-  }
-
-  if (delBtn){
-    const id = Number(delBtn.dataset.del);
-    if (!confirm('Удалить пост?')) return;
-    try {
-      await api('/api/posts/' + id, { method: 'DELETE' });
-      state.posts = state.posts.filter(function(x){ return x.id !== id; });
-      renderFeed();
-    } catch (err) {
-      alert(err.message);
+      $('#create-error').textContent = err.message;
     }
   }
+  $('#submit-create').disabled = createState.slides.length === 0;
+  e.target.value = '';
 });
 
-async function init(){
+$('#submit-create').addEventListener('click', async () => {
+  if (!createState.slides.length) return;
+  $('#submit-create').disabled = true;
+  $('#create-error').textContent = '';
   try {
-    const me = await api('/api/me');
-    state.user = me.username || null;
-  } catch (e) {
-    state.user = null;
+    await api('/api/slideshows', {
+      method: 'POST',
+      body: { title: $('#new-title').value, slides: createState.slides },
+    });
+    $('#create-modal').classList.add('hidden');
+    await loadFeed();
+    $('#feed').scrollTo({ top: 0 });
+  } catch (err) {
+    $('#create-error').textContent = err.message;
+    $('#submit-create').disabled = false;
   }
-  setTab('login');
-  renderUser();
-  await loadPosts();
-}
+});
 
-init();
+(async function init() {
+  try {
+    state.user = await api('/api/me');
+    await showApp();
+  } catch {
+    showAuth();
+  }
+})();
 </script>
 </body>
 </html>
@@ -514,11 +680,9 @@ init();
 
 
 @app.get("/", response_class=HTMLResponse)
-def index():
-    return HTML
+async def index():
+    return HTML_PAGE
 
 
 if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
