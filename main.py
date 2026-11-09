@@ -9,7 +9,7 @@ from typing import Optional
 
 app = FastAPI()
 
-APP_VERSION = "0.11"
+APP_VERSION = "0.12"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -20,6 +20,7 @@ sb: Client = create_client(S_URL, S_KEY)
 
 deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
+MAX_POST_LEN = 5000
 
 # --- RATE LIMITING ---
 _RATE_BUCKETS = {}
@@ -91,11 +92,6 @@ def valid_b64(s):
     if len(s) > MAX_B64_LEN or not s.startswith("data:image/"): return ""
     return s
 
-def sanitize_q(q):
-    if not q: return ""
-    q = q.strip()[:100]
-    return q.replace("\\", "").replace("%", "").replace("_", "")
-
 def _uptime_str(lang="ru"):
     delta = datetime.now(timezone.utc) - SERVER_START_DT
     sec = int(delta.total_seconds())
@@ -126,11 +122,23 @@ async def _fetch_posts(nickname):
         return res.data or []
     except Exception: return []
 
+async def _fetch_all_posts(limit=50):
+    try:
+        res = await asyncio.to_thread(lambda: sb.table('posts').select('*').order('created_at', desc=True).limit(limit).execute())
+        return res.data or []
+    except Exception: return []
+
 async def _fetch_suggestions(nickname):
     try:
         res = await asyncio.to_thread(lambda: sb.table('suggestions').select('*').eq('author_nickname', nickname).eq('status', 'pending').order('created_at', desc=True).execute())
         return res.data or []
     except Exception: return []
+
+async def _fetch_suggestions_count(nickname):
+    try:
+        res = await asyncio.to_thread(lambda: sb.table('suggestions').select('id', count='exact').eq('author_nickname', nickname).eq('status', 'pending').execute())
+        return res.count if getattr(res, 'count', None) is not None else len(res.data or [])
+    except Exception: return 0
 
 async def _stats_data():
     users_count, posts_count, sugg_count, last_update = 0, 0, 0, None
@@ -184,8 +192,8 @@ async def ws_endpoint(websocket: WebSocket):
 async def manifest():
     return JSONResponse(
         {"name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
-         "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
-         "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]},
+         "display": "standalone", "background_color": "#0f0f0f", "theme_color": "#0f0f0f",
+         "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmMDAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]},
         headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/sw.js")
@@ -292,16 +300,16 @@ LOCALES = {
         "toast_copy_fail": "Не удалось скопировать", "toast_approved": "Одобрено!",
         "toast_rejected": "Отклонено!", "toast_approved_removed": "Одобрено и удалено!",
         "toast_rejected_removed": "Отклонено и удалено!", "toast_failed": "Ошибка:", "toast_csrf": "Ошибка CSRF",
-        "search_title": "ПОИСК", "search_placeholder": "Введите запрос...",
-        "search_type_all": "Всё", "search_type_authors": "Авторы", "search_type_records": "Записи",
-        "search_author_filter": "Фильтр по автору (никнейм)",
-        "search_btn": "Найти", "search_no_results": "Ничего не найдено",
-        "search_found_authors": "Найденные авторы", "search_found_records": "Найденные записи",
         "search_link": "Поиск", "stats_link": "Статистика",
         "stats_title": "СТАТИСТИКА", "stats_users": "Пользователей", "stats_posts": "Записей",
         "stats_sugges": "Предложек", "stats_started": "Сервер запущен", "stats_last_update": "Последнее обновление",
         "stats_uptime": "Аптайм", "stats_contacts": "Связь с администрацией",
-        "stats_contacts_desc": "По любым вопросам и предложениям:", "stats_back": "На главную"
+        "stats_contacts_desc": "По любым вопросам и предложениям:", "stats_back": "На главную",
+        "feed_title": "ГЛАВНАЯ", "feed_link": "Главная", "feed_empty": "Записей пока нет...",
+        "suggestions_count": "предложек", "create_new": "Создать",
+        "choose_file": "Выбрать файл", "no_file": "Файл не выбран",
+        "post_too_long": "Слишком длинный пост (макс. 5000 символов)",
+        "menu": "Меню", "close": "Закрыть", "upload": "Загрузить"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -349,16 +357,16 @@ LOCALES = {
         "toast_copy_fail": "Failed to copy", "toast_approved": "Approved!",
         "toast_rejected": "Rejected!", "toast_approved_removed": "Approved & removed!",
         "toast_rejected_removed": "Rejected & removed!", "toast_failed": "Error:", "toast_csrf": "CSRF error",
-        "search_title": "SEARCH", "search_placeholder": "Enter query...",
-        "search_type_all": "All", "search_type_authors": "Authors", "search_type_records": "Records",
-        "search_author_filter": "Filter by author (nickname)",
-        "search_btn": "Search", "search_no_results": "Nothing found",
-        "search_found_authors": "Found authors", "search_found_records": "Found records",
         "search_link": "Search", "stats_link": "Stats",
         "stats_title": "STATISTICS", "stats_users": "Users", "stats_posts": "Records",
         "stats_sugges": "Suggestions", "stats_started": "Server started", "stats_last_update": "Last update",
         "stats_uptime": "Uptime", "stats_contacts": "Contact administration",
-        "stats_contacts_desc": "For questions and suggestions:", "stats_back": "Back to home"
+        "stats_contacts_desc": "For questions and suggestions:", "stats_back": "Back to home",
+        "feed_title": "HOME", "feed_link": "Home", "feed_empty": "No records yet...",
+        "suggestions_count": "suggestions", "create_new": "Create",
+        "choose_file": "Choose file", "no_file": "No file chosen",
+        "post_too_long": "Post too long (max 5000 chars)",
+        "menu": "Menu", "close": "Close", "upload": "Upload"
     }
 }
 
@@ -369,8 +377,8 @@ def format_date(iso):
     try: return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M")
     except: return iso[:10]
 
-SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
-SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
+SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#f1f1f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
+SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='#f1f1f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
 
 _CSS_CACHE = None
 def get_css():
@@ -378,153 +386,466 @@ def get_css():
     if _CSS_CACHE is None:
         _CSS_CACHE = """
         <style>
-            * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-            a { color: black; text-decoration: none; font-weight: bold; }
-            a:hover { text-decoration: underline; }
-            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
-            .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
-            .footer a { color: #000; border-bottom: 2px solid #000; }
-            .footer-links { font-size: 14px; color: #777; }
-            .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
-            .footer-contacts { font-size: 13px; color: #666; font-weight: normal; }
-            .footer-contacts a { color: #2a5db0; }
-            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
-            .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
-            .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
-            .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
-            .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
-            textarea { text-align: left; resize: vertical; }
-            input[type="file"] { background-color: #a9a9a9; border: none; padding: 10px; font-size: 15px; width: 100%; cursor: pointer; }
-            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
-            button:hover, .btn:hover { background-color: #8c8c8c; }
-            button:disabled { opacity: 0.6; cursor: wait; }
-            .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
-            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
-            .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
-            .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
-            .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
-            .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
-            .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
-            .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
-            .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
-            .avatar { width: 120px; height: 120px; border-radius: 8px; object-fit: cover; display: block; margin: 0 auto 10px auto; border: 3px solid #a9a9a9; background: #333; cursor: zoom-in; }
-            .logout-btn { margin-top: 10px; background: #ff4d4d; }
-            .logout-btn:hover { background: #cc0000; }
-            .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
-            .edit-btn:hover { background: #1a82e2; }
-            .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; }
-            .sugges-btn:hover { background: #8e44ad; }
-            .search-sidebar-btn { background: #16a085; color: white; margin-top: 5px; }
-            .search-sidebar-btn:hover { background: #138d75; }
-            .stats-sidebar-btn { background: #34495e; color: white; margin-top: 5px; }
-            .stats-sidebar-btn:hover { background: #2c3e50; }
-            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-            .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
-            .create-post-box textarea { height: 100px; font-size: 16px; padding: 10px; border-radius: 3px; }
-            .create-post-box label { color: #fff; font-size: 14px; font-weight: bold; display: block; margin-top: 5px;}
-            .img-preview { max-width: 100%; max-height: 200px; border-radius: 5px; margin-top: 8px; display: block; margin-left: auto; margin-right: auto; cursor: zoom-in;}
-            .post-item { background: #a9a9a9; padding: 15px; font-size: 16px; word-wrap: break-word; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px;}
-            .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-            .post-content { margin-bottom: 10px; font-size: 18px; text-align: center; }
-            .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
-            .post-image { max-width: 100%; max-height: 500px; object-fit: contain; border-radius: 5px; margin: 10px auto; display: block; cursor: zoom-in; }
-            .post-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #888; padding-top: 5px; flex-wrap: wrap; gap: 10px; }
-            .post-date { font-size: 12px; color: #555; margin-left: auto; }
-            .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; }
-            .posts-area { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; min-height: 300px;}
-            .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
-            .post-wrapper { position: relative; transition: opacity 0.3s ease; }
-            .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
-            .post-wrapper:hover .post-actions { opacity: 1; }
-            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
-            .action-btn:hover { background: #ff4d4d; }
-            .action-btn.pin-btn:hover { background: #4da6ff; }
-            .action-btn.link-btn:hover { background: #f1c40f; color: black; }
-            .suggestion-card { background: #a9a9a9; padding: 15px; border-radius: 5px; border-left: 5px solid #9b59b6; margin-bottom: 10px; }
-            .sugg-author { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #888; flex-wrap: wrap;}
-            .sugg-name { font-weight: bold; color: #333; font-size: 14px; }
-            .sugg-date { font-size: 12px; color: #666; }
-            .sugg-content { font-size: 16px; margin-bottom: 10px; text-align: center; }
-            .sugg-actions { display: flex; gap: 10px; }
-            .sugg-approve { background: #2ecc71; color: white; padding: 8px; }
-            .sugg-approve:hover { background: #27ae60; }
-            .sugg-reject { background: #e74c3c; color: white; padding: 8px; }
-            .sugg-reject:hover { background: #c0392b; }
-            .rules-box { background: #fff9e6; border-left: 5px solid #9b59b6; padding: 15px; border-radius: 5px; margin-bottom: 15px; color: #000; }
-            .rules-box b { display: block; margin-bottom: 8px; font-size: 15px; }
-            .rules-content { font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
-            .toggle-row { background: #a9a9a9; padding: 12px; border-radius: 3px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: bold; cursor: pointer; }
-            .toggle-row input[type="checkbox"] { width: 24px; height: 24px; cursor: pointer; }
-            .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
-            .status-Принято, .status-Accepted { background: #4da6ff; }
-            .status-В-работе, .status-In-Progress { background: #f1c40f; }
-            .status-Исправлено, .status-Fixed { background: #2ecc71; }
-            .status-Отклонено, .status-Rejected { background: #e74c3c; }
-            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
-            .lang-btn:hover { background: #a9a9a9; color: black; }
-            .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
-            .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
-            .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
-            .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
-            #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; max-width: 90%; }
-            #toast.show { opacity: 1; }
-            .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; padding: 15px; }
-            .modal-overlay.show { display: flex; }
-            .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 100%; text-align: center; border: 5px solid #000; }
-            .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+            :root {
+                --bg: #0f0f0f;
+                --bg-elevated: #212121;
+                --bg-hover: #3f3f3f;
+                --text: #f1f1f1;
+                --text-secondary: #aaaaaa;
+                --border: #303030;
+                --accent: #ff0000;
+                --accent-hover: #cc0000;
+                --radius: 12px;
+            }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+                font-family: 'Roboto', Arial, sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                padding-top: 56px;
+            }
+            a { color: var(--text); text-decoration: none; }
+            a:hover { text-decoration: none; }
+            /* === HEADER === */
+            header {
+                position: fixed; top: 0; left: 0; right: 0;
+                height: 56px;
+                background: var(--bg);
+                display: flex;
+                align-items: center;
+                padding: 0 16px;
+                gap: 16px;
+                z-index: 1000;
+                border-bottom: 1px solid var(--border);
+            }
+            .logo {
+                display: flex; align-items: center; gap: 8px;
+                font-weight: bold; font-size: 20px; color: var(--text);
+                text-decoration: none;
+            }
+            .logo-icon {
+                width: 32px; height: 32px;
+                background: var(--accent);
+                border-radius: 8px;
+                display: flex; align-items: center; justify-content: center;
+                color: white; font-size: 18px; font-weight: bold;
+            }
+            .header-spacer { flex: 1; }
+            .header-user {
+                display: flex; align-items: center; gap: 12px;
+            }
+            .header-user img {
+                width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
+            }
+            /* === LAYOUT === */
+            .layout {
+                display: flex;
+                flex: 1;
+            }
+            .sidebar {
+                width: 240px;
+                background: var(--bg);
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                position: sticky;
+                top: 56px;
+                height: calc(100vh - 56px);
+                overflow-y: auto;
+                flex-shrink: 0;
+            }
+            .sidebar-item {
+                display: flex; align-items: center; gap: 16px;
+                padding: 10px 16px;
+                border-radius: 8px;
+                color: var(--text);
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.15s;
+                text-decoration: none;
+                position: relative;
+            }
+            .sidebar-item:hover { background: var(--bg-elevated); }
+            .sidebar-item.active { background: var(--bg-elevated); font-weight: bold; }
+            .sidebar-item .badge {
+                background: var(--accent); color: white;
+                border-radius: 10px; padding: 2px 8px; font-size: 12px;
+                margin-left: auto;
+            }
+            .main-content {
+                flex: 1;
+                padding: 24px;
+                min-width: 0;
+            }
+            /* === AUTH === */
+            .auth-container {
+                display: flex; justify-content: center; align-items: center;
+                min-height: calc(100vh - 56px); padding: 20px;
+            }
+            .auth-box {
+                background: var(--bg-elevated);
+                padding: 40px;
+                border-radius: var(--radius);
+                width: 100%;
+                max-width: 400px;
+            }
+            .auth-box h1 { font-size: 28px; margin-bottom: 20px; text-align: center; }
+            .auth-box input, .auth-box textarea, .auth-box select {
+                background: var(--bg);
+                border: 1px solid var(--border);
+                color: var(--text);
+                padding: 12px 16px;
+                border-radius: 8px;
+                font-size: 16px;
+                width: 100%;
+                margin-bottom: 12px;
+                outline: none;
+            }
+            .auth-box input:focus { border-color: var(--accent); }
+            .auth-box button {
+                background: var(--accent);
+                color: white;
+                border: none;
+                padding: 12px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                width: 100%;
+                margin-top: 8px;
+            }
+            .auth-box button:hover { background: var(--accent-hover); }
+            .auth-footer { margin-top: 16px; text-align: center; font-size: 14px; color: var(--text-secondary); }
+            .auth-footer a { color: var(--accent); }
+            /* === FEED GRID === */
+            .feed-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                gap: 24px 16px;
+            }
+            .post-card {
+                background: var(--bg-elevated);
+                border-radius: var(--radius);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                transition: transform 0.15s;
+                position: relative;
+            }
+            .post-card:hover { transform: scale(1.02); }
+            .post-card-img {
+                width: 100%;
+                aspect-ratio: 16/9;
+                object-fit: cover;
+                background: var(--bg);
+                display: block;
+            }
+            .post-card-body {
+                padding: 12px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .post-card-title {
+                font-size: 16px;
+                font-weight: 500;
+                line-height: 1.4;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .post-card-meta {
+                font-size: 14px;
+                color: var(--text-secondary);
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+            }
+            .post-card-actions {
+                position: absolute;
+                top: 8px; right: 8px;
+                display: flex;
+                gap: 4px;
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+            .post-card:hover .post-card-actions { opacity: 1; }
+            .icon-btn {
+                background: rgba(0,0,0,0.6);
+                color: white;
+                border: none;
+                border-radius: 50%;
+                width: 32px; height: 32px;
+                display: flex; align-items: center; justify-content: center;
+                cursor: pointer;
+                font-size: 14px;
+            }
+            .icon-btn:hover { background: rgba(0,0,0,0.8); }
+            /* === PROFILE / CABINET === */
+            .profile-header {
+                display: flex; gap: 24px; align-items: flex-start;
+                margin-bottom: 32px;
+                background: var(--bg-elevated);
+                padding: 24px;
+                border-radius: var(--radius);
+            }
+            .profile-avatar {
+                width: 120px; height: 120px;
+                border-radius: 50%;
+                object-fit: cover;
+                background: var(--bg);
+                flex-shrink: 0;
+                cursor: zoom-in;
+            }
+            .profile-avatar-placeholder {
+                width: 120px; height: 120px;
+                border-radius: 50%;
+                background: var(--bg);
+                flex-shrink: 0;
+            }
+            .profile-info h1 { font-size: 32px; margin-bottom: 8px; }
+            .profile-info .username { color: var(--text-secondary); margin-bottom: 8px; }
+            .profile-info .bio { color: var(--text-secondary); font-size: 14px; max-width: 500px; }
+            .profile-stats {
+                display: flex; gap: 24px; margin-top: 16px;
+                font-size: 14px; color: var(--text-secondary);
+            }
+            .profile-stats b { color: var(--text); }
+            /* === BUTTONS === */
+            .btn {
+                display: inline-flex; align-items: center; justify-content: center;
+                padding: 10px 20px;
+                border-radius: 20px;
+                border: none;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.15s;
+                text-decoration: none;
+                gap: 8px;
+            }
+            .btn-primary { background: var(--accent); color: white; }
+            .btn-primary:hover { background: var(--accent-hover); }
+            .btn-secondary { background: var(--bg-elevated); color: var(--text); }
+            .btn-secondary:hover { background: var(--bg-hover); }
             .btn-danger { background: #ff4d4d; color: white; }
             .btn-danger:hover { background: #cc0000; }
-            .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left;}
-            .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
-            .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold;}
-            .og-desc { margin: 0; font-size: 14px; color: #555; }
-            #img-viewer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 20000; display: none; justify-content: center; align-items: center; cursor: zoom-out; padding: 10px; }
+            .btn-small { padding: 6px 12px; font-size: 12px; border-radius: 16px; }
+            /* === FORMS === */
+            .form-group { margin-bottom: 16px; }
+            .form-group label { display: block; margin-bottom: 6px; font-size: 14px; color: var(--text-secondary); }
+            .form-group input, .form-group textarea, .form-group select {
+                width: 100%;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                color: var(--text);
+                padding: 12px 16px;
+                border-radius: 8px;
+                font-size: 16px;
+                outline: none;
+                font-family: inherit;
+            }
+            .form-group textarea { resize: vertical; min-height: 120px; }
+            .form-group input:focus, .form-group textarea:focus { border-color: var(--accent); }
+            .form-group .hint { font-size: 12px; color: var(--text-secondary); text-align: right; margin-top: 4px; }
+            .form-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+            /* === TOGGLE === */
+            .toggle-row {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: 12px 16px;
+                background: var(--bg);
+                border-radius: 8px;
+                margin-bottom: 12px;
+                font-size: 14px;
+                cursor: pointer;
+            }
+            .toggle-row input[type="checkbox"] {
+                width: 20px; height: 20px;
+                accent-color: var(--accent);
+                cursor: pointer;
+            }
+            /* === CUSTOM FILE INPUT === */
+            .custom-file-upload {
+                display: inline-flex; align-items: center; gap: 8px;
+                padding: 10px 20px;
+                border-radius: 20px;
+                background: var(--bg-elevated);
+                color: var(--text);
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.15s;
+                border: 1px solid var(--border);
+            }
+            .custom-file-upload:hover { background: var(--bg-hover); }
+            .custom-file-upload input[type="file"] { display: none; }
+            /* === IMAGE PREVIEW === */
+            .img-preview {
+                max-width: 100%;
+                max-height: 200px;
+                border-radius: 8px;
+                margin: 8px 0;
+                display: block;
+                cursor: zoom-in;
+            }
+            /* === POST FULL VIEW (single) === */
+            .post-full {
+                background: var(--bg-elevated);
+                border-radius: var(--radius);
+                padding: 24px;
+                margin-bottom: 24px;
+            }
+            .post-full .post-full-content {
+                font-size: 18px;
+                line-height: 1.6;
+                margin-bottom: 16px;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+            .post-full .post-full-image {
+                width: 100%;
+                max-height: 500px;
+                object-fit: cover;
+                border-radius: 8px;
+                margin: 16px 0;
+                cursor: zoom-in;
+                display: block;
+            }
+            .post-full .post-full-meta {
+                display: flex; justify-content: space-between; align-items: center;
+                font-size: 14px; color: var(--text-secondary);
+                border-top: 1px solid var(--border);
+                padding-top: 16px;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            /* === SUGGESTIONS === */
+            .suggestion-card {
+                background: var(--bg-elevated);
+                border-radius: var(--radius);
+                padding: 16px;
+                margin-bottom: 12px;
+            }
+            .suggestion-header {
+                display: flex; justify-content: space-between; align-items: center;
+                margin-bottom: 12px;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .suggestion-name { font-weight: 500; }
+            .suggestion-date { font-size: 12px; color: var(--text-secondary); }
+            .suggestion-content {
+                font-size: 15px;
+                margin-bottom: 12px;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+            .suggestion-image {
+                width: 100%;
+                max-height: 200px;
+                object-fit: cover;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                cursor: zoom-in;
+            }
+            .suggestion-actions { display: flex; gap: 8px; }
+            /* === PHOTO VIEWER === */
+            #img-viewer {
+                display: none;
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.95);
+                z-index: 20000;
+                justify-content: center; align-items: center;
+                cursor: zoom-out;
+                padding: 20px;
+            }
             #img-viewer.show { display: flex; }
-            #img-viewer-img { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 5px; }
-            .img-viewer-close { position: absolute; top: 15px; right: 15px; background: rgba(255,255,255,0.2); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+            #img-viewer-img {
+                max-width: 95vw; max-height: 95vh;
+                object-fit: contain;
+                border-radius: 8px;
+                user-select: none;
+            }
+            .img-viewer-close {
+                position: absolute; top: 20px; right: 20px;
+                background: rgba(255,255,255,0.2); color: white;
+                border: none; border-radius: 50%;
+                width: 48px; height: 48px;
+                font-size: 28px; cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+            }
             .img-viewer-close:hover { background: rgba(255,255,255,0.4); }
-            .search-form-row { display: flex; gap: 10px; flex-wrap: wrap; }
-            .search-form-row > * { flex: 1; min-width: 150px; }
-            .search-result-card { background: #a9a9a9; padding: 12px; border-radius: 5px; margin-bottom: 8px; }
-            .search-result-card a { color: #000; }
-            .search-avatar { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; float: left; margin-right: 10px; }
-            .search-empty { color: #888; text-align: center; padding: 20px; }
-            .stats-card { background: #a9a9a9; padding: 15px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;}
-            .stats-card b { font-size: 17px; }
-            .stats-value { font-weight: bold; color: #1e8449; font-size: 22px; }
-            .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
-            .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
-            .contacts-box a { color: #4da6ff; }
-            @media (max-width: 768px) {
-                body { padding: 8px; }
-                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
-                .auth-wrapper { width: 100%; }
-                .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
-                .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
-                .dashboard-container { flex-direction: column; gap: 15px; }
-                .sidebar { width: 100%; }
-                .main-content { width: 100%; }
-                .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
-                .error-msg { text-align: center; }
-                .login-lang-wrapper { justify-content: center; }
-                .create-post-box { padding: 10px; }
-                .post-item { padding: 10px; }
-                .post-footer { flex-direction: column; align-items: flex-start; gap: 5px; }
-                .post-date { margin-left: 0; }
-                input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
-                button, .btn { font-size: 16px; padding: 14px; }
-                .post-content { font-size: 16px; }
-                .sidebar h2 { font-size: 20px; }
-                .avatar { width: 100px; height: 100px; }
-                .post-image { max-height: 400px; }
-                .sugg-actions { flex-direction: column; }
-                .action-btn { padding: 8px 12px; font-size: 13px; }
-                .modal-box { padding: 20px; }
-                .stats-card { font-size: 15px;}
-                .stats-value { font-size: 18px;}
+            /* === MODALS === */
+            .modal-overlay {
+                display: none;
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.7);
+                z-index: 10000;
+                justify-content: center; align-items: center;
+                padding: 20px;
+            }
+            .modal-overlay.show { display: flex; }
+            .modal-box {
+                background: var(--bg-elevated);
+                padding: 32px;
+                border-radius: var(--radius);
+                max-width: 480px;
+                width: 100%;
+                text-align: center;
+                position: relative;
+            }
+            .modal-actions { display: flex; gap: 12px; margin-top: 24px; justify-content: center; }
+            .modal-actions .btn { flex: 1; }
+            /* === TOAST === */
+            #toast {
+                position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+                background: var(--bg-elevated);
+                color: var(--text);
+                padding: 12px 24px;
+                border-radius: 8px;
+                opacity: 0;
+                transition: opacity 0.3s;
+                z-index: 9999;
+                font-weight: 500;
+                pointer-events: none;
+                border: 1px solid var(--border);
+            }
+            #toast.show { opacity: 1; }
+            /* === FOOTER === */
+            .footer {
+                padding: 24px;
+                text-align: center;
+                color: var(--text-secondary);
+                font-size: 13px;
+                border-top: 1px solid var(--border);
+                margin-top: auto;
+            }
+            .footer a { color: var(--text-secondary); }
+            .footer a:hover { color: var(--text); }
+            .footer-links { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+            .footer-contacts { font-size: 12px; margin-top: 8px; }
+            .footer-contacts a { color: var(--accent); }
+            /* === ERRORS === */
+            .error-msg { color: #ff4d4d; font-size: 14px; margin-top: 8px; min-height: 20px; }
+            /* === SEARCH (removed) === */
+            /* === RESPONSIVE === */
+            @media (max-width: 900px) {
+                .sidebar { display: none; }
+                .main-content { padding: 16px; }
+                .feed-grid { grid-template-columns: 1fr; }
+                .profile-header { flex-direction: column; align-items: center; text-align: center; }
+                .profile-info h1 { font-size: 24px; }
+                .profile-stats { justify-content: center; }
+            }
+            @media (min-width: 901px) {
+                .menu-toggle { display: none; }
             }
         </style>
         """
@@ -540,10 +861,19 @@ def get_js(lang, token, current_user=""):
             n: "__NOPOSTS__", cl: "__COPYLINK__", sf: "__SUGG_FILL__", ss: "__SUGG_SELF__", su: "__SUGG_SUCCESS__",
             ic: "__IMG_COMPRESSING__", ir: "__IMG_READY__", ie: "__IMG_ERROR__", ib: "__IMG_BIG__",
             tn: "__TOAST_NEW__", tl: "__TOAST_LINK__", tc: "__TOAST_COPY_FAIL__",
-            tar: "__TOAST_APPROVED_REMOVED__", trr: "__TOAST_REJECTED_REMOVED__", tf: "__TOAST_FAILED__"
+            tar: "__TOAST_APPROVED_REMOVED__", trr: "__TOAST_REJECTED_REMOVED__", tf: "__TOAST_FAILED__",
+            ptl: "__POST_TOO_LONG__"
         };
-        function viewImage(src) { if (!src) return; document.getElementById('img-viewer-img').src = src; document.getElementById('img-viewer').classList.add('show'); document.body.style.overflow = 'hidden'; }
-        function closeImgViewer() { document.getElementById('img-viewer').classList.remove('show'); document.body.style.overflow = ''; }
+        function viewImage(src) {
+            if (!src) return;
+            document.getElementById('img-viewer-img').src = src;
+            document.getElementById('img-viewer').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeImgViewer() {
+            document.getElementById('img-viewer').classList.remove('show');
+            document.body.style.overflow = '';
+        }
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImgViewer(); });
         async function compressImage(file, maxWidth=1000, quality=0.75) {
             return new Promise((resolve, reject) => {
@@ -558,7 +888,7 @@ def get_js(lang, token, current_user=""):
                             if (w > maxWidth) { h = Math.round(h*maxWidth/w); w = maxWidth; }
                             c.width = w; c.height = h;
                             const ctx = c.getContext('2d');
-                            ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
+                            ctx.fillStyle = '#000'; ctx.fillRect(0,0,w,h);
                             ctx.drawImage(img, 0, 0, w, h);
                             let b64 = c.toDataURL('image/jpeg', quality);
                             let q = quality;
@@ -576,27 +906,42 @@ def get_js(lang, token, current_user=""):
         }
         window.postImageCache = ""; window.suggImageCache = "";
         async function handlePostImage(input) {
-            const file = input.files[0]; const preview = document.getElementById('post-img-preview'); const btn = document.getElementById('create-post-btn');
-            if (!file) { window.postImageCache = ""; if(preview) preview.style.display='none'; return; }
+            const file = input.files[0];
+            const preview = document.getElementById('post-img-preview');
+            const btn = document.getElementById('create-post-btn');
+            const label = input.closest('label');
+            const nameSpan = label ? label.querySelector('.file-name') : null;
+            if (!file) { window.postImageCache = ""; if(preview) preview.style.display='none'; if(nameSpan) nameSpan.innerText = ''; return; }
+            if(nameSpan) nameSpan.innerText = file.name;
             showToast(L.ic); if(btn) btn.disabled = true;
             try { const b64 = await compressImage(file, 1000, 0.75); window.postImageCache = b64; if (preview) { preview.src = b64; preview.style.display = 'block'; preview.onclick = () => viewImage(b64); } showToast(L.ir); }
-            catch (e) { window.postImageCache = ""; showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; if(preview) preview.style.display='none'; }
+            catch (e) { window.postImageCache = ""; showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; if(preview) preview.style.display='none'; if(nameSpan) nameSpan.innerText = ''; }
             finally { if(btn) btn.disabled = false; }
         }
         async function handleSuggImage(input) {
-            const file = input.files[0]; const preview = document.getElementById('sugg-img-preview'); const btn = document.getElementById('sugg-submit-btn');
-            if (!file) { window.suggImageCache = ""; if(preview) preview.style.display='none'; return; }
+            const file = input.files[0];
+            const preview = document.getElementById('sugg-img-preview');
+            const btn = document.getElementById('sugg-submit-btn');
+            const label = input.closest('label');
+            const nameSpan = label ? label.querySelector('.file-name') : null;
+            if (!file) { window.suggImageCache = ""; if(preview) preview.style.display='none'; if(nameSpan) nameSpan.innerText = ''; return; }
+            if(nameSpan) nameSpan.innerText = file.name;
             showToast(L.ic); if(btn) btn.disabled = true;
             try { const b64 = await compressImage(file, 1000, 0.75); window.suggImageCache = b64; if (preview) { preview.src = b64; preview.style.display = 'block'; preview.onclick = () => viewImage(b64); } showToast(L.ir); }
-            catch (e) { window.suggImageCache = ""; showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; if(preview) preview.style.display='none'; }
+            catch (e) { window.suggImageCache = ""; showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; if(preview) preview.style.display='none'; if(nameSpan) nameSpan.innerText = ''; }
             finally { if(btn) btn.disabled = false; }
         }
         async function handleAvatarChange(input) {
-            const file = input.files[0]; const hidden = document.getElementById('avatar-data'); const preview = document.getElementById('avatar-preview');
-            if (!file) { hidden.value = ""; return; }
+            const file = input.files[0];
+            const hidden = document.getElementById('avatar-data');
+            const preview = document.getElementById('avatar-preview');
+            const label = input.closest('label');
+            const nameSpan = label ? label.querySelector('.file-name') : null;
+            if (!file) { hidden.value = ""; if(nameSpan) nameSpan.innerText = ''; return; }
+            if(nameSpan) nameSpan.innerText = file.name;
             showToast(L.ic);
             try { const b64 = await compressImage(file, 300, 0.8); hidden.value = b64; if (preview) { preview.src = b64; preview.style.display = 'block'; } showToast(L.ir); }
-            catch (e) { showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; }
+            catch (e) { showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; if(nameSpan) nameSpan.innerText = ''; }
         }
         if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err)); }); }
         let ws;
@@ -613,47 +958,52 @@ def get_js(lang, token, current_user=""):
         let pendingUrl = "";
         async function showLinkWarning(e, el) {
             e.preventDefault(); pendingUrl = el.getAttribute('data-url'); if (!pendingUrl) return;
-            document.getElementById('link-modal-confirm').href = pendingUrl; const ogBox = document.getElementById('og-preview'); ogBox.innerHTML = `<p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p>`; document.getElementById('link-modal').classList.add('show');
-            try { const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl)); const data = await res.json(); if (data.title || data.description || data.image) { let html = ''; if (data.image) html += `<img src="${data.image}" class="og-img">`; if (data.title) html += `<h4 class="og-title">${data.title}</h4>`; if (data.description) html += `<p class="og-desc">${data.description}</p>`; ogBox.innerHTML = html; } else { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">No preview</p>'; } }
-            catch (err) { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">Failed to load</p>'; }
+            document.getElementById('link-modal-confirm').href = pendingUrl; const ogBox = document.getElementById('og-preview'); ogBox.innerHTML = `<p style="margin:0; font-size:14px; color:#aaa;">__EXT_LOADING__</p>`; document.getElementById('link-modal').classList.add('show');
+            try { const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl)); const data = await res.json(); if (data.title || data.description || data.image) { let html = ''; if (data.image) html += `<img src="${data.image}" class="og-img" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:10px;object-fit:cover;">`; if (data.title) html += `<h4 style="margin:0 0 5px 0;font-size:16px;color:#fff;font-weight:bold;">${data.title}</h4>`; if (data.description) html += `<p style="margin:0;font-size:14px;color:#aaa;">${data.description}</p>`; ogBox.innerHTML = html; } else { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#aaa;">No preview</p>'; } }
+            catch (err) { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#aaa;">Failed to load</p>'; }
         }
         function closeLinkModal() { document.getElementById('link-modal').classList.remove('show'); }
         async function rpc(method, params) { const res = await fetch('/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': T }, body: JSON.stringify({ method, params }) }); const data = await res.json(); if (!res.ok) throw new Error(data.detail || data.error || 'RPC Error'); return data; }
         function tp(i, b) { const x = document.getElementById(i); if (x.type === 'password') { x.type = 'text'; b.innerHTML = `__SVG_EYE_OFF__`; } else { x.type = 'password'; b.innerHTML = `__SVG_EYE__`; } }
-        function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
+        function uc(e) { const el = document.getElementById('char-count'); if(el) el.innerText = e.value.length + ' / ' + (e.maxLength || 5000); }
         function ucRules(e) { document.getElementById('rules-count').innerText = e.value.length + ' / 1000'; }
         async function hc(e) {
             e.preventDefault(); const f = e.target, c = f.querySelector('textarea').value.trim(); if (!c) return;
+            if (c.length > 5000) { showToast(L.ptl); return; }
             const i = crypto.randomUUID(), n = new Date();
             const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'});
             const img = window.postImageCache || "";
             const a = document.querySelector('#my-records-container');
+            if (!a) return;
             const m = a.querySelector('.empty-state'); if (m) m.remove();
-            const w = document.createElement('div'); w.className = 'post-wrapper'; w.id = 'post-' + i;
-            w.innerHTML = `<div class="post-actions"><button onclick="copyLink('${ME}','${i}',this)" class="action-btn link-btn">${L.cl}</button><button onclick="hp('${i}',this)" class="action-btn pin-btn">${L.p}</button><button onclick="hd('${i}',this)" class="action-btn">${L.d}</button></div><div class="post-item"><div class="post-content">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>${img ? `<img class="post-image" src="${img}" onclick="viewImage(this.src)">` : ''}<div class="post-footer"><div class="post-date">${d}</div></div></div>`;
-            let inserted = false; const wrappers = a.querySelectorAll('.post-wrapper');
-            for (let ww of wrappers) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
+            const w = document.createElement('div');
+            w.className = 'post-card'; w.id = 'post-' + i;
+            w.innerHTML = `<div class="post-card-actions"><button onclick="copyLink('${ME}','${i}',this)" class="icon-btn" title="${L.cl}">🔗</button><button onclick="hp('${i}',this)" class="icon-btn pin-btn" title="${L.p}">📌</button><button onclick="hd('${i}',this)" class="icon-btn" title="${L.d}">🗑️</button></div>${img ? `<img class="post-card-img" src="${img}" onclick="viewImage(this.src)">` : ''}<div class="post-card-body"><div class="post-card-title">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div><div class="post-card-meta"><span>${d}</span></div></div>`;
+            let inserted = false; const cards = a.querySelectorAll('.post-card');
+            for (let ww of cards) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
             if (!inserted) a.appendChild(w);
             f.reset(); window.postImageCache = ""; const preview = document.getElementById('post-img-preview'); if (preview) preview.style.display = 'none';
             try { await rpc('create_record', { content: c, client_id: i, image_data: img }); } catch (x) { w.remove(); showToast(L.tf + ' ' + x.message); }
         }
-        function hd(i) { showConfirm(L.c, async (yes) => { if (!yes) return; const w = document.getElementById('post-' + i); w.style.opacity = '0'; setTimeout(() => w.style.display = 'none', 300); try { await rpc('delete_record', { post_id: i }); w.remove(); } catch (x) { w.style.opacity = '1'; w.style.display = 'block'; showToast(L.tf + ' ' + x.message); } }); }
+        function hd(i) { showConfirm(L.c, async (yes) => { if (!yes) return; const w = document.getElementById('post-' + i); if (!w) return; w.style.opacity = '0'; setTimeout(() => w.style.display = 'none', 300); try { await rpc('delete_record', { post_id: i }); w.remove(); } catch (x) { w.style.opacity = '1'; w.style.display = 'block'; showToast(L.tf + ' ' + x.message); } }); }
         async function hp(i, b) {
-            const w = document.getElementById('post-' + i), p = w.querySelector('.post-item'), s = p.classList.contains('pinned');
-            if (s) { p.classList.remove('pinned'); b.innerText = L.p; }
+            const w = document.getElementById('post-' + i); if (!w) return;
+            const p = w.querySelector('.post-card'); const s = p && p.classList.contains('pinned');
+            if (s) { if (p) p.classList.remove('pinned'); if (b) b.innerText = '📌'; }
             else {
-                document.querySelectorAll('.post-item.pinned').forEach(el => { el.classList.remove('pinned'); const ww = el.closest('.post-wrapper'); if (ww) { const btn = ww.querySelector('.pin-btn'); if (btn) btn.innerText = L.p; } });
-                p.classList.add('pinned'); b.innerText = L.u;
+                document.querySelectorAll('.post-card.pinned').forEach(el => { el.classList.remove('pinned'); const ww = el.closest('.post-card'); if (ww) { const btn = ww.querySelector('.pin-btn'); if (btn) btn.innerText = '📌'; } });
+                if (p) p.classList.add('pinned'); if (b) b.innerText = '📌';
                 const a = w.parentNode; a.insertBefore(w, a.children[1]);
             }
             try { await rpc('pin_record', { post_id: i }); }
-            catch (x) { if (s) { p.classList.add('pinned'); b.innerText = L.u; } else { p.classList.remove('pinned'); b.innerText = L.p; } showToast(L.tf + ' ' + x.message); }
+            catch (x) { if (s) { if (p) p.classList.add('pinned'); if (b) b.innerText = '📌'; } else { if (p) p.classList.remove('pinned'); if (b) b.innerText = '📌'; } showToast(L.tf + ' ' + x.message); }
         }
         async function submitSuggestion(event) {
             event.preventDefault(); const f = event.target; const target = f.dataset.nickname;
             const name = f.querySelector('input[name="sugg_name"]').value.trim();
             const content = f.querySelector('textarea[name="content"]').value.trim();
             if (!name || !content) { showToast(L.sf); return; }
+            if (content.length > 5000) { showToast(L.ptl); return; }
             if (ME && target === ME) { showToast(L.ss); return; }
             const btn = f.querySelector('button[type="submit"]'); const img = window.suggImageCache || ""; btn.disabled = true;
             try { await rpc('submit_suggestion', { target_nickname: target, sugg_name: name, content: content, image_data: img }); showToast(L.su); f.reset(); window.suggImageCache = ""; const preview = document.getElementById('sugg-img-preview'); if (preview) preview.style.display = 'none'; }
@@ -664,15 +1014,15 @@ def get_js(lang, token, current_user=""):
         async function rejectSugg(suggId) { try { await rpc('reject_suggestion', { suggestion_id: suggId }); const card = document.getElementById('sugg-' + suggId); if (card) card.remove(); showToast(L.trr); } catch (x) { showToast(L.tf + ' ' + x.message); } }
     </script>
     """
-    replacements = [("__TOKEN__", token),("__ME__", current_user),("__DEL__", t('delete',lang)),("__PIN__", t('pin',lang)),("__UNPIN__", t('unpin',lang)),("__CONFIRM__", t('confirm_delete',lang)),("__NOPOSTS__", t('no_posts',lang)),("__COPYLINK__", t('copy_link',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__SUGG_FILL__", t('sugges_error_fill',lang)),("__SUGG_SELF__", t('sugges_error_self',lang)),("__SUGG_SUCCESS__", t('sugges_success',lang)),("__IMG_COMPRESSING__", t('img_compressing',lang)),("__IMG_READY__", t('img_ready',lang)),("__IMG_ERROR__", t('img_error',lang)),("__IMG_BIG__", t('img_too_big',lang)),("__TOAST_NEW__", t('toast_new',lang)),("__TOAST_LINK__", t('toast_link',lang)),("__TOAST_COPY_FAIL__", t('toast_copy_fail',lang)),("__TOAST_APPROVED_REMOVED__", t('toast_approved_removed',lang)),("__TOAST_REJECTED_REMOVED__", t('toast_rejected_removed',lang)),("__TOAST_FAILED__", t('toast_failed',lang)),("__SVG_EYE_OFF__", SVG_EYE_OFF),("__SVG_EYE__", SVG_EYE)]
+    replacements = [("__TOKEN__", token),("__ME__", current_user),("__DEL__", t('delete',lang)),("__PIN__", t('pin',lang)),("__UNPIN__", t('unpin',lang)),("__CONFIRM__", t('confirm_delete',lang)),("__NOPOSTS__", t('no_posts',lang)),("__COPYLINK__", t('copy_link',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__SUGG_FILL__", t('sugges_error_fill',lang)),("__SUGG_SELF__", t('sugges_error_self',lang)),("__SUGG_SUCCESS__", t('sugges_success',lang)),("__IMG_COMPRESSING__", t('img_compressing',lang)),("__IMG_READY__", t('img_ready',lang)),("__IMG_ERROR__", t('img_error',lang)),("__IMG_BIG__", t('img_too_big',lang)),("__TOAST_NEW__", t('toast_new',lang)),("__TOAST_LINK__", t('toast_link',lang)),("__TOAST_COPY_FAIL__", t('toast_copy_fail',lang)),("__TOAST_APPROVED_REMOVED__", t('toast_approved_removed',lang)),("__TOAST_REJECTED_REMOVED__", t('toast_rejected_removed',lang)),("__TOAST_FAILED__", t('toast_failed',lang)),("__SVG_EYE_OFF__", SVG_EYE_OFF),("__SVG_EYE__", SVG_EYE),("__POST_TOO_LONG__", t('post_too_long',lang))]
     for k, v in replacements: js = js.replace(k, v)
     return js
 
 def get_overlay(lang):
     html_str = """
     <div id="toast"></div>
-    <div id="modal-overlay" class="modal-overlay"><div class="modal-box"><p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p><div class="modal-actions"><button id="modal-cancel" class="btn" style="background:#aaa;color:black;">__CANCEL__</button><button id="modal-confirm" class="btn btn-danger">OK</button></div></div></div>
-    <div id="link-modal" class="modal-overlay"><div class="modal-box" style="text-align: left;"><h3 style="margin-top:0;">__EXT_TITLE__</h3><p style="font-size:14px; color:#555; margin-bottom:10px;">__EXT_DESC__</p><div id="og-preview" class="og-box"><p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p></div><div class="modal-actions"><button onclick="closeLinkModal()" class="btn" style="background:#aaa;color:black;">__CANCEL__</button><a id="link-modal-confirm" href="#" target="_blank" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">__EXT_CONTINUE__</a></div></div></div>
+    <div id="modal-overlay" class="modal-overlay"><div class="modal-box"><p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p><div class="modal-actions"><button id="modal-cancel" class="btn btn-secondary">__CANCEL__</button><button id="modal-confirm" class="btn btn-danger">OK</button></div></div></div>
+    <div id="link-modal" class="modal-overlay"><div class="modal-box" style="text-align: left;"><h3 style="margin-top:0;color:#fff;">__EXT_TITLE__</h3><p style="font-size:14px; color:#aaa; margin-bottom:10px;">__EXT_DESC__</p><div id="og-preview" style="margin:15px 0;padding:10px;background:#0f0f0f;border-radius:8px;border:1px solid #303030;"><p style="margin:0; font-size:14px; color:#aaa;">__EXT_LOADING__</p></div><div class="modal-actions"><button onclick="closeLinkModal()" class="btn btn-secondary">__CANCEL__</button><a id="link-modal-confirm" href="#" target="_blank" class="btn btn-primary">__EXT_CONTINUE__</a></div></div></div>
     <div id="img-viewer" onclick="if(event.target===this)closeImgViewer()"><button class="img-viewer-close" onclick="closeImgViewer()">&times;</button><img id="img-viewer-img" src="" alt=""></div>
     """
     for k, v in [("__CANCEL__", t('cancel',lang)),("__EXT_TITLE__", t('ext_title',lang)),("__EXT_DESC__", t('ext_desc',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__EXT_CONTINUE__", t('ext_continue',lang))]:
@@ -683,415 +1033,489 @@ def get_footer(lang):
     contacts = " | ".join(f"<a href='mailto:{e}'>{e}</a>" for e in CONTACT_EMAILS)
     html_str = """
     <div class="footer">
-        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
         <div class="footer-links">
-            <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a> | <a href="/search">__SEARCH_LINK__</a> | <a href="/stats">__STATS_LINK__</a>
+            <a href="/privacy">__PRIVACY_TITLE__</a>
+            <a href="/bugreport">__BUGREPORT_TITLE__</a>
+            <a href="/stats">__STATS_LINK__</a>
         </div>
         <div class="footer-contacts">__CONTACTS__</div>
-        <div style="font-size: 12px; color: #999; margin-top: 5px;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
+        <div style="margin-top:8px;font-size:12px;color:#666;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
     </div>
     """
-    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__SEARCH_LINK__",t('search_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
+    for k, v in [("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
         html_str = html_str.replace(k, v)
     return html_str
+
+def header_html(lang, viewer, active="feed"):
+    avatar = ""
+    if viewer:
+        try:
+            # We'll just use a placeholder for now; actual avatar is fetched in pages
+            pass
+        except: pass
+    home_class = "active" if active == "feed" else ""
+    cabinet_class = "active" if active == "cabinet" else ""
+    return f"""
+    <header>
+        <a href="/feed" class="logo"><div class="logo-icon">▶</div> Solid Link</a>
+        <div class="header-spacer"></div>
+        <div class="header-user">
+            {f'<a href="/cabinet" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--text);"><span style="font-size:14px;">{esc(viewer)}</span></a>' if viewer else '<a href="/" class="btn btn-secondary btn-small">Войти</a>'}
+        </div>
+    </header>
+    <div class="layout">
+        <aside class="sidebar">
+            <a href="/feed" class="sidebar-item {home_class}">🏠 {t('feed_link', lang)}</a>
+            <a href="/cabinet" class="sidebar-item {cabinet_class}">👤 {t('cabinet', lang)}</a>
+            {f'<a href="/cabinet/suggestions" class="sidebar-item">📬 {t("suggestions_title", lang)}</a>' if viewer else ''}
+            <a href="/cabinet/edit" class="sidebar-item">⚙️ {t('edit_profile', lang)}</a>
+            <a href="/stats" class="sidebar-item">📊 {t('stats_link', lang)}</a>
+            <a href="/logout" class="sidebar-item">🚪 {t('logout', lang)}</a>
+        </aside>
+        <main class="main-content">
+    """
+
+def footer_close(lang):
+    return f"""
+        </main>
+    </div>
+    {get_footer(lang)}
+    {get_overlay(lang)}
+    """
 
 def auth_html(lang, error_msg="", token=""):
     eb = f"<div class='error-msg'>{error_msg}</div>" if error_msg else "<div class='error-msg'></div>"
     html_str = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
     <title>__LOGIN__ / __REG__</title>__CSS____JS__</head><body>
-    <div class="container">
-        <div class="auth-wrapper"><div class="label-text">__REG__</div><div class="form-box"><form action="/register" method="post">
-            <input type="hidden" name="csrf_token" value="__TOKEN__">
-            <input type="text" name="username" placeholder="__USERNAME__" required>
-            <input type="text" name="nickname" placeholder="__NICKNAME__" required>
-            <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
-            <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-            <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" class="privacy-link">__PRIVACY_LINK__</a></span></label>
-            <button type="submit">__REG_BTN__</button>
-        </form></div></div>
-        <div class="auth-wrapper"><div class="auth-wrapper-inner"><div class="form-box"><form action="/login" method="post">
-            <input type="hidden" name="csrf_token" value="__TOKEN__">
-            <input type="text" name="nickname" placeholder="__NICKNAME__" required>
-            <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-            <button type="submit">__LOGIN_BTN__</button>
-        </form></div><div class="label-text">__LOGIN__</div></div>
-        <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn __EN_ACTIVE__">EN</a></div></div>
-        __ERROR__</div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    <div class="auth-container">
+        <div class="auth-box">
+            <h1>__REG__</h1>
+            <form action="/register" method="post">
+                <input type="hidden" name="csrf_token" value="__TOKEN__">
+                <input type="text" name="username" placeholder="__USERNAME__" required>
+                <input type="text" name="nickname" placeholder="__NICKNAME__" required>
+                <div style="position:relative;">
+                    <input type="password" name="password" id="rp" placeholder="__PASSWORD__" required>
+                    <button type="button" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:none;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;padding:0;" onclick="tp('rp',this)">__SVG_EYE__</button>
+                </div>
+                <div style="position:relative;">
+                    <input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required>
+                    <button type="button" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:none;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;padding:0;" onclick="tp('rr',this)">__SVG_EYE__</button>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;color:#aaa;cursor:pointer;">
+                    <input type="checkbox" name="captcha" required style="width:18px;height:18px;accent-color:var(--accent);"> __CAPTCHA__
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;color:#aaa;cursor:pointer;">
+                    <input type="checkbox" name="privacy" required style="width:18px;height:18px;accent-color:var(--accent);"> __PRIVACY_AGREE__ <a href="/privacy" target="_blank" style="color:var(--accent);">__PRIVACY_LINK__</a>
+                </label>
+                <button type="submit">__REG_BTN__</button>
+            </form>
+            <div class="auth-footer">Уже есть аккаунт? <a href="#" onclick="document.querySelector('.auth-box h1').innerText='__LOGIN__'; document.querySelector('.auth-box form').action='/login'; document.querySelector('.auth-box form').innerHTML='<input type=\\'hidden\\' name=\\'csrf_token\\' value=\\'__TOKEN__\\'><input type=\\'text\\' name=\\'nickname\\' placeholder=\\'__NICKNAME__\\' required><div style=\\'position:relative;\\'><input type=\\'password\\' name=\\'password\\' id=\\'lp\\' placeholder=\\'__PASSWORD__\\' required><button type=\\'button\\' style=\\'position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:none;cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;padding:0;\\' onclick=\\'tp(\\\"lp\\\",this)\\'><svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'20\\' height=\\'20\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'#f1f1f1\\' stroke-width=\\'2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><path d=\\'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\\'></path><circle cx=\\'12\\' cy=\\'12\\' r=\\'3\\'></circle></svg></button></div><label style=\\'display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;color:#aaa;cursor:pointer;\\'><input type=\\'checkbox\\' name=\\'captcha\\' required style=\\'width:18px;height:18px;accent-color:var(--accent);\\'> __CAPTCHA__</label><button type=\\'submit\\'>__LOGIN_BTN__</button>'; document.querySelector('.auth-footer').innerHTML='Нет аккаунта? <a href=\\'#\\' onclick=\\'location.reload()\\'>__REG__</a>'; return false;">__LOGIN__</a></div>
+            <div class="error-msg" style="text-align:center;">__ERROR__</div>
+        </div>
+    </div>__FOOTER__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
+    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__SVG_EYE__",SVG_EYE)]:
         html_str = html_str.replace(k, v)
     return html_str
 
-def render_records(records, lang, own=False, uid=None):
-    if not records or not isinstance(records, list): return f"<div class='post-item empty-state'>{t('no_posts', lang)}</div>"
-    out = ""
-    for x in records:
-        if not isinstance(x, dict): continue
-        rid = esc(x.get('id'))
-        if not rid: continue
-        pinned = bool(x.get('is_pinned', False))
-        content = linkify(x.get('content'))
-        date = format_date(esc(x.get('created_at')))
-        sugg_by = esc(x.get('suggested_by', ''))
-        img = esc(x.get('image_data', ''))
-        pc = "pinned" if pinned else ""
-        acts = "<div class='post-actions'>"
-        if uid: acts += f"<button onclick='copyLink(\"{x.get('user_nickname','')}\",\"{rid}\", this)' class='action-btn link-btn'>{t('copy_link', lang)}</button>"
-        if own:
-            acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
-            acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
-        acts += "</div>"
-        sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
-        img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
-        item = f"<div class='post-wrapper' id='post-{rid}'>{acts}<div class='post-item {pc}'><div class='post-content'>{content}</div>{img_html}<div class='post-footer'>{sugg_html}<div class='post-date'>{date}</div></div></div></div>"
-        out += item
-    return out
+def render_feed_cards(posts, lang, viewer=""):
+    if not posts:
+        return f"<div style='text-align:center;padding:60px 20px;color:#aaa;'>{t('feed_empty', lang)}</div>"
+    cards = ""
+    for p in posts:
+        rid = esc(p.get('id',''))
+        nick = esc(p.get('user_nickname',''))
+        content = esc(p.get('content',''))
+        # Truncate for card title
+        title = content[:150] + ('...' if len(content) > 150 else '')
+        date = format_date(esc(p.get('created_at','')))
+        img = esc(p.get('image_data',''))
+        img_html = f'<img class="post-card-img" src="{img}" onclick="viewImage(this.src)">' if img else '<div class="post-card-img" style="display:flex;align-items:center;justify-content:center;background:#1a1a1a;color:#555;font-size:48px;">📝</div>'
+        actions = ""
+        if viewer:
+            actions = f'<div class="post-card-actions"><button onclick="copyLink(\'{nick}\',\'{rid}\',this)" class="icon-btn" title="{t("copy_link",lang)}">🔗</button></div>'
+        cards += f"""
+        <div class="post-card" id="post-{rid}">
+            {actions}
+            {img_html}
+            <div class="post-card-body">
+                <a href="/{nick}/{rid}" class="post-card-title">{esc(title)}</a>
+                <div class="post-card-meta">
+                    <a href="/{nick}" style="color:var(--text);font-weight:500;">{nick}</a>
+                    <span>•</span>
+                    <span>{date}</span>
+                </div>
+            </div>
+        </div>
+        """
+    return cards
 
-def merge_memory(db_records, nickname):
-    f = []
-    if not db_records or not isinstance(db_records, list): db_records = []
-    for x in db_records:
-        if not isinstance(x, dict): continue
-        x_id = x.get('id')
-        if not x_id or x_id in deleted_records: continue
-        if x_id in pinned_records: x['is_pinned'] = pinned_records[x_id]
-        f.append(x)
-    for rid, x in pending_records.items():
-        if isinstance(x, dict) and x.get('user_nickname') == nickname: f.append(x)
-    try: f.sort(key=lambda x: (bool(x.get('is_pinned')), str(x.get('created_at') or '')), reverse=True)
-    except Exception: pass
-    return f
-
-def dashboard_html(nickname, user, my_p, lang, token, viewer):
-    rh_my = render_records(my_p, lang, own=True, uid=viewer)
-    user_username = esc(user.get('username'))
-    desc = esc(user.get('description'))
-    avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
-    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__CABINET__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>__CABINET__</h2>
-        __AVATAR__
-        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICKNAME__" target="_blank">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
-        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
-        <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
-        <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE__</a>
-        <a href="/search" class="btn search-sidebar-btn">__SEARCH_LINK__</a>
-        <a href="/stats" class="btn stats-sidebar-btn">__STATS_LINK__</a>
-        <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">__LOGOUT__</button></form>
-        <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div>
-    <div class="main-content">
-        <div class="create-post-box"><form id="create-form" onsubmit="hc(event)">
-            <textarea name="content" placeholder="__CREATE_POST_PLACEHOLDER__" required maxlength="500"></textarea>
-            <label>__ATTACH_PHOTO__</label>
-            <input type="file" accept="image/*" onchange="handlePostImage(this)">
-            <img id="post-img-preview" class="img-preview" style="display:none;">
-            <button type="submit" id="create-post-btn">__CREATE_POST_BTN__</button>
-        </form></div>
-        <div class="posts-area" id="my-records-container"><h2>__MY_POSTS__</h2>__RECORDS_HTML__</div>
-    </div></div>__FOOTER____OVERLAY__</body></html>
+def feed_html(posts, lang, token, viewer):
+    cards = render_feed_cards(posts, lang, viewer)
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('feed_title',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "feed")}
+        <div class="feed-grid">{cards}</div>
+    {footer_close(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__SEARCH_LINK__",t('search_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
 
-def suggestions_page_html(nickname, suggestions, lang, token):
+def cabinet_html(nickname, user, my_p, sugg_count, lang, token, viewer):
+    avatar = esc(user.get('avatar_data',''))
+    avatar_html = f'<img class="profile-avatar" src="{avatar}" onclick="viewImage(this.src)">' if avatar else '<div class="profile-avatar-placeholder"></div>'
+    desc = esc(user.get('description',''))
+    badge = f'<span class="badge">{sugg_count}</span>' if sugg_count > 0 else ''
+    posts_html = render_feed_cards(my_p, lang, viewer) if my_p else f'<div style="text-align:center;padding:40px;color:#aaa;">{t("no_posts",lang)}</div>'
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('cabinet',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "cabinet")}
+        <div class="profile-header">
+            {avatar_html}
+            <div class="profile-info">
+                <h1>{esc(user.get('username',''))}</h1>
+                <div class="username">@{esc(nickname)}</div>
+                <div class="bio">{desc if desc else ''}</div>
+                <div class="profile-stats">
+                    <span><b>{len(my_p)}</b> {t('total_posts',lang)}</span>
+                </div>
+                <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="/cabinet/edit" class="btn btn-secondary btn-small">⚙️ {t('edit_profile',lang)}</a>
+                    <a href="/cabinet/suggestions" class="btn btn-secondary btn-small" style="position:relative;">📬 {t('suggestions_title',lang)} {badge}</a>
+                    <a href="/{nickname}" class="btn btn-secondary btn-small">👁️ {t('profile',lang)}</a>
+                </div>
+            </div>
+        </div>
+        <div class="form-group" style="margin-bottom:24px;">
+            <form id="create-form" onsubmit="hc(event)">
+                <textarea name="content" placeholder="{t('create_post_placeholder',lang)}" required maxlength="5000" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:16px;border-radius:8px;width:100%;font-size:16px;min-height:120px;outline:none;resize:vertical;"></textarea>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:8px;">
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <label class="custom-file-upload">
+                            <input type="file" accept="image/*" onchange="handlePostImage(this)">
+                            📷 {t('choose_file',lang)}
+                            <span class="file-name" style="font-size:12px;color:#aaa;margin-left:4px;"></span>
+                        </label>
+                        <span id="char-count" style="font-size:12px;color:#aaa;">0 / 5000</span>
+                    </div>
+                    <button type="submit" id="create-post-btn" class="btn btn-primary">{t('create_post_btn',lang)}</button>
+                </div>
+                <img id="post-img-preview" class="img-preview" style="display:none;">
+            </form>
+        </div>
+        <h2 style="margin-bottom:16px;">{t('my_posts',lang)}</h2>
+        <div class="feed-grid" id="my-records-container">{posts_html}</div>
+    {footer_close(lang)}
+    </body></html>
+    """
+
+def suggestions_html(nickname, suggestions, lang, token, viewer):
     if not suggestions:
-        rh = f"<div class='post-item'>{t('sugges_empty', lang)}</div>"
+        rh = f"<div style='text-align:center;padding:40px;color:#aaa;'>{t('sugges_empty',lang)}</div>"
     else:
         rh = ""
         for s in suggestions:
-            sid = esc(s.get('id'))
-            sugg_by = esc(s.get('suggested_by_name'))
-            content = linkify(s.get('content'))
-            date = format_date(esc(s.get('created_at')))
-            img = esc(s.get('image_data', ''))
-            img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
-            card = f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
-            rh += card
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__SUGGESTIONS_TITLE__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
-    <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="posts-area" style="min-height:300px;padding:20px;"><h2>__SUGGESTIONS_TITLE__</h2>__SUGGESTIONS_HTML__</div>
-        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__BACK__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>__FOOTER____OVERLAY__</body></html>
+            sid = esc(s.get('id',''))
+            sugg_by = esc(s.get('suggested_by_name',''))
+            content = esc(s.get('content',''))
+            date = format_date(esc(s.get('created_at','')))
+            img = esc(s.get('image_data',''))
+            img_html = f'<img class="suggestion-image" src="{img}" onclick="viewImage(this.src)">' if img else ''
+            rh += f"""
+            <div class="suggestion-card" id="sugg-{sid}">
+                <div class="suggestion-header">
+                    <span class="suggestion-name">{sugg_by}</span>
+                    <span class="suggestion-date">{date}</span>
+                </div>
+                <div class="suggestion-content">{content}</div>
+                {img_html}
+                <div class="suggestion-actions">
+                    <button class="btn btn-primary btn-small" onclick="approveSugg('{sid}')">{t('sugges_approve',lang)}</button>
+                    <button class="btn btn-danger btn-small" onclick="rejectSugg('{sid}')">{t('sugges_reject',lang)}</button>
+                </div>
+            </div>
+            """
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('suggestions_title',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "cabinet")}
+        <h2 style="margin-bottom:24px;">{t('suggestions_title',lang)}</h2>
+        {rh}
+        <a href="/cabinet" class="btn btn-secondary" style="margin-top:24px;">← {t('back_home',lang)}</a>
+    {footer_close(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
 
-def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabled=True, photo_enabled=True):
-    msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{error}</div>" if error else ""
-    is_own = (viewer == nickname)
-    if is_own: form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_own', lang)}</div>"
-    elif not enabled: form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_disabled', lang)}</div>"
-    else:
-        photo_block = f"<label style='color:#fff;font-size:14px;font-weight:bold;'>{t('attach_photo', lang)}</label><input type='file' accept='image/*' onchange='handleSuggImage(this)'><img id='sugg-img-preview' class='img-preview' style='display:none;'>" if photo_enabled else ""
-        form_block = f"<form data-nickname='{esc(nickname)}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:10px'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60' style='background:#a9a9a9;padding:12px;font-size:16px;'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='background:#a9a9a9;height:150px;padding:12px;font-size:16px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' style='background:#2ecc71;color:white;font-size:18px;'>{t('sugges_send',lang)}</button></form>"
-    rules_block = f"<div class='rules-box'><b>{t('rules_title',lang)}</b><div class='rules-content'>{esc(rules)}</div></div>" if rules else ""
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__TITLE__ __NICKNAME__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
-        <div class="posts-area" style="padding:20px;">
-            <h2>__TITLE__ __NICKNAME__</h2>
-            __RULES_BLOCK____MSG____FORM_BLOCK__
-            <a href="/__NICKNAME__" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
-            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/__NICKNAME__/sugges" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICKNAME__/sugges" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-        </div>
-    </div></div>__FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__TITLE__",t('sugges_title',lang)),("__NICKNAME__",esc(nickname)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__RULES_BLOCK__",rules_block),("__MSG__",msg_html),("__FORM_BLOCK__",form_block),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
-
-def edit_html(nickname, user, lang, token):
-    desc = esc(user.get('description'))
-    rules = esc(user.get('sugges_rules', ''))
-    avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img id="avatar-preview" class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else '<img id="avatar-preview" class="avatar" style="display:none;" alt="avatar">'
-    user_username = esc(user.get('username'))
+def edit_profile_html(nickname, user, lang, token, viewer):
+    desc = esc(user.get('description',''))
+    rules = esc(user.get('sugges_rules',''))
+    avatar = esc(user.get('avatar_data',''))
+    avatar_html = f'<img id="avatar-preview" class="profile-avatar" src="{avatar}" onclick="viewImage(this.src)">' if avatar else '<img id="avatar-preview" class="profile-avatar" style="display:none;">'
     sugges_checked = "checked" if user_sugges_enabled(user) else ""
     photo_checked = "checked" if user_sugges_photo_enabled(user) else ""
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__EDIT_PROFILE__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
-        <h2 style="color:#fff;text-align:center">__EDIT_PROFILE__</h2>
-        <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
-            <input type="hidden" name="csrf_token" value="__TOKEN__">
-            <input type="hidden" name="avatar_data" id="avatar-data" value="">
-            __AVATAR_HTML__
-            <div style="color:#fff;font-size:16px;margin-bottom:-5px">__ATTACH_AVATAR__</div>
-            <input type="file" accept="image/*" onchange="handleAvatarChange(this)">
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__USERNAME_LABEL__</div>
-            <input type="text" name="username" value="__USERNAME__" required style="background:#a9a9a9;padding:12px;font-size:18px">
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__DESCRIPTION__</div>
-            <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__DESC__</textarea>
-            <div id="char-count" style="color:#fff;text-align:right;font-size:14px">__DESC_LEN__ / 300</div>
-            <label class="toggle-row"><span>__SUGGES_ENABLE_LABEL__</span><input type="checkbox" name="sugges_enabled" __SUGGES_CHECKED__></label>
-            <label class="toggle-row"><span>__SUGGES_PHOTO_ENABLE_LABEL__</span><input type="checkbox" name="sugges_photo_enabled" __PHOTO_CHECKED__></label>
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__RULES_LABEL__</div>
-            <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__RULES__</textarea>
-            <div id="rules-count" style="color:#fff;text-align:right;font-size:14px">__RULES_LEN__ / 1000</div>
-            <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
-            <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
-        </form>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div></div>__FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
-
-def public_html(nickname, user, records, lang, token, viewer):
-    is_owner = (viewer == nickname)
-    rh = render_records(records, lang, own=is_owner, uid=viewer)
-    user_username = esc(user.get('username'))
-    desc = esc(user.get('description'))
-    avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
-    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
-    sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PROFILE__ __NICKNAME__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>__PROFILE__</h2>
-        __AVATAR__
-        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br>__NICKNAME__</div>__DB__
-        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
-        __SUGG_BTN__
-        <a href="/search" class="btn search-sidebar-btn">__SEARCH_LINK__</a>
-        <a href="/stats" class="btn stats-sidebar-btn">__STATS_LINK__</a>
-        <div class="lang-switch"><a href="/set_lang/ru?next=/__NICKNAME__" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICKNAME__" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-        <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
-    </div><div class="main-content"><div class="posts-area" style="min-height:500px"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>__FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__NICKNAME__",esc(nickname)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__SEARCH_LINK__",t('search_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
-
-def record_page_html(nickname, user, record, lang, token, viewer):
-    rh = render_records([record], lang, own=False, uid=viewer)
-    avatar = esc(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
-    sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__RECORD_PAGE__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>__PROFILE__</h2>
-        __AVATAR__
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICKNAME__">__NICKNAME__</a></div>
-        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
-        __SUGG_BTN__
-        <a href="/__NICKNAME__" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
-    </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>__RECORDS_HTML__</div></div></div>__FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
-
-def bugreport_html(username, reports, lang, token):
-    rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else ""
-    for x in reports:
-        item = f"<div class='post-item' style='border-left-color:transparent'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;'><b>{t('bugreport_title',lang)}</b><span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span></div><div class='post-content' style='text-align:left;'>{esc(x.get('content'))}</div><div class='post-date'>{format_date(esc(x.get('created_at')))}</div></div>"
-        rh += item
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__BUGREPORT_TITLE__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
-    <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="create-post-box"><h2 style="color:#fff;text-align:center;margin:10px 0">__BUGREPORT_TITLE__</h2>
-            <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:5px">
-                <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="text" name="name" value="__USERNAME__" placeholder="__BUGREPORT_NAME__" required style="background:#a9a9a9;padding:12px;margin-bottom:5px">
-                <textarea name="content" placeholder="__BUGREPORT_DESC__" required style="background:#a9a9a9;height:150px;padding:12px;margin-bottom:5px"></textarea>
-                <button type="submit" style="background:#f1c40f;color:#000">__BUGREPORT_SEND__</button>
-            </form>
-        </div>
-        <div class="posts-area"><h2>__BUGREPORT_MY__</h2>__REPORTS_HTML__</div>
-        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__CANCEL__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>__FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
-
-def privacy_html(lang, token):
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PRIVACY_TITLE__</title>__CSS__</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area" style="padding:20px">
-        <h2 style="color:#fff;text-align:center;margin-bottom:20px">__PRIVACY_TITLE__</h2>
-        <div class="privacy-content">__PRIVACY_TEXT__</div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:20px">__BACK_HOME__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div></div>__FOOTER__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__CSS__",get_css()),("__PRIVACY_TEXT__",t('privacy_text',lang)),("__BACK_HOME__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
-
-def search_html(lang, token, q="", stype="all", author="", authors=None, posts=None, viewer=""):
-    authors = authors or []
-    posts = posts or []
-    authors_html = ""
-    for a in authors:
-        parts = [f"<div class='search-result-card'><a href='/{esc(a.get('nickname',''))}'>"]
-        if a.get('avatar_data'):
-            parts.append(f"<img class='search-avatar' src='{esc(a.get('avatar_data'))}' alt=''>")
-        parts.append(f"<b>{esc(a.get('nickname',''))}</b> <span style='color:#555;font-size:13px;'>@{esc(a.get('username',''))}</span></a>")
-        if a.get('description'):
-            parts.append(f"<div style='margin-top:6px;font-size:13px;color:#444;'>{esc(a.get('description'))[:120]}</div>")
-        parts.append("<div style='clear:both;'></div></div>")
-        authors_html += "".join(parts)
-    
-    records_html = ""
-    for p in posts:
-        nick = esc(p.get('user_nickname',''))
-        c = linkify(p.get('content',''))
-        d = format_date(esc(p.get('created_at','')))
-        img = esc(p.get('image_data',''))
-        img_html = f'<img class="post-image" src="{img}" onclick="viewImage(this.src)" style="max-height:300px;">' if img else ""
-        records_html += f"<div class='search-result-card'><div style='display:flex;justify-content:space-between;flex-wrap:wrap;'><a href='/{nick}'><b>{nick}</b></a><span style='font-size:12px;color:#666;'>{d}</span></div><div style='margin-top:8px;'>{c}</div>{img_html}</div>"
-    
-    if not q: content = f"<div class='search-empty'>{t('search_placeholder', lang)}</div>"
-    elif not authors and not posts: content = f"<div class='search-empty'>{t('search_no_results', lang)}</div>"
-    else:
-        content = ""
-        if authors: content += f"<h3 style='color:#fff;'>{t('search_found_authors', lang)} ({len(authors)})</h3>{authors_html}"
-        if posts: content += f"<h3 style='color:#fff;margin-top:15px;'>{t('search_found_records', lang)} ({len(posts)})</h3>{records_html}"
-    
-    sel_all = "selected" if stype == "all" else ""
-    sel_a = "selected" if stype == "authors" else ""
-    sel_r = "selected" if stype == "records" else ""
-    
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__SEARCH_TITLE__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:900px">
-        <div class="posts-area" style="padding:20px;min-height:400px;">
-            <h2>__SEARCH_TITLE__</h2>
-            <form method="get" action="/search" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
-                <input type="text" name="q" value="__Q__" placeholder="__SEARCH_PLACEHOLDER__" style="background:#a9a9a9;padding:12px;font-size:16px;">
-                <div class="search-form-row">
-                    <select name="stype" style="background:#a9a9a9;padding:12px;font-size:15px;">
-                        <option value="all" __SEL_ALL__>__TYPE_ALL__</option>
-                        <option value="authors" __SEL_A__>__TYPE_A__</option>
-                        <option value="records" __SEL_R__>__TYPE_R__</option>
-                    </select>
-                    <input type="text" name="author" value="__AUTHOR__" placeholder="__AUTHOR_FILTER__" style="background:#a9a9a9;padding:12px;font-size:15px;">
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('edit_profile',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "cabinet")}
+        <div style="max-width:600px;">
+            <h2 style="margin-bottom:24px;">{t('edit_profile',lang)}</h2>
+            <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:16px;">
+                <input type="hidden" name="csrf_token" value="{token}">
+                <input type="hidden" name="avatar_data" id="avatar-data" value="">
+                <div style="text-align:center;">{avatar_html}</div>
+                <label class="custom-file-upload" style="justify-content:center;">
+                    <input type="file" accept="image/*" onchange="handleAvatarChange(this)">
+                    🖼️ {t('attach_avatar',lang)}
+                    <span class="file-name" style="font-size:12px;color:#aaa;margin-left:4px;"></span>
+                </label>
+                <div class="form-group">
+                    <label>{t('username_label',lang)}</label>
+                    <input type="text" name="username" value="{esc(user.get('username',''))}" required>
                 </div>
-                <button type="submit" style="background:#16a085;color:white;">__SEARCH_BTN__</button>
+                <div class="form-group">
+                    <label>{t('description',lang)}</label>
+                    <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder',lang)}" oninput="uc(this)">{desc}</textarea>
+                    <div class="hint" id="char-count">{len(desc)} / 300</div>
+                </div>
+                <label class="toggle-row">
+                    <span>{t('sugges_enable_label',lang)}</span>
+                    <input type="checkbox" name="sugges_enabled" {sugges_checked}>
+                </label>
+                <label class="toggle-row">
+                    <span>{t('sugges_photo_enable_label',lang)}</span>
+                    <input type="checkbox" name="sugges_photo_enabled" {photo_checked}>
+                </label>
+                <div class="form-group">
+                    <label>{t('rules_edit_label',lang)}</label>
+                    <textarea name="sugges_rules" maxlength="1000" placeholder="{t('rules_placeholder',lang)}" oninput="ucRules(this)">{rules}</textarea>
+                    <div class="hint" id="rules-count">{len(rules)} / 1000</div>
+                </div>
+                <button type="submit" class="btn btn-primary">{t('save_changes',lang)}</button>
+                <a href="/cabinet" class="btn btn-secondary">{t('cancel',lang)}</a>
             </form>
-            __CONTENT__
         </div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/search" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/search" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>__FOOTER____OVERLAY__</body></html>
+    {footer_close(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__SEARCH_TITLE__",t('search_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__Q__",esc(q)),("__SEARCH_PLACEHOLDER__",t('search_placeholder',lang)),("__SEL_ALL__",sel_all),("__SEL_A__",sel_a),("__SEL_R__",sel_r),("__TYPE_ALL__",t('search_type_all',lang)),("__TYPE_A__",t('search_type_authors',lang)),("__TYPE_R__",t('search_type_records',lang)),("__AUTHOR__",esc(author)),("__AUTHOR_FILTER__",t('search_author_filter',lang)),("__SEARCH_BTN__",t('search_btn',lang)),("__CONTENT__",content),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
+
+def profile_html(nickname, user, posts, lang, token, viewer):
+    is_owner = (viewer == nickname)
+    avatar = esc(user.get('avatar_data',''))
+    avatar_html = f'<img class="profile-avatar" src="{avatar}" onclick="viewImage(this.src)">' if avatar else '<div class="profile-avatar-placeholder"></div>'
+    desc = esc(user.get('description',''))
+    sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f'<a href="/{nickname}/sugges" class="btn btn-primary btn-small">✉️ {t("suggestions_btn",lang)}</a>'
+    posts_html = render_feed_cards(posts, lang, viewer) if posts else f'<div style="text-align:center;padding:40px;color:#aaa;">{t("no_posts",lang)}</div>'
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{esc(nickname)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "feed")}
+        <div class="profile-header">
+            {avatar_html}
+            <div class="profile-info">
+                <h1>{esc(user.get('username',''))}</h1>
+                <div class="username">@{esc(nickname)}</div>
+                <div class="bio">{desc if desc else ''}</div>
+                <div class="profile-stats">
+                    <span><b>{len(posts)}</b> {t('total_posts',lang)}</span>
+                </div>
+                <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+                    {sugg_btn}
+                </div>
+            </div>
+        </div>
+        <div class="feed-grid">{posts_html}</div>
+    {footer_close(lang)}
+    </body></html>
+    """
+
+def single_post_html(nickname, user, post, lang, token, viewer):
+    avatar = esc(user.get('avatar_data',''))
+    avatar_html = f'<img class="profile-avatar" style="width:48px;height:48px;border-radius:50%;" src="{avatar}">' if avatar else ''
+    content = esc(post.get('content',''))
+    date = format_date(esc(post.get('created_at','')))
+    img = esc(post.get('image_data',''))
+    img_html = f'<img class="post-full-image" src="{img}" onclick="viewImage(this.src)">' if img else ''
+    sugg_by = esc(post.get('suggested_by',''))
+    sugg_html = f'<div style="font-size:13px;color:#1e8449;font-weight:bold;margin-top:8px;">{t("suggested_by",lang)} {sugg_by}</div>' if sugg_by else ''
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('record_page',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "feed")}
+        <div class="post-full">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                {avatar_html}
+                <div>
+                    <a href="/{nickname}" style="font-weight:bold;font-size:18px;color:var(--text);">{nickname}</a>
+                    <div style="font-size:14px;color:var(--text-secondary);">{date}</div>
+                </div>
+            </div>
+            <div class="post-full-content">{content}</div>
+            {img_html}
+            {sugg_html}
+            <div class="post-full-meta">
+                <a href="/{nickname}" class="btn btn-secondary btn-small">← {t('back_home',lang)}</a>
+                <button class="btn btn-secondary btn-small" onclick="copyLink('{nickname}','{esc(post.get('id',''))}',this)">{t('copy_link',lang)}</button>
+            </div>
+        </div>
+    {footer_close(lang)}
+    </body></html>
+    """
+
+def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabled=True, photo_enabled=True):
+    msg_html = f"<div class='error-msg'>{error}</div>" if error else ""
+    is_own = (viewer == nickname)
+    if is_own:
+        form_block = f"<div class='error-msg'>{t('sugges_own', lang)}</div>"
+    elif not enabled:
+        form_block = f"<div class='error-msg'>{t('sugges_disabled', lang)}</div>"
+    else:
+        photo_block = f'<label class="custom-file-upload"><input type="file" accept="image/*" onchange="handleSuggImage(this)"> 📷 {t("choose_file",lang)} <span class="file-name" style="font-size:12px;color:#aaa;margin-left:4px;"></span></label><img id="sugg-img-preview" class="img-preview" style="display:none;">' if photo_enabled else ""
+        form_block = f"""
+        <form data-nickname="{esc(nickname)}" onsubmit="submitSuggestion(event)" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="form-group">
+                <label>{t('sugges_name',lang)}</label>
+                <input type="text" name="sugg_name" required maxlength="60" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:12px 16px;border-radius:8px;font-size:16px;width:100%;">
+            </div>
+            <div class="form-group">
+                <label>{t('sugges_content',lang)}</label>
+                <textarea name="content" required maxlength="5000" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:12px 16px;border-radius:8px;font-size:16px;width:100%;min-height:150px;resize:vertical;"></textarea>
+            </div>
+            {photo_block}
+            <button type="submit" class="btn btn-primary" id="sugg-submit-btn">{t('sugges_send',lang)}</button>
+        </form>
+        """
+    rules_block = f'<div style="background:var(--bg-elevated);border-left:4px solid var(--accent);padding:16px;border-radius:8px;margin-bottom:20px;"><b style="display:block;margin-bottom:8px;">{t("rules_title",lang)}</b><div style="white-space:pre-wrap;line-height:1.5;">{esc(rules)}</div></div>' if rules else ""
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('sugges_title',lang)} {esc(nickname)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "feed")}
+        <div style="max-width:600px;">
+            <h2 style="margin-bottom:20px;">{t('sugges_title',lang)} {esc(nickname)}</h2>
+            {rules_block}
+            {msg_html}
+            {form_block}
+            <a href="/{nickname}" class="btn btn-secondary" style="margin-top:20px;">← {t('back_home',lang)}</a>
+        </div>
+    {footer_close(lang)}
+    </body></html>
+    """
 
 def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_iso, viewer=""):
     uptime = _uptime_str(lang)
     started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
     last_upd = format_date(last_update_iso) if last_update_iso else "—"
-    contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}'>{e}</a></div>" for e in CONTACT_EMAILS)
-    
-    html_str = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__STATS_TITLE__</title>__CSS____JS__</head><body>
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px">
-        <div class="posts-area" style="padding:20px;min-height:400px;">
-            <h2>__STATS_TITLE__</h2>
-            <div class="stats-card"><b>__STATS_USERS__</b><span class="stats-value">__USERS_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_POSTS__</b><span class="stats-value">__POSTS_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_SUGGES__</b><span class="stats-value">__SUGG_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_STARTED__</b><span style="font-size:15px;">__STARTED__</span></div>
-            <div class="stats-card"><b>__STATS_LAST_UPDATE__</b><span style="font-size:15px;">__LAST_UPDATE__</span></div>
-            <div class="stats-card"><b>__STATS_UPTIME__</b><span class="stats-value" style="color:#2a5db0;">__UPTIME__</span></div>
-            <div class="contacts-box">
-                <b>__STATS_CONTACTS__</b>
-                <div>__STATS_CONTACTS_DESC__</div>
-                __CONTACTS_HTML__
+    contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}' style='color:var(--accent);'>{e}</a></div>" for e in CONTACT_EMAILS)
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('stats_title',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "stats")}
+        <div style="max-width:800px;">
+            <h2 style="margin-bottom:24px;">{t('stats_title',lang)}</h2>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <b>{t('stats_users',lang)}</b><span style="font-size:24px;font-weight:bold;color:var(--accent);">{users_count}</span>
             </div>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <b>{t('stats_posts',lang)}</b><span style="font-size:24px;font-weight:bold;color:var(--accent);">{posts_count}</span>
+            </div>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <b>{t('stats_sugges',lang)}</b><span style="font-size:24px;font-weight:bold;color:var(--accent);">{sugg_count}</span>
+            </div>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <b>{t('stats_started',lang)}</b><span>{started}</span>
+            </div>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <b>{t('stats_last_update',lang)}</b><span>{last_upd}</span>
+            </div>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                <b>{t('stats_uptime',lang)}</b><span style="color:#2a5db0;font-weight:bold;">{uptime}</span>
+            </div>
+            <div style="background:var(--bg-elevated);border-radius:8px;padding:20px;margin-top:24px;border:1px solid var(--border);">
+                <b style="display:block;margin-bottom:8px;">{t('stats_contacts',lang)}</b>
+                <div style="color:var(--text-secondary);margin-bottom:8px;">{t('stats_contacts_desc',lang)}</div>
+                {contacts_html}
+            </div>
+            <a href="/feed" class="btn btn-secondary" style="margin-top:24px;">← {t('stats_back',lang)}</a>
         </div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>__FOOTER____OVERLAY__</body></html>
+    {footer_close(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        html_str = html_str.replace(k, v)
-    return html_str
+
+def privacy_html(lang, token):
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('privacy_title',lang)} - Solid Link</title>{get_css()}
+    </head><body>
+    {header_html(lang, "", "privacy")}
+        <div style="max-width:800px;">
+            <h2 style="margin-bottom:24px;">{t('privacy_title',lang)}</h2>
+            <div style="background:var(--bg-elevated);padding:24px;border-radius:8px;line-height:1.6;">{t('privacy_text',lang)}</div>
+            <a href="/feed" class="btn btn-secondary" style="margin-top:24px;">← {t('back_home',lang)}</a>
+        </div>
+    {footer_close(lang)}
+    </body></html>
+    """
+
+def bugreport_html(username, reports, lang, token, viewer):
+    rh = "<div style='text-align:center;padding:40px;color:#aaa;'>Заявок пока нет...</div>" if not reports else ""
+    for x in reports:
+        rh += f"""
+        <div style="background:var(--bg-elevated);border-radius:8px;padding:16px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+                <b>{t('bugreport_title',lang)}</b>
+                <span style="background:{'#4da6ff' if x.get('status')=='Принято' else '#f1c40f' if x.get('status')=='В работе' else '#2ecc71' if x.get('status')=='Исправлено' else '#e74c3c'};padding:4px 10px;border-radius:12px;font-size:12px;font-weight:bold;">{esc(x.get('status','Принято'))}</span>
+            </div>
+            <div style="white-space:pre-wrap;margin-bottom:8px;">{esc(x.get('content',''))}</div>
+            <div style="font-size:12px;color:var(--text-secondary);text-align:right;">{format_date(esc(x.get('created_at','')))}</div>
+        </div>
+        """
+    return f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#0f0f0f">
+    <title>{t('bugreport_title',lang)} - Solid Link</title>{get_css()}{get_js(lang, token, viewer)}
+    </head><body>
+    {header_html(lang, viewer, "bugreport")}
+        <div style="max-width:800px;">
+            <h2 style="margin-bottom:24px;">{t('bugreport_title',lang)}</h2>
+            <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
+                <input type="hidden" name="csrf_token" value="{token}">
+                <div class="form-group">
+                    <label>{t('bugreport_name',lang)}</label>
+                    <input type="text" name="name" value="{esc(username)}" required>
+                </div>
+                <div class="form-group">
+                    <label>{t('bugreport_desc',lang)}</label>
+                    <textarea name="content" required style="min-height:120px;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">{t('bugreport_send',lang)}</button>
+            </form>
+            <h3 style="margin-bottom:16px;">{t('bugreport_my',lang)}</h3>
+            {rh}
+            <a href="/feed" class="btn btn-secondary" style="margin-top:24px;">← {t('back_home',lang)}</a>
+        </div>
+    {footer_close(lang)}
+    </body></html>
+    """
 
 # --- ROUTES ---
 @app.get("/set_lang/{lang}")
@@ -1107,9 +1531,19 @@ async def index(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru
         try:
             rdb = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
             if rdb.data:
-                resp = RedirectResponse("/cabinet", 303); set_csrf_cookie(resp, token, r); return resp
+                resp = RedirectResponse("/feed", 303); set_csrf_cookie(resp, token, r); return resp
         except Exception: pass
     res = HTMLResponse(auth_html(lang, "", token)); set_csrf_cookie(res, token, r); return res
+
+@app.get("/feed", response_class=HTMLResponse)
+async def feed_page(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    token = get_csrf_token(r)
+    if not nickname: return RedirectResponse("/", 303)
+    user_data = await _fetch_user(nickname)
+    if not user_data: return RedirectResponse("/", 303)
+    posts = await _fetch_all_posts()
+    res = HTMLResponse(feed_html(posts, lang, token, nickname))
+    set_csrf_cookie(res, token, r); return res
 
 @app.get("/stats", response_class=HTMLResponse)
 async def stats_page(r: Request, lang: str = Cookie("ru")):
@@ -1122,56 +1556,6 @@ async def stats_page(r: Request, lang: str = Cookie("ru")):
         uc, pc, sc, lu = 0, 0, 0, None
     res = HTMLResponse(stats_html(lang, token, uc, pc, sc, lu, viewer))
     set_csrf_cookie(res, token, r); return res
-
-@app.get("/search", response_class=HTMLResponse)
-async def search_page(r: Request, q: str = "", stype: str = "all", author: str = "", lang: str = Cookie("ru")):
-    token = get_csrf_token(r)
-    viewer = r.cookies.get("nickname") or ""
-    q = (q or "").strip()[:100]
-    authors, posts = [], []
-    try:
-        if q:
-            sq = sanitize_q(q)
-            if sq:
-                if stype in ("all", "authors"):
-                    try:
-                        r1 = await asyncio.to_thread(lambda: sb.table('users').select('username,nickname,description').ilike('nickname', f'%{sq}%').limit(30).execute())
-                        authors = r1.data or []
-                    except Exception as e: print(f"search nick: {e}")
-                    try:
-                        r2 = await asyncio.to_thread(lambda: sb.table('users').select('username,nickname,description').ilike('username', f'%{sq}%').limit(30).execute())
-                        existing = {a.get('nickname') for a in authors}
-                        for u in (r2.data or []):
-                            if u.get('nickname') not in existing:
-                                authors.append(u)
-                    except Exception as e: print(f"search user: {e}")
-                
-                if stype in ("all", "records"):
-                    try:
-                        if author.strip():
-                            r3 = await asyncio.to_thread(lambda: sb.table('posts').select('id,user_nickname,content,image_data,created_at').ilike('content', f'%{sq}%').eq('user_nickname', author.strip()).order('created_at', desc=True).limit(50).execute())
-                        else:
-                            r3 = await asyncio.to_thread(lambda: sb.table('posts').select('id,user_nickname,content,image_data,created_at').ilike('content', f'%{sq}%').order('created_at', desc=True).limit(50).execute())
-                        posts = r3.data or []
-                    except Exception as e:
-                        print(f"search posts (img): {e}")
-                        try:
-                            if author.strip():
-                                r4 = await asyncio.to_thread(lambda: sb.table('posts').select('id,user_nickname,content,created_at').ilike('content', f'%{sq}%').eq('user_nickname', author.strip()).order('created_at', desc=True).limit(50).execute())
-                            else:
-                                r4 = await asyncio.to_thread(lambda: sb.table('posts').select('id,user_nickname,content,created_at').ilike('content', f'%{sq}%').order('created_at', desc=True).limit(50).execute())
-                            posts = r4.data or []
-                        except Exception as e2: print(f"search posts: {e2}")
-    except Exception as e:
-        print(f"search outer: {e}")
-    
-    try:
-        rh = search_html(lang, token, q=q, stype=stype, author=author, authors=authors, posts=posts, viewer=viewer)
-    except Exception as e:
-        print(f"search_html: {e}")
-        traceback.print_exc()
-        rh = f"<h2 style='color:red'>Search error</h2><pre>{esc(str(e))}</pre><a href='/'>OK</a>"
-    res = HTMLResponse(rh); set_csrf_cookie(res, token, r); return res
 
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(r: Request, lang: str = Cookie("ru")):
@@ -1192,7 +1576,7 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
         await asyncio.to_thread(lambda: sb.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute())
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
-    resp = RedirectResponse("/cabinet", 303)
+    resp = RedirectResponse("/feed", 303)
     secure = r.url.scheme == "https"
     resp.set_cookie("nickname", nickname, httponly=True, samesite="lax", secure=secure)
     set_csrf_cookie(resp, token, r); return resp
@@ -1211,7 +1595,7 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
             _login_clear(ip)
             if len(user["password"]) == 64:
                 await asyncio.to_thread(lambda: sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute())
-            resp = RedirectResponse("/cabinet", 303)
+            resp = RedirectResponse("/feed", 303)
             secure = r.url.scheme == "https"
             resp.set_cookie("nickname", nickname, httponly=True, samesite="lax", secure=secure)
             set_csrf_cookie(resp, token, r); return resp
@@ -1223,12 +1607,16 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
 @app.get("/cabinet", response_class=HTMLResponse)
 async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if not nickname: return RedirectResponse("/", 303)
-    user_data, p_data = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname))
+    user_data, p_data, sugg_count = await asyncio.gather(
+        _fetch_user(nickname),
+        _fetch_posts(nickname),
+        _fetch_suggestions_count(nickname)
+    )
     if not user_data:
         resp = RedirectResponse("/", 303); resp.delete_cookie("nickname"); return resp
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname))
+    res = HTMLResponse(cabinet_html(nickname, user_data, po, sugg_count, lang, token, nickname))
     set_csrf_cookie(res, token, r); return res
 
 @app.get("/cabinet/suggestions", response_class=HTMLResponse)
@@ -1236,7 +1624,7 @@ async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: st
     if not nickname: return RedirectResponse("/", 303)
     s_data = await _fetch_suggestions(nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(suggestions_page_html(nickname, s_data, lang, token))
+    res = HTMLResponse(suggestions_html(nickname, s_data, lang, token, nickname))
     set_csrf_cookie(res, token, r); return res
 
 @app.get("/{nickname}/sugges", response_class=HTMLResponse)
@@ -1257,7 +1645,7 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
     if req.method == "submit_suggestion":
         target = req.params.get("target_nickname", "").strip()
         sugg_name = req.params.get("sugg_name", "").strip()[:60]
-        content = req.params.get("content", "").strip()[:500]
+        content = req.params.get("content", "").strip()[:MAX_POST_LEN]
         image_data = valid_b64(req.params.get("image_data", ""))
         if not target or not sugg_name or not content: raise HTTPException(400, "Missing fields")
         if nickname and target == nickname: raise HTTPException(400, "Cannot suggest to yourself")
@@ -1281,6 +1669,7 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             content = req.params.get("content", "")
             client_id = req.params.get("client_id")
             image_data = valid_b64(req.params.get("image_data", ""))
+            if len(content) > MAX_POST_LEN: raise HTTPException(400, "Too long")
             i = client_id or str(uuid.uuid4())
             n = datetime.now(timezone.utc).isoformat()
             pd = {"id": i, "user_nickname": nickname, "content": content.strip(), "is_pinned": False, "created_at": n, "image_data": image_data}
@@ -1332,7 +1721,7 @@ async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru"
     user_data = await _fetch_user(nickname)
     if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
-    res = HTMLResponse(edit_html(nickname, user_data, lang, token))
+    res = HTMLResponse(edit_profile_html(nickname, user_data, lang, token, nickname))
     set_csrf_cookie(res, token, r); return res
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
@@ -1362,7 +1751,8 @@ async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie
             rp = y.data or []
         except Exception: pass
     token = get_csrf_token(r)
-    res = HTMLResponse(bugreport_html(u, rp, lang, token))
+    viewer = nickname or ""
+    res = HTMLResponse(bugreport_html(u, rp, lang, token, viewer))
     set_csrf_cookie(res, token, r); return res
 
 @app.post("/bugreport", response_class=HTMLResponse)
@@ -1391,18 +1781,18 @@ async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("r
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
-    res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token, viewer))
+    res = HTMLResponse(single_post_html(nickname, u_data, rec, lang, token, viewer))
     set_csrf_cookie(res, token, r); return res
 
 @app.get("/{nickname}", response_class=HTMLResponse)
 async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
     user_data, p_data = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname))
     if not user_data:
-        return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
+        return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/feed'>OK</a></h2>", 404)
     viewer = r.cookies.get("nickname") or ""
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(public_html(nickname, user_data, po, lang, token, viewer))
+    res = HTMLResponse(profile_html(nickname, user_data, po, lang, token, viewer))
     set_csrf_cookie(res, token, r); return res
 
 if __name__ == "__main__":
