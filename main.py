@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse, PlainTextResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.19"
+APP_VERSION = "0.20"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -68,9 +68,9 @@ def _set_lang_cookie(res: Response, r: Request, lang: str):
 
 CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    "font-src 'self' data: https://fonts.gstatic.com; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
     "img-src 'self' data: https: blob:; "
     "connect-src 'self' https: wss:; "
     "frame-ancestors 'self'; "
@@ -462,6 +462,7 @@ We may update this Policy. The current version is always available at /privacy. 
 12. Contacts<br>
 For privacy-related questions: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
+# ИСПРАВЛЕННЫЙ FAQ_DATA: все вложенные двойные кавычки заменены на одинарные
 FAQ_DATA = {
     "ru": [
         ("🔐", "Регистрация и вход", [
@@ -524,7 +525,7 @@ FAQ_DATA = {
             ("What nickname can I choose?", 'From 3 to 30 characters: latin letters a–z, digits 0–9, underscores <code>_</code> and hyphens <code>-</code>. Nickname is unique — pick another if taken.'),
             ("I forgot my password — what now?", 'Email the administration at the addresses in the footer: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> or <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Include your nickname.'),
             ("How do I log out?", 'In your personal cabinet click the red "Logout" button in the left panel.'),
-            ("What is the "Too Many Requests" error?", 'Rate limit triggered: too many attempts in a minute. Wait 60 seconds, for login — up to 5 minutes.'),
+            ("What is the 'Too Many Requests' error?", 'Rate limit triggered: too many attempts in a minute. Wait 60 seconds, for login — up to 5 minutes.'),
         ]),
         ("📝", "Records & Posts", [
             ("How do I create a record?", 'In your cabinet type text into the "Write something..." field and click "Create". The record appears immediately in "My records" and on your public page.'),
@@ -561,16 +562,16 @@ FAQ_DATA = {
             ("How are passwords stored?", 'Only as a bcrypt hash. The original is never stored and cannot be recovered.'),
             ("Who sees my data?", 'Publicly visible: name, nickname, description, avatar, records. Password, CSRF token and service cookies — no.'),
             ("What is a CSRF token?", 'A hidden token protecting forms from request forgery. Without it, the action will not run.'),
-            ("What is the "CSRF Error"?", 'The cookie expired or was cleared. Refresh the page — a new token is issued.'),
+            ("What is the 'CSRF Error'?", 'The cookie expired or was cleared. Refresh the page — a new token is issued.'),
             ("How are sessions protected?", 'HttpOnly cookies, SameSite=Lax, Secure on HTTPS. Plus CSP, X-Frame-Options, HSTS headers.'),
             ("What is the privacy policy?", 'A document describing what data we collect and how we use it. Full text — at /privacy.'),
         ]),
         ("🐞", "Problems & Support", [
             ("How do I report a bug?", 'Open /bugreport and describe the issue. Your reports are listed there with status: Accepted, In Progress, Fixed, Rejected.'),
-            ("Login doesn't work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. 4) No rate limit block.'),
-            ("Why don't I receive emails?", 'We do not send emails — all contact via the bug-report form or footer addresses.'),
+            ("Login doesn\'t work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. 4) No rate limit block.'),
+            ("Why don\'t I receive emails?", 'We do not send emails — all contact via the bug-report form or footer addresses.'),
             ("Who do I contact?", 'Admin email: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. We reply within 1–2 days.'),
-            ("What is "uptime" in stats?", 'Time since server start. If the server restarts, the counter starts over.'),
+            ("What is 'uptime' in stats?", 'Time since server start. If the server restarts, the counter starts over.'),
         ]),
     ]
 }
@@ -1493,78 +1494,81 @@ def privacy_html(lang, token):
         s = s.replace(k, v)
     return s
 
-def faq_html(lang, token):
+# ---------- Docsify / FAQ ----------
+
+def faq_markdown(lang: str) -> str:
     sections = FAQ_DATA.get(lang, FAQ_DATA["ru"])
-    body = ""
+    lines = [f"# {t('faq_title', lang)}", "", t('faq_intro', lang), ""]
     for icon, title, items in sections:
-        items_html = ""
+        lines.append(f"## {icon} {title}")
+        lines.append("")
         for q, a in items:
-            items_html += f"<div class='faq-item'><div class='faq-q'>{q}</div><div class='faq-a'>{a}</div></div>"
-        body += f"<div class='faq-section'><h3>{icon} {title}</h3>{items_html}</div>"
+            lines.append(f"### {q}")
+            lines.append("")
+            lines.append(a)
+            lines.append("")
+    return "\n".join(lines)
+
+def docs_html(lang: str, token: str) -> str:
     og_title = "FAQ — Solid Link"
     og_desc = "Часто задаваемые вопросы о Solid Link" if lang == "ru" else "Frequently asked questions about Solid Link"
     og = og_tags(og_title, og_desc, "/docs", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>FAQ — Solid Link</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:900px">
-        <div class="posts-area" style="padding:20px;min-height:400px;">
-            <h2>📖 __FAQ_TITLE__</h2>
-            <div class="faq-intro">__FAQ_INTRO__</div>
-            __BODY__
-            <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
-            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/docs" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/docs" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-        </div>
-    </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    return f"""
+    <!DOCTYPE html>
+    <html lang="{lang}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>FAQ — Solid Link</title>
+        {og}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/themes/vue.css">
+        <style>
+            body {{ font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; }}
+            .sidebar {{ background: #f4f4f4; }}
+            .sidebar-toggle {{ background: #4da6ff; }}
+            .markdown-section {{ max-width: 900px; }}
+        </style>
+        <script>
+            window.$docsify = {{
+                name: 'Solid Link',
+                repo: '',
+                loadSidebar: false,
+                subMaxLevel: 2,
+                basePath: '/docs/',
+                homepage: 'README.md',
+                coverpage: false,
+                onlyCover: false,
+                auto2top: true,
+                executeScript: false,
+                noEmoji: false,
+                mergeNavbar: true,
+                formatUpdated: '{{YYYY}}/{{MM}}/{{DD}} {{HH}}:{{mm}}',
+                search: {{
+                    placeholder: 'Поиск...',
+                    noData: 'Ничего не найдено'
+                }}
+            }};
+        </script>
+    </head>
+    <body>
+        <div id="app"></div>
+        <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
+        <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+        <script>
+            // Кнопка назад
+            document.addEventListener('DOMContentLoaded', function() {{
+                const backBtn = document.createElement('a');
+                backBtn.href = '/';
+                backBtn.textContent = '← На главную';
+                backBtn.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#4da6ff;color:#fff;padding:10px 18px;border-radius:5px;text-decoration:none;font-weight:bold;z-index:9999;';
+                document.body.appendChild(backBtn);
+            }});
+        </script>
+    </body>
+    </html>
     """
-    for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__FAQ_TITLE__",t('faq_title',lang)),("__FAQ_INTRO__",t('faq_intro',lang)),("__BODY__",body),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
-    return s
 
-def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_iso, viewer=""):
-    uptime = _uptime_str(lang)
-    started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
-    last_upd = format_date(last_update_iso) if last_update_iso else "—"
-    last_upd_iso = esc(last_update_iso or "")
-    contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}'>{e}</a></div>" for e in CONTACT_EMAILS)
-    og_title = "Статистика — Solid Link" if lang == "ru" else "Stats — Solid Link"
-    og_desc = f"Пользователей: {users_count}, записей: {posts_count}" if lang == "ru" else f"Users: {users_count}, records: {posts_count}"
-    og = og_tags(og_title, og_desc, "/stats", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__STATS_TITLE__ — Solid Link</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px">
-        <div class="posts-area" style="padding:20px;min-height:400px;">
-            <h2>__STATS_TITLE__</h2>
-            <div class="stats-card"><b>__STATS_USERS__</b><span class="stats-value">__USERS_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_POSTS__</b><span class="stats-value">__POSTS_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_SUGGES__</b><span class="stats-value">__SUGG_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_STARTED__</b><span style="font-size:15px;">__STARTED__</span></div>
-            <div class="stats-card"><b>__STATS_LAST_UPDATE__</b><span style="font-size:15px;" data-iso="__LAST_UPDATE_ISO__">__LAST_UPDATE__</span></div>
-            <div class="stats-card"><b>__STATS_UPTIME__</b><span class="stats-value" style="color:#2a5db0;">__UPTIME__</span></div>
-            <div class="contacts-box">
-                <b>__STATS_CONTACTS__</b>
-                <div>__STATS_CONTACTS_DESC__</div>
-                __CONTACTS_HTML__
-            </div>
-        </div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
-    return s
-
-# --- ROUTES ---
+# ---------- ROUTES ----------
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, r: Request, next: str = "/"):
     effective_lang = lang if lang in ("ru", "en") else "ru"
@@ -1615,10 +1619,15 @@ async def privacy(r: Request, setlang: str = None):
 async def docs_page(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
-    res = HTMLResponse(faq_html(lang, token))
+    res = HTMLResponse(docs_html(lang, token))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
+
+@app.get("/docs/README.md", response_class=PlainTextResponse)
+async def docs_readme(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    return PlainTextResponse(faq_markdown(lang), media_type="text/markdown; charset=utf-8")
 
 @app.post("/register", response_class=HTMLResponse)
 async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
