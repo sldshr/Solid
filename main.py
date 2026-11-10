@@ -9,12 +9,16 @@ from urllib.parse import quote
 
 app = FastAPI()
 
-APP_VERSION = "0.15"
+APP_VERSION = "0.16"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
 SITE_URL = "https://solid.fastapicloud.dev"
 BADGE_URL = "https://destroy.spritefusion.com/?from=badge&url=https%3A%2F%2Fsolid.fastapicloud.dev"
+
+RECAPTCHA_SITE_KEY = "6Le5UhkuAAAAAGBoFbFs22_cjA74eef3-GPw8qwb"
+RECAPTCHA_SECRET_KEY = "6Le5UhkuAAAAAHP5amuOqkxsqVH56iZrEkQG9tDd"
+RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
@@ -52,11 +56,12 @@ def _login_clear(ip): _LOGIN_FAILS.pop(ip, None)
 
 CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src 'self' data: https://fonts.gstatic.com; "
     "img-src 'self' data: https: blob:; "
     "connect-src 'self' https: wss:; "
+    "frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; "
     "frame-ancestors 'self'; "
     "base-uri 'self'; "
     "form-action 'self';"
@@ -91,15 +96,20 @@ async def generic_handler(request: Request, exc: Exception):
     msg = "Ошибка сервера" if lang == "ru" else "Server error"
     return HTMLResponse(f"<h1 style='color:red'>{msg}</h1><a href='/'>OK</a>", status_code=500)
 
-# --- STATIC FONT ---
-@app.get("/static/ru_font.ttf")
-async def ru_font():
-    for p in ("/app/static/ru_font.ttf", "static/ru_font.ttf", "/app/ru_font.ttf", "ru_font.ttf", "./static/ru_font.ttf"):
-        if os.path.exists(p):
-            return FileResponse(p, media_type="font/ttf", headers={"Cache-Control": "public, max-age=31536000, immutable"})
-    return Response("Font not found", status_code=404)
+async def verify_recaptcha(token: str, ip: str = "") -> bool:
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient() as client:
+            data = {"secret": RECAPTCHA_SECRET_KEY, "response": token}
+            if ip:
+                data["remoteip"] = ip
+            r = await client.post(RECAPTCHA_VERIFY_URL, data=data, timeout=5.0)
+            result = r.json()
+            return bool(result.get("success"))
+    except Exception:
+        return False
 
-# --- UTILS ---
 def esc(val): return html.escape(str(val)) if val is not None else ""
 
 def strip_html(s):
@@ -107,7 +117,6 @@ def strip_html(s):
     return re.sub(r'<[^>]+>', '', str(s))
 
 def sanitize_url(u):
-    """Allow only http(s) and data:image/ URLs"""
     if not u: return ""
     u = str(u)
     if re.match(r'^https?://', u, re.I): return u
@@ -126,7 +135,6 @@ def valid_b64(s):
     return s
 
 def clean_content(s):
-    """Strip control chars, limit length"""
     if not s: return ""
     s = str(s)
     s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', s)
@@ -268,7 +276,6 @@ async def get_og(url: str):
             if not t:
                 tm = re.search(r'<title>([^<]*)</title>', hc, re.I)
                 if tm: t = tm.group(1)
-            # Strip any HTML from title/desc server-side too
             t = strip_html(t)[:200]
             d = strip_html(gm("description"))[:300]
             i = sanitize_url(gm("image"))
@@ -361,7 +368,8 @@ LOCALES = {
         "post_too_long": "Пост слишком длинный (макс 5000 символов)",
         "err_nick_format": "Никнейм: 3-30 символов, только a-z, 0-9, _, -",
         "err_user_format": "Имя: 1-60 символов, только буквы/цифры/пробел/_-",
-        "err_pass_short": "Пароль должен быть не короче 8 символов"
+        "err_pass_short": "Пароль должен быть не короче 8 символов",
+        "captcha_fail": "Проверка «Я не робот» не пройдена. Попробуйте снова."
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -417,7 +425,8 @@ LOCALES = {
         "post_too_long": "Post too long (max 5000 chars)",
         "err_nick_format": "Nickname: 3-30 chars, only a-z, 0-9, _, -",
         "err_user_format": "Name: 1-60 chars, letters/digits/space/_-",
-        "err_pass_short": "Password must be at least 8 chars"
+        "err_pass_short": "Password must be at least 8 chars",
+        "captcha_fail": "reCAPTCHA verification failed. Please try again."
     }
 }
 
@@ -437,16 +446,9 @@ def get_css():
     if _CSS_CACHE is None:
         _CSS_CACHE = """
         <style>
-            @font-face {
-                font-family: 'RuFont';
-                src: url('/ru_font.ttf') format('truetype');
-                font-weight: 300 700;
-                font-display: swap;
-                unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+2DE0-2DFF, U+A640-A69F;
-            }
-            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,400&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext');
             * { box-sizing: border-box; }
-            body { font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+            body { font-family: 'Titillium Web', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
             a { color: black; text-decoration: none; font-weight: bold; }
             a:hover { text-decoration: underline; }
             .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
@@ -464,17 +466,16 @@ def get_css():
             .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
             .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
             .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; outline: none; }
+            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; outline: none; }
             textarea { text-align: left; resize: vertical; }
             .file-label { display: block; background: #a9a9a9; padding: 12px; text-align: center; cursor: pointer; font-weight: bold; border-radius: 3px; margin-top: 5px; font-size: 16px; color: black; }
             .file-label:hover { background: #8c8c8c; }
-            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
+            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
             button:hover, .btn:hover { background-color: #8c8c8c; }
             button:disabled { opacity: 0.6; cursor: wait; }
             .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
             .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
-            .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
-            .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
+            .captcha-wrap { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 78px; }
             .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
             .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
             .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -507,7 +508,7 @@ def get_css():
             .post-wrapper { position: relative; transition: opacity 0.3s ease; }
             .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
             .post-wrapper:hover .post-actions { opacity: 1; }
-            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;}
+            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal; font-family: 'Titillium Web', Arial, sans-serif;}
             .action-btn:hover { background: #ff4d4d; }
             .action-btn.pin-btn:hover { background: #4da6ff; }
             .action-btn.link-btn:hover { background: #f1c40f; color: black; }
@@ -532,7 +533,7 @@ def get_css():
             .status-Исправлено, .status-Fixed { background: #2ecc71; }
             .status-Отклонено, .status-Rejected { background: #e74c3c; }
             .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;}
+            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'Titillium Web', Arial, sans-serif;}
             .lang-btn:hover { background: #a9a9a9; color: black; }
             .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
             .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
@@ -598,6 +599,7 @@ def get_css():
 
 def get_js(lang, token, current_user=""):
     js = """
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <script>
         const T = "__TOKEN__";
         const ME = "__ME__";
@@ -607,10 +609,9 @@ def get_js(lang, token, current_user=""):
             ic: "__IMG_COMPRESSING__", ir: "__IMG_READY__", ie: "__IMG_ERROR__", ib: "__IMG_BIG__",
             tn: "__TOAST_NEW__", tl: "__TOAST_LINK__", tc: "__TOAST_COPY_FAIL__",
             tar: "__TOAST_APPROVED_REMOVED__", trr: "__TOAST_REJECTED_REMOVED__", tf: "__TOAST_FAILED__",
-            ptl: "__POST_TOO_LONG__"
+            ptl: "__POST_TOO_LONG__", cf: "__CAPTCHA_FAIL__"
         };
         
-        // ============ SAFE HELPERS ============
         function escHtml(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
         }
@@ -621,7 +622,6 @@ def get_js(lang, token, current_user=""):
             return '';
         }
         
-        // ============ LOCAL TIME FORMATTER ============
         function formatLocalDates() {
             const opts = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
             document.querySelectorAll('[data-iso]').forEach(el => {
@@ -758,7 +758,6 @@ def get_js(lang, token, current_user=""):
             const a = document.querySelector('#my-records-container');
             const m = a.querySelector('.empty-state'); if (m) m.remove();
             
-            // === BUILD SAFELY VIA DOM (no innerHTML for user content) ===
             const w = document.createElement('div'); w.className = 'post-wrapper'; w.id = 'post-' + i;
             
             const acts = document.createElement('div'); acts.className = 'post-actions';
@@ -814,7 +813,7 @@ def get_js(lang, token, current_user=""):
         async function rejectSugg(suggId) { try { await rpc('reject_suggestion', { suggestion_id: suggId }); const card = document.getElementById('sugg-' + suggId); if (card) card.remove(); showToast(L.trr); } catch (x) { showToast(L.tf + ' ' + x.message); } }
     </script>
     """
-    reps = [("__TOKEN__", token),("__ME__", current_user),("__DEL__", t('delete',lang)),("__PIN__", t('pin',lang)),("__UNPIN__", t('unpin',lang)),("__CONFIRM__", t('confirm_delete',lang)),("__NOPOSTS__", t('no_posts',lang)),("__COPYLINK__", t('copy_link',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__SUGG_FILL__", t('sugges_error_fill',lang)),("__SUGG_SELF__", t('sugges_error_self',lang)),("__SUGG_SUCCESS__", t('sugges_success',lang)),("__IMG_COMPRESSING__", t('img_compressing',lang)),("__IMG_READY__", t('img_ready',lang)),("__IMG_ERROR__", t('img_error',lang)),("__IMG_BIG__", t('img_too_big',lang)),("__TOAST_NEW__", t('toast_new',lang)),("__TOAST_LINK__", t('toast_link',lang)),("__TOAST_COPY_FAIL__", t('toast_copy_fail',lang)),("__TOAST_APPROVED_REMOVED__", t('toast_approved_removed',lang)),("__TOAST_REJECTED_REMOVED__", t('toast_rejected_removed',lang)),("__TOAST_FAILED__", t('toast_failed',lang)),("__POST_TOO_LONG__", t('post_too_long',lang)),("__SVG_EYE_OFF__", SVG_EYE_OFF),("__SVG_EYE__", SVG_EYE)]
+    reps = [("__TOKEN__", token),("__ME__", current_user),("__DEL__", t('delete',lang)),("__PIN__", t('pin',lang)),("__UNPIN__", t('unpin',lang)),("__CONFIRM__", t('confirm_delete',lang)),("__NOPOSTS__", t('no_posts',lang)),("__COPYLINK__", t('copy_link',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__SUGG_FILL__", t('sugges_error_fill',lang)),("__SUGG_SELF__", t('sugges_error_self',lang)),("__SUGG_SUCCESS__", t('sugges_success',lang)),("__IMG_COMPRESSING__", t('img_compressing',lang)),("__IMG_READY__", t('img_ready',lang)),("__IMG_ERROR__", t('img_error',lang)),("__IMG_BIG__", t('img_too_big',lang)),("__TOAST_NEW__", t('toast_new',lang)),("__TOAST_LINK__", t('toast_link',lang)),("__TOAST_COPY_FAIL__", t('toast_copy_fail',lang)),("__TOAST_APPROVED_REMOVED__", t('toast_approved_removed',lang)),("__TOAST_REJECTED_REMOVED__", t('toast_rejected_removed',lang)),("__TOAST_FAILED__", t('toast_failed',lang)),("__POST_TOO_LONG__", t('post_too_long',lang)),("__CAPTCHA_FAIL__", t('captcha_fail',lang)),("__SVG_EYE_OFF__", SVG_EYE_OFF),("__SVG_EYE__", SVG_EYE)]
     for k, v in reps: js = js.replace(k, v)
     return js
 
@@ -867,7 +866,7 @@ def auth_html(lang, error_msg="", token=""):
             <input type="text" name="nickname" placeholder="__NICKNAME__" required maxlength="30" pattern="[a-zA-Z0-9_\\-]{3,30}" title="3-30: a-z 0-9 _ -">
             <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
             <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+            <div class="captcha-wrap"><div class="g-recaptcha" data-sitekey="__RECAPTCHA_SITE_KEY__"></div></div>
             <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
             <button type="submit">__REG_BTN__</button>
         </form></div></div>
@@ -875,14 +874,14 @@ def auth_html(lang, error_msg="", token=""):
             <input type="hidden" name="csrf_token" value="__TOKEN__">
             <input type="text" name="nickname" placeholder="__NICKNAME__" required>
             <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+            <div class="captcha-wrap"><div class="g-recaptcha" data-sitekey="__RECAPTCHA_SITE_KEY__"></div></div>
             <button type="submit">__LOGIN_BTN__</button>
         </form></div><div class="label-text">__LOGIN__</div></div>
         <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn __EN_ACTIVE__">EN</a></div></div>
         __ERROR__</div>
     </div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
+    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__RECAPTCHA_SITE_KEY__",RECAPTCHA_SITE_KEY),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
         s = s.replace(k, v)
     return s
 
@@ -1228,7 +1227,6 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         s = s.replace(k, v)
     return s
 
-# --- ROUTES ---
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, next: str = "/"):
     res = RedirectResponse(next, 303)
@@ -1264,12 +1262,14 @@ async def privacy(r: Request, lang: str = Cookie("ru")):
     res = HTMLResponse(privacy_html(lang, token)); set_csrf_cookie(res, token, r); return res
 
 @app.post("/register", response_class=HTMLResponse)
-async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru"), g_recaptcha_response: str = Form(None)):
     token = get_csrf_token(r)
     if not check_csrf(r, csrf_token):
         resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
-    if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
+    ip = r.client.host if r.client else ""
+    if not await verify_recaptcha(g_recaptcha_response or "", ip):
+        return auth_html(lang, t('captcha_fail', lang), token)
     username = (username or "").strip()[:60]
     nickname = (nickname or "").strip()
     if not VALID_USER_RE.match(username):
@@ -1291,12 +1291,13 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
     set_csrf_cookie(resp, token, r); return resp
 
 @app.post("/login", response_class=HTMLResponse)
-async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), csrf_token: str = Form(None), lang: str = Cookie("ru"), g_recaptcha_response: str = Form(None)):
     token = get_csrf_token(r)
     ip = r.client.host if r.client else "0.0.0.0"
     if not check_csrf(r, csrf_token):
         resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
-    if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
+    if not await verify_recaptcha(g_recaptcha_response or "", ip):
+        return auth_html(lang, t('captcha_fail', lang), token)
     try:
         x = await asyncio.to_thread(lambda: sb.table('users').select('password').eq('nickname', nickname).execute())
         user = x.data[0] if x.data else None
@@ -1373,8 +1374,7 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
     try:
         if req.method == "create_record":
             content = clean_content(req.params.get("content", ""))
-            if not content.strip():
-                raise HTTPException(400, "Empty")
+            if not content.strip(): raise HTTPException(400, "Empty")
             client_id = req.params.get("client_id")
             image_data = valid_b64(req.params.get("image_data", ""))
             i = client_id if client_id and re.match(r'^[a-f0-9\-]{10,40}$', client_id) else str(uuid.uuid4())
