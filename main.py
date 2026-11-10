@@ -6,15 +6,18 @@ from supabase import create_client, Client
 import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, httpx, asyncio, time as time_module, traceback, os
 from datetime import datetime, timezone
 from urllib.parse import quote
+from contextvars import ContextVar
 
 app = FastAPI()
 
-APP_VERSION = "0.17"
+APP_VERSION = "0.18"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
 SITE_URL = "https://solid.fastapicloud.dev"
-BADGE_URL = "https://destroy.spritefusion.com/?from=badge&url=https%3A%2F%2Fsolid.fastapicloud.dev"
+DESTROY_BASE = "https://destroy.spritefusion.com/?from=badge&url="
+
+_current_path: ContextVar[str] = ContextVar("current_path", default="/")
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
@@ -25,6 +28,10 @@ MAX_B64_LEN = 900000
 POST_MAX_LEN = 5000
 VALID_NICK_RE = re.compile(r'^[a-zA-Z0-9_\-]{3,30}$')
 VALID_USER_RE = re.compile(r'^[a-zA-Z0-9_\- ]{1,60}$')
+
+class _DBUnavailable:
+    pass
+DB_UNAVAILABLE = _DBUnavailable()
 
 _RATE_BUCKETS = {}
 _LOGIN_FAILS = {}
@@ -73,6 +80,7 @@ CSP = (
 
 @app.middleware("http")
 async def security_mw(request: Request, call_next):
+    _current_path.set(request.url.path)
     path = request.url.path
     ip = request.client.host if request.client else "0.0.0.0"
     if path in ("/login", "/register", "/rpc") and not _rate_ok(f"auth:{ip}", 40, 60):
@@ -179,6 +187,7 @@ def og_tags(title, description="", path="", image="", lang="ru"):
     return "".join(parts)
 
 async def _fetch_user(nickname):
+    last_exc = None
     for sel in ('username,description,sugges_rules,avatar_data,sugges_enabled,sugges_photo_enabled',
                 'username,description,sugges_rules,avatar_data,sugges_enabled',
                 'username,description,sugges_rules,avatar_data',
@@ -187,8 +196,10 @@ async def _fetch_user(nickname):
         try:
             res = await asyncio.to_thread(lambda: sb.table('users').select(sel).eq('nickname', nickname).execute())
             return res.data[0] if res.data else None
-        except Exception: continue
-    return None
+        except Exception as e:
+            last_exc = e
+            continue
+    return DB_UNAVAILABLE
 
 async def _fetch_posts(nickname):
     try:
@@ -229,10 +240,10 @@ async def _stats_data():
     return users_count, posts_count, sugg_count, last_update
 
 def user_sugges_enabled(u):
-    return bool(u) and u.get('sugges_enabled') is not False
+    return bool(u) and isinstance(u, dict) and u.get('sugges_enabled') is not False
 
 def user_sugges_photo_enabled(u):
-    return bool(u) and u.get('sugges_photo_enabled') is not False
+    return bool(u) and isinstance(u, dict) and u.get('sugges_photo_enabled') is not False
 
 class ConnectionManager:
     def __init__(self): self.active_connections = []
@@ -263,8 +274,47 @@ async def manifest():
 
 @app.get("/sw.js")
 async def sw():
-    js = "self.addEventListener('install', (e) => { e.waitUntil(caches.open('solid-link-v1').then((cache) => cache.addAll(['/']))); }); self.addEventListener('fetch', (e) => { if (e.request.method !== 'GET') return; e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request))); });"
-    return Response(content=js, media_type="application/javascript", headers={"Cache-Control": "public, max-age=3600"})
+    js = """
+    const CACHE_NAME = 'solid-link-v2';
+    const STATIC_ASSETS = ['/manifest.json'];
+
+    self.addEventListener('install', (e) => {
+        self.skipWaiting();
+        e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {})));
+    });
+
+    self.addEventListener('activate', (e) => {
+        e.waitUntil(
+            caches.keys()
+                .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+                .then(() => self.clients.claim())
+        );
+    });
+
+    // IMPORTANT: never cache HTML navigations — otherwise users see stale login
+    // pages when returning to "/" from /stats etc. Only cache static assets.
+    self.addEventListener('fetch', (e) => {
+        if (e.request.method !== 'GET') return;
+        const url = new URL(e.request.url);
+        if (url.origin !== self.location.origin) return;
+        if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.json') {
+            e.respondWith(
+                caches.match(e.request).then((cached) => {
+                    if (cached) return cached;
+                    return fetch(e.request).then((resp) => {
+                        if (resp && resp.ok) {
+                            const clone = resp.clone();
+                            caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+                        }
+                        return resp;
+                    });
+                })
+            );
+        }
+    });
+    """
+    return Response(content=js, media_type="application/javascript",
+                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/api/og")
 async def get_og(url: str):
@@ -453,7 +503,6 @@ def get_css():
                 src: url('/static/ru_font.ttf') format('truetype');
                 font-weight: 300 700;
                 font-display: swap;
-                unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+2DE0-2DFF, U+A640-A69F;
             }
             @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap');
             * { box-sizing: border-box; }
@@ -834,6 +883,9 @@ def get_overlay(lang):
 
 def get_footer(lang):
     contacts = " | ".join(f"<a href='mailto:{e}'>{e}</a>" for e in CONTACT_EMAILS)
+    current_path = _current_path.get() or "/"
+    current_url = SITE_URL + current_path
+    badge_url = DESTROY_BASE + quote(current_url, safe='')
     s = """
     <div class="footer">
         <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank" rel="noopener noreferrer">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank" rel="noopener noreferrer">FastAPICloud</a></div>
@@ -849,7 +901,7 @@ def get_footer(lang):
         <div style="font-size: 12px; color: #999; margin-top: 5px;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
     </div>
     """
-    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__BADGE_URL__",BADGE_URL),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
+    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__BADGE_URL__",badge_url),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
         s = s.replace(k, v)
     return s
 
@@ -1050,7 +1102,6 @@ def edit_html(nickname, user, lang, token):
     desc = esc(user.get('description'))
     rules = esc(user.get('sugges_rules', ''))
     avatar = sanitize_url(user.get('avatar_data', ''))
-    # Avatar preview: always present, hidden if no avatar
     avatar_display = "block" if avatar else "none"
     avatar_html = f'<label class="avatar-upload" for="avatar-file-input"><img id="avatar-preview" class="avatar-img" src="{avatar}" alt="avatar" style="display:{avatar_display}"><div class="avatar-upload-icon">{SVG_UPLOAD}</div></label>'
     user_username = esc(user.get('username'))
@@ -1270,14 +1321,15 @@ async def set_lang(lang: str, r: Request, next: str = "/"):
 async def index(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
-    nickname = r.cookies.get("nickname")
-    if nickname:
-        try:
-            rdb = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
-            if rdb.data:
-                resp = RedirectResponse("/cabinet", 303); set_csrf_cookie(resp, token, r); return resp
-        except Exception: pass
-    res = HTMLResponse(auth_html(lang, "", token)); set_csrf_cookie(res, token, r)
+    # Trust cookie; /cabinet will verify against DB. Avoids getting "kicked out"
+    # on transient DB hiccups at "/", and lets the redirect work instantly.
+    if r.cookies.get("nickname"):
+        resp = RedirectResponse("/cabinet", 303)
+        set_csrf_cookie(resp, token, r)
+        if setlang in ("ru", "en"): _set_lang_cookie(resp, r, lang)
+        return resp
+    res = HTMLResponse(auth_html(lang, "", token))
+    set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
 
@@ -1357,7 +1409,12 @@ async def cabinet(r: Request, setlang: str = None):
     nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
     user_data, p_data, sc = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname), _fetch_suggestion_count(nickname))
+    if user_data is DB_UNAVAILABLE:
+        # Transient DB failure — keep the user logged in, show retry page.
+        body = "<h2>Сервер временно недоступен. <a href='/cabinet'>Повторить</a></h2>" if lang == "ru" else "<h2>Server temporarily unavailable. <a href='/cabinet'>Retry</a></h2>"
+        return HTMLResponse(body, status_code=503)
     if not user_data:
+        # User genuinely gone — clear cookie.
         resp = RedirectResponse("/", 303); resp.delete_cookie("nickname"); return resp
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
@@ -1384,6 +1441,8 @@ async def sugges_form(nickname: str, r: Request, setlang: str = None):
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
     user_data = await _fetch_user(nickname)
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
     if not user_data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
     rules = user_data.get('sugges_rules', '') or ''
     enabled = user_sugges_enabled(user_data)
@@ -1476,6 +1535,8 @@ async def edit(r: Request, setlang: str = None):
     nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
     user_data = await _fetch_user(nickname)
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
     if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
     res = HTMLResponse(edit_html(nickname, user_data, lang, token))
@@ -1557,6 +1618,8 @@ async def record_page(nickname: str, rid: str, r: Request, setlang: str = None):
 async def public_profile(nickname: str, r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     user_data, p_data = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname))
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
     if not user_data:
         return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
     viewer = r.cookies.get("nickname") or ""
