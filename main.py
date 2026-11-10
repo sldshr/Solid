@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.20"
+APP_VERSION = "0.21"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -171,7 +171,7 @@ def og_tags(title, description="", path="", image="", lang="ru"):
     parts = [
         f'<meta property="og:title" content="{esc(title)}">',
         '<meta property="og:type" content="website">',
-        '<meta property="og:site_name" content="Solid Link">',
+        '<meta property="og:site_name" content="Solid">',
         f'<meta property="og:url" content="{esc(full_url)}">',
         f'<meta property="og:locale" content="{"ru_RU" if lang == "ru" else "en_US"}">',
     ]
@@ -267,7 +267,7 @@ async def ws_endpoint(websocket: WebSocket):
 @app.get("/manifest.json")
 async def manifest():
     return JSONResponse(
-        {"name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
+        {"name": "Solid", "short_name": "Solid", "start_url": "/",
          "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
          "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]},
         headers={"Cache-Control": "public, max-age=86400"})
@@ -361,7 +361,7 @@ class RPCRequest(BaseModel):
     params: dict = {}
 
 PRIVACY_RU = """1. Общие положения<br>
-Настоящая Политика конфиденциальности описывает, какие данные собирает Solid Link, как они используются, хранятся и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>
+Настоящая Политика конфиденциальности описывает, какие данные собирает Solid, как они используются, хранятся и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>
 
 2. Какие данные мы собираем<br>
 • <b>Имя (юзернейм)</b> — отображаемое имя, указанное вами при регистрации.<br>
@@ -412,7 +412,7 @@ PRIVACY_RU = """1. Общие положения<br>
 По вопросам конфиденциальности: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
 PRIVACY_EN = """1. General provisions<br>
-This Privacy Policy describes what data Solid Link collects, how it is used, stored and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>
+This Privacy Policy describes what data Solid collects, how it is used, stored and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>
 
 2. Data we collect<br>
 • <b>Name (username)</b> — the display name you provide during registration.<br>
@@ -462,17 +462,17 @@ We may update this Policy. The current version is always available at /privacy. 
 12. Contacts<br>
 For privacy-related questions: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
-# ИСПРАВЛЕННЫЙ FAQ_DATA: все вложенные двойные кавычки заменены на одинарные
+# FAQ_DATA — emoji here act only as keys; SVG_ICONS maps them to inline SVG at render time.
 FAQ_DATA = {
     "ru": [
-        ("🔐", "Регистрация и вход", [
+        ("lock", "Регистрация и вход", [
             ("Как зарегистрироваться?", 'На главной странице заполните форму «Регистрация»: укажите юзернейм (ваше имя), никнейм (уникальный логин), пароль не короче 8 символов и его повтор. Поставьте обе галочки — «Я не робот» и согласие с политикой. Нажмите «Зарегистрироваться!».'),
             ("Какой никнейм можно выбрать?", 'От 3 до 30 символов: латинские буквы a–z, цифры 0–9, знаки подчёркивания <code>_</code> и дефис <code>-</code>. Никнейм уникален — если он занят, выберите другой.'),
             ("Забыли пароль — что делать?", 'Напишите администрации по адресам из подвала сайта: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> или <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Укажите ваш никнейм.'),
             ("Как выйти из аккаунта?", 'В личном кабинете нажмите красную кнопку «Выйти» в левой панели.'),
             ("Что за ошибка «Too Many Requests»?", 'Сработал rate limit: слишком много попыток за минуту. Подождите 60 секунд, для логина — до 5 минут.'),
         ]),
-        ("📝", "Записи и посты", [
+        ("pencil", "Записи и посты", [
             ("Как создать запись?", 'В личном кабинете введите текст в поле «Напишите что-нибудь...» и нажмите «Создать». Запись сразу появится в разделе «Мои записи» и на вашей публичной странице.'),
             ("Какая максимальная длина записи?", 'До 5000 символов. Символы переноса строки сохраняются.'),
             ("Как прикрепить фото?", 'В форме создания записи нажмите «Фото» и выберите изображение. Фото автоматически сожмётся и прикрепится к записи.'),
@@ -481,7 +481,7 @@ FAQ_DATA = {
             ("Как поделиться ссылкой на запись?", 'Наведите на запись и нажмите «Ссылка» — ссылка скопируется в буфер обмена. Она ведёт на страницу этой конкретной записи.'),
             ("Что такое автопревью ссылок?", 'Если в записи есть URL, при клике откроется диалог с превью: заголовок, описание и картинка с того сайта. Это защита от случайных переходов.'),
         ]),
-        ("💡", "Предложка", [
+        ("lightbulb", "Предложка", [
             ("Что такое предложка?", 'Это форма обратной связи для ваших читателей: они могут предложить пост, который вы одобрите или отклоните. Найти её можно по адресу /ваш_никнейм/sugges.'),
             ("Как предложить пост?", 'Откройте страницу пользователя и нажмите «Предложить пост». Введите ваше имя и текст, при желании прикрепите фото, нажмите «Отправить».'),
             ("Как включить или отключить предложку?", 'В /cabinet/edit есть переключатель «Разрешить предложку». Отключённая предложка скрывает кнопку у всех посетителей.'),
@@ -490,20 +490,20 @@ FAQ_DATA = {
             ("Как задать правила для предложки?", 'В /cabinet/edit в поле «Правила предложки» (до 1000 символов). Они будут показаны всем, кто открывает форму.'),
             ("Можно ли предложить пост самому себе?", 'Нет. Свои посты создавайте напрямую в личном кабинете.'),
         ]),
-        ("⚙️", "Профиль и настройки", [
+        ("gear", "Профиль и настройки", [
             ("Как изменить имя или описание?", 'В /cabinet/edit укажите новое имя и описание (до 300 символов) и сохраните изменения.'),
             ("Как сменить аватар?", 'На странице редактирования нажмите на аватар — откроется выбор файла. Фото сожмётся до 300×300 пикселей.'),
             ("Как сменить язык?", 'Кнопки RU / EN в подвале любой страницы или в сайдбаре. Выбор запоминается в cookie на год.'),
             ("Где посмотреть статистику сайта?", 'Ссылка «Статистика» в подвале: количество пользователей, записей, предложек, аптайм и контакты администрации.'),
             ("Как удалить аккаунт?", 'Напишите администрации. Мы удалим аккаунт и все связанные записи в течение 7 дней.'),
         ]),
-        ("🖼️", "Фото и изображения", [
+        ("image", "Фото и изображения", [
             ("Какие форматы фото поддерживаются?", 'Любые, которые умеет открывать браузер: JPEG, PNG, WebP, GIF. На сервер отправляется сжатый JPEG.'),
             ("Почему фото сжимаются?", 'Чтобы сайт работал быстро и не перегружал хранилище. Сжатие происходит в браузере до отправки: до 1000px по ширине для постов и до 300px для аватара.'),
             ("Максимальный размер изображения?", 'После сжатия — до ~800 КБ в base64. Если оригинал огромный, сжатие произойдёт с потерей качества.'),
             ("Как посмотреть фото в полном размере?", 'Кликните по изображению — откроется просмотрщик. Закрыть можно клавишей Esc или кликом вне фото.'),
         ]),
-        ("🔒", "Безопасность и приватность", [
+        ("shield", "Безопасность и приватность", [
             ("Как хранятся пароли?", 'Только в виде bcrypt-хеша. Оригинал пароля не сохраняется и не может быть восстановлен.'),
             ("Кто видит мои данные?", 'Публично видны: имя, никнейм, описание, аватар, записи. Пароль, CSRF-токен и служебные cookies — нет.'),
             ("Что такое CSRF-токен?", 'Скрытый токен, который защищает формы от подделки запросов. Без него действие не выполнится.'),
@@ -511,7 +511,7 @@ FAQ_DATA = {
             ("Как защищены сессии?", 'Cookies HttpOnly, SameSite=Lax, Secure на HTTPS. Плюс заголовки CSP, X-Frame-Options, HSTS.'),
             ("Что такое политика конфиденциальности?", 'Документ, описывающий какие данные мы собираем и как их используем. Полный текст — по ссылке в подвале или на /privacy.'),
         ]),
-        ("🐞", "Проблемы и поддержка", [
+        ("bug", "Проблемы и поддержка", [
             ("Как сообщить о баге?", 'Откройте /bugreport, опишите проблему. Все ваши заявки видны там же со статусом: Принято, В работе, Исправлено, Отклонено.'),
             ("Не работает вход — что проверить?", '1) Никнейм точно такой, как при регистрации. 2) Пароль не короче 8 символов. 3) Галочка «Я не робот» поставлена. 4) Нет блокировки по rate limit.'),
             ("Почему не приходит письмо?", 'Письма мы не отправляем — вся связь через форму баг-репорта или контакты в подвале.'),
@@ -520,14 +520,14 @@ FAQ_DATA = {
         ]),
     ],
     "en": [
-        ("🔐", "Registration & Login", [
+        ("lock", "Registration & Login", [
             ("How do I register?", 'On the home page, fill in the "Registration" form: enter a username (your name), nickname (unique login), a password of at least 8 characters, and repeat it. Tick both boxes — "I am not a robot" and the privacy policy agreement. Click "Register!".'),
             ("What nickname can I choose?", 'From 3 to 30 characters: latin letters a–z, digits 0–9, underscores <code>_</code> and hyphens <code>-</code>. Nickname is unique — pick another if taken.'),
             ("I forgot my password — what now?", 'Email the administration at the addresses in the footer: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> or <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Include your nickname.'),
             ("How do I log out?", 'In your personal cabinet click the red "Logout" button in the left panel.'),
             ("What is the 'Too Many Requests' error?", 'Rate limit triggered: too many attempts in a minute. Wait 60 seconds, for login — up to 5 minutes.'),
         ]),
-        ("📝", "Records & Posts", [
+        ("pencil", "Records & Posts", [
             ("How do I create a record?", 'In your cabinet type text into the "Write something..." field and click "Create". The record appears immediately in "My records" and on your public page.'),
             ("What is the max record length?", 'Up to 5000 characters. Line breaks are preserved.'),
             ("How do I attach a photo?", 'In the create-record form click "Photo" and pick an image. The photo is auto-compressed and attached.'),
@@ -536,7 +536,7 @@ FAQ_DATA = {
             ("How do I share a link to a record?", 'Hover over the record and click "Link" — the URL is copied to clipboard. It links to that exact record page.'),
             ("What is auto link preview?", 'If a record contains a URL, clicking it opens a dialog with a preview: title, description and image from that site. This prevents accidental clicks.'),
         ]),
-        ("💡", "Suggestions", [
+        ("lightbulb", "Suggestions", [
             ("What is the suggestion box?", 'It is a feedback form for your readers: they can suggest a post that you approve or reject. Available at /your_nickname/sugges.'),
             ("How do I suggest a post?", 'Open a user page and click "Suggest a post". Enter your name and text, optionally attach a photo, click "Send".'),
             ("How do I enable or disable suggestions?", 'In /cabinet/edit there is a toggle "Enable suggestions". Disabled suggestions hide the button from all visitors.'),
@@ -545,20 +545,20 @@ FAQ_DATA = {
             ("How do I set rules for suggestions?", 'In /cabinet/edit under "Suggestion rules" (up to 1000 chars). They are shown to everyone who opens the form.'),
             ("Can I suggest a post to myself?", 'No. Create your posts directly in your cabinet.'),
         ]),
-        ("⚙️", "Profile & Settings", [
+        ("gear", "Profile & Settings", [
             ("How do I change name or description?", 'In /cabinet/edit enter a new name and description (up to 300 chars) and save.'),
             ("How do I change my avatar?", 'On the edit page click the avatar — a file picker opens. The photo is compressed to 300×300 pixels.'),
             ("How do I change the language?", 'RU / EN buttons in the footer of any page or in the sidebar. The choice is stored in a cookie for a year.'),
             ("Where can I see site statistics?", 'The "Stats" link in the footer: users, records, suggestions, uptime and admin contacts.'),
             ("How do I delete my account?", 'Email the administration. We will delete the account and all related records within 7 days.'),
         ]),
-        ("🖼️", "Photos & Images", [
+        ("image", "Photos & Images", [
             ("Which photo formats are supported?", 'Any your browser can open: JPEG, PNG, WebP, GIF. A compressed JPEG is uploaded.'),
             ("Why are photos compressed?", 'To keep the site fast and storage light. Compression happens in the browser before upload: up to 1000px wide for posts, 300px for avatars.'),
             ("What is the max image size?", 'After compression — up to ~800 KB in base64. Very large originals will be compressed with quality loss.'),
             ("How do I view a photo full-size?", 'Click the image — a viewer opens. Close with Esc or click outside the photo.'),
         ]),
-        ("🔒", "Security & Privacy", [
+        ("shield", "Security & Privacy", [
             ("How are passwords stored?", 'Only as a bcrypt hash. The original is never stored and cannot be recovered.'),
             ("Who sees my data?", 'Publicly visible: name, nickname, description, avatar, records. Password, CSRF token and service cookies — no.'),
             ("What is a CSRF token?", 'A hidden token protecting forms from request forgery. Without it, the action will not run.'),
@@ -566,12 +566,12 @@ FAQ_DATA = {
             ("How are sessions protected?", 'HttpOnly cookies, SameSite=Lax, Secure on HTTPS. Plus CSP, X-Frame-Options, HSTS headers.'),
             ("What is the privacy policy?", 'A document describing what data we collect and how we use it. Full text — at /privacy.'),
         ]),
-        ("🐞", "Problems & Support", [
+        ("bug", "Problems & Support", [
             ("How do I report a bug?", 'Open /bugreport and describe the issue. Your reports are listed there with status: Accepted, In Progress, Fixed, Rejected.'),
             ("Login doesn\'t work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. 4) No rate limit block.'),
             ("Why don\'t I receive emails?", 'We do not send emails — all contact via the bug-report form or footer addresses.'),
             ("Who do I contact?", 'Admin email: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. We reply within 1–2 days.'),
-            ("What is 'uptime' in stats?", 'Time since server start. If the server restarts, the counter starts over.'),
+            ("What is \'uptime\' in stats?", 'Time since server start. If the server restarts, the counter starts over.'),
         ]),
     ]
 }
@@ -633,7 +633,7 @@ LOCALES = {
         "err_user_format": "Имя: 1-60 символов, только буквы/цифры/пробел/_-",
         "err_pass_short": "Пароль должен быть не короче 8 символов",
         "faq_title": "ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ",
-        "faq_intro": "Здесь собраны ответы на частые вопросы о Solid Link. Если не нашли ответ — напишите администрации по контактам ниже."
+        "faq_intro": "Здесь собраны ответы на частые вопросы о Solid. Если не нашли ответ — напишите администрации по контактам ниже."
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -691,7 +691,7 @@ LOCALES = {
         "err_user_format": "Name: 1-60 chars, letters/digits/space/_-",
         "err_pass_short": "Password must be at least 8 chars",
         "faq_title": "FREQUENTLY ASKED QUESTIONS",
-        "faq_intro": "Here are answers to frequently asked questions about Solid Link. If you couldn't find an answer — contact the administration below."
+        "faq_intro": "Here are answers to frequently asked questions about Solid. If you couldn't find an answer — contact the administration below."
     }
 }
 
@@ -706,6 +706,17 @@ SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' view
 SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
 SVG_UPLOAD = """<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'></path><polyline points='17 8 12 3 7 8'></polyline><line x1='12' y1='3' x2='12' y2='15'></line></svg>"""
 SVG_CAMERA = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'></path><circle cx='12' cy='13' r='4'></circle></svg>"""
+
+# SVG icons for the docs page (replaces emoji). All use stroke='#4da6ff' to blend with dark theme.
+SVG_ICONS = {
+    "lock": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
+    "pencil": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>",
+    "lightbulb": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/></svg>",
+    "gear": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>",
+    "image": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2' ry='2'/><circle cx='8.5' cy='8.5' r='1.5'/><polyline points='21 15 16 10 5 21'/></svg>",
+    "shield": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg>",
+    "bug": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='6' width='8' height='14' rx='4'/><path d='M19 7l-3 2'/><path d='M5 7l3 2'/><path d='M19 19l-3-2'/><path d='M5 19l3-2'/><path d='M20 13h-4'/><path d='M4 13h4'/><path d='M10 4l1 2'/><path d='M14 4l-1 2'/></svg>",
+}
 
 _CSS_CACHE = None
 def get_css():
@@ -868,14 +879,6 @@ def get_css():
             .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
             .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
             .contacts-box a { color: #4da6ff; }
-            .faq-intro { background: #222; padding: 20px; border-radius: 8px; margin-bottom: 25px; color: #ddd; font-size: 16px; line-height: 1.6; border: 1px solid #333; }
-            .faq-section { background: #1a1a1a; padding: 25px; border-radius: 8px; margin-bottom: 20px; border-left: 6px solid #4da6ff; }
-            .faq-section h3 { color: #fff; margin: 0 0 18px 0; font-size: 24px; border-bottom: 2px solid #333; padding-bottom: 12px; }
-            .faq-item { background: #2a2a2a; padding: 15px 18px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid #9b59b6; }
-            .faq-q { font-weight: bold; font-size: 17px; margin-bottom: 8px; color: #4da6ff; }
-            .faq-a { font-size: 15px; color: #ddd; line-height: 1.6; }
-            .faq-a a { color: #4da6ff; text-decoration: underline; }
-            .faq-a code { background: #444; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #ff9; font-size: 14px; }
             @media (max-width: 768px) {
                 .page-content { padding: 8px; }
                 .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -906,10 +909,6 @@ def get_css():
                 .stats-card { font-size: 15px;}
                 .stats-value { font-size: 18px;}
                 .footer-badge img { width: 160px; height: 36px; }
-                .faq-section { padding: 18px; }
-                .faq-section h3 { font-size: 20px; }
-                .faq-q { font-size: 15px; }
-                .faq-a { font-size: 14px; }
             }
         </style>
         """
@@ -1116,7 +1115,7 @@ def get_footer(lang):
     badge_url = DESTROY_BASE + quote(current_url, safe='')
     s = """
     <div class="footer">
-        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank" rel="noopener noreferrer">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank" rel="noopener noreferrer">FastAPICloud</a></div>
+        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank" rel="noopener noreferrer">Solid</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank" rel="noopener noreferrer">FastAPICloud</a></div>
         <div class="footer-links">
             <a href="/docs">__FAQ_LINK__</a> | <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a> | <a href="/stats">__STATS_LINK__</a>
         </div>
@@ -1135,13 +1134,13 @@ def get_footer(lang):
 
 def auth_html(lang, error_msg="", token=""):
     eb = f"<div class='error-msg'>{esc(error_msg)}</div>" if error_msg else "<div class='error-msg'></div>"
-    og_title = "Solid Link — Вход / Регистрация" if lang == "ru" else "Solid Link — Login / Registration"
-    og_desc = "Solid Link — простая социальная платформа с записями и предложкой" if lang == "ru" else "Solid Link — simple social platform with records and suggestions"
+    og_title = "Solid — Вход / Регистрация" if lang == "ru" else "Solid — Login / Registration"
+    og_desc = "Solid — простая социальная платформа с записями и предложкой" if lang == "ru" else "Solid — simple social platform with records and suggestions"
     og = og_tags(og_title, og_desc, "/", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__LOGIN__ / __REG__ — Solid Link</title>__OG__
+    <title>__LOGIN__ / __REG__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="container">
@@ -1222,12 +1221,12 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
     badge = f'<span class="badge">{sugg_count}</span>' if sugg_count else ''
     safe_nick_url = quote(nickname, safe='')
     og_title = f"Личный кабинет — {nickname}" if lang == "ru" else f"Personal cabinet — {nickname}"
-    og_desc = desc or ("Solid Link — личный кабинет" if lang == "ru" else "Solid Link — personal cabinet")
+    og_desc = desc or ("Solid — личный кабинет" if lang == "ru" else "Solid — personal cabinet")
     og = og_tags(og_title, og_desc, "/cabinet", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__CABINET__ — Solid Link</title>__OG__
+    <title>__CABINET__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar">
@@ -1274,11 +1273,11 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
             rh += f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date' data-iso='{iso}'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
     og_title = t('suggestions_title', lang) + " — " + nickname
-    og = og_tags(og_title, "Solid Link — suggestions", "/cabinet/suggestions", lang=lang)
+    og = og_tags(og_title, "Solid — suggestions", "/cabinet/suggestions", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__SUGGESTIONS_TITLE__ — Solid Link</title>__OG__
+    <title>__SUGGESTIONS_TITLE__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
@@ -1304,12 +1303,12 @@ def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabl
         form_block = f"<form data-nickname='{safe_nick_attr}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:10px'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60' style='background:#a9a9a9;padding:12px;font-size:16px;'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='background:#a9a9a9;height:150px;padding:12px;font-size:16px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' style='background:#2ecc71;color:white;font-size:18px;'>{t('sugges_send',lang)}</button></form>"
     rules_block = f"<div class='rules-box'><b>{t('rules_title',lang)}</b><div class='rules-content'>{esc(rules)}</div></div>" if rules else ""
     og_title = f"Предложить пост для {nickname}" if lang == "ru" else f"Suggest a post for {nickname}"
-    og = og_tags(og_title, "Solid Link — suggestions", f"/{quote(nickname, safe='')}/sugges", lang=lang)
+    og = og_tags(og_title, "Solid — suggestions", f"/{quote(nickname, safe='')}/sugges", lang=lang)
     safe_nick_url = quote(nickname, safe='')
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__TITLE__ __NICKNAME__ — Solid Link</title>__OG__
+    <title>__TITLE__ __NICKNAME__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
@@ -1335,12 +1334,12 @@ def edit_html(nickname, user, lang, token):
     user_username = esc(user.get('username'))
     sugges_checked = "checked" if user_sugges_enabled(user) else ""
     photo_checked = "checked" if user_sugges_photo_enabled(user) else ""
-    og_title = "Редактировать профиль — Solid Link" if lang == "ru" else "Edit Profile — Solid Link"
+    og_title = "Редактировать профиль — Solid" if lang == "ru" else "Edit Profile — Solid"
     og = og_tags(og_title, desc or "", "/cabinet/edit", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__EDIT_PROFILE__ — Solid Link</title>__OG__
+    <title>__EDIT_PROFILE__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
@@ -1381,13 +1380,13 @@ def public_html(nickname, user, records, lang, token, viewer):
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     safe_nick_url = quote(nickname, safe='')
     sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
-    og_title = f"{nickname} — Solid Link"
+    og_title = f"{nickname} — Solid"
     og_desc = desc or (f"Профиль {nickname}" if lang == "ru" else f"Profile {nickname}")
     og = og_tags(og_title, og_desc, f"/{safe_nick_url}", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PROFILE__ __NICKNAME__ — Solid Link</title>__OG__
+    <title>__PROFILE__ __NICKNAME__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar">
@@ -1414,14 +1413,14 @@ def record_page_html(nickname, user, record, lang, token, viewer):
     sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
     raw_content = record.get('content', '') or ''
     snippet = strip_html(raw_content)[:150] + ('...' if len(raw_content) > 150 else '')
-    og_title = f"Запись от {nickname} — Solid Link" if lang == "ru" else f"Record by {nickname} — Solid Link"
-    og_desc = snippet or "Solid Link"
+    og_title = f"Запись от {nickname} — Solid" if lang == "ru" else f"Record by {nickname} — Solid"
+    og_desc = snippet or "Solid"
     img_data = sanitize_url(record.get('image_data', ''))
     og = og_tags(og_title, og_desc, f"/{safe_nick_url}/{quote(str(record.get('id', '')), safe='')}", image=img_data, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__RECORD_PAGE__ — Solid Link</title>__OG__
+    <title>__RECORD_PAGE__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar">
@@ -1444,12 +1443,12 @@ def bugreport_html(username, reports, lang, token):
         date_str = format_date(esc(x.get('created_at')))
         iso_str = esc(x.get('created_at', ''))
         rh += f"<div class='post-item' style='border-left-color:transparent'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;'><b>{t('bugreport_title',lang)}</b><span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span></div><div class='post-content' style='text-align:left;'>{esc(x.get('content'))}</div><div class='post-date' data-iso='{iso_str}'>{date_str}</div></div>"
-    og_title = "Баг-репорт — Solid Link" if lang == "ru" else "Bug Report — Solid Link"
-    og = og_tags(og_title, "Solid Link", "/bugreport", lang=lang)
+    og_title = "Баг-репорт — Solid" if lang == "ru" else "Bug Report — Solid"
+    og = og_tags(og_title, "Solid", "/bugreport", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__BUGREPORT_TITLE__ — Solid Link</title>__OG__
+    <title>__BUGREPORT_TITLE__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
@@ -1473,13 +1472,13 @@ def bugreport_html(username, reports, lang, token):
     return s
 
 def privacy_html(lang, token):
-    og_title = "Политика конфиденциальности — Solid Link" if lang == "ru" else "Privacy Policy — Solid Link"
-    og_desc = "Политика конфиденциальности Solid Link" if lang == "ru" else "Solid Link Privacy Policy"
+    og_title = "Политика конфиденциальности — Solid" if lang == "ru" else "Privacy Policy — Solid"
+    og_desc = "Политика конфиденциальности Solid" if lang == "ru" else "Solid Privacy Policy"
     og = og_tags(og_title, og_desc, "/privacy", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PRIVACY_TITLE__ — Solid Link</title>__OG__
+    <title>__PRIVACY_TITLE__ — Solid</title>__OG__
     __CSS__</head><body>
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area" style="padding:20px">
@@ -1494,13 +1493,54 @@ def privacy_html(lang, token):
         s = s.replace(k, v)
     return s
 
+def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_iso, viewer=""):
+    uptime = _uptime_str(lang)
+    started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
+    last_upd = format_date(last_update_iso) if last_update_iso else "—"
+    last_upd_iso = esc(last_update_iso or "")
+    contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}'>{e}</a></div>" for e in CONTACT_EMAILS)
+    og_title = "Статистика — Solid" if lang == "ru" else "Stats — Solid"
+    og_desc = f"Пользователей: {users_count}, записей: {posts_count}" if lang == "ru" else f"Users: {users_count}, records: {posts_count}"
+    og = og_tags(og_title, og_desc, "/stats", lang=lang)
+    s = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>__STATS_TITLE__ — Solid</title>__OG__
+    __CSS____JS__</head><body>
+    <div class="page-content">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px">
+        <div class="posts-area" style="padding:20px;min-height:400px;">
+            <h2>__STATS_TITLE__</h2>
+            <div class="stats-card"><b>__STATS_USERS__</b><span class="stats-value">__USERS_COUNT__</span></div>
+            <div class="stats-card"><b>__STATS_POSTS__</b><span class="stats-value">__POSTS_COUNT__</span></div>
+            <div class="stats-card"><b>__STATS_SUGGES__</b><span class="stats-value">__SUGG_COUNT__</span></div>
+            <div class="stats-card"><b>__STATS_STARTED__</b><span style="font-size:15px;">__STARTED__</span></div>
+            <div class="stats-card"><b>__STATS_LAST_UPDATE__</b><span style="font-size:15px;" data-iso="__LAST_UPDATE_ISO__">__LAST_UPDATE__</span></div>
+            <div class="stats-card"><b>__STATS_UPTIME__</b><span class="stats-value" style="color:#2a5db0;">__UPTIME__</span></div>
+            <div class="contacts-box">
+                <b>__STATS_CONTACTS__</b>
+                <div>__STATS_CONTACTS_DESC__</div>
+                __CONTACTS_HTML__
+            </div>
+        </div>
+        <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
+        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    </div></div>
+    </div>__FOOTER____OVERLAY__</body></html>
+    """
+    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+        s = s.replace(k, v)
+    return s
+
 # ---------- Docsify / FAQ ----------
 
 def faq_markdown(lang: str) -> str:
     sections = FAQ_DATA.get(lang, FAQ_DATA["ru"])
     lines = [f"# {t('faq_title', lang)}", "", t('faq_intro', lang), ""]
-    for icon, title, items in sections:
-        lines.append(f"## {icon} {title}")
+    for icon_key, title, items in sections:
+        svg = SVG_ICONS.get(icon_key, "")
+        icon_html = f'<span class="docs-icon">{svg}</span> ' if svg else ""
+        lines.append(f"## {icon_html}{title}")
         lines.append("")
         for q, a in items:
             lines.append(f"### {q}")
@@ -1510,8 +1550,8 @@ def faq_markdown(lang: str) -> str:
     return "\n".join(lines)
 
 def docs_html(lang: str, token: str) -> str:
-    og_title = "FAQ — Solid Link"
-    og_desc = "Часто задаваемые вопросы о Solid Link" if lang == "ru" else "Frequently asked questions about Solid Link"
+    og_title = "FAQ — Solid"
+    og_desc = "Часто задаваемые вопросы о Solid" if lang == "ru" else "Frequently asked questions about Solid"
     og = og_tags(og_title, og_desc, "/docs", lang=lang)
     return f"""
     <!DOCTYPE html>
@@ -1519,19 +1559,81 @@ def docs_html(lang: str, token: str) -> str:
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>FAQ — Solid Link</title>
+        <title>FAQ — Solid</title>
         {og}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/themes/vue.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/themes/dark.css">
         <style>
-            body {{ font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; }}
-            .sidebar {{ background: #f4f4f4; }}
-            .sidebar-toggle {{ background: #4da6ff; }}
-            .markdown-section {{ max-width: 900px; }}
+            @font-face {{
+                font-family: 'RuFont';
+                src: url('/static/ru_font.ttf') format('truetype');
+                font-weight: 300 700;
+                font-display: swap;
+            }}
+            body {{
+                font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;
+                background: #0d1117;
+            }}
+            :root {{
+                --theme-color: #4da6ff;
+            }}
+            .sidebar {{
+                background: #0d1117;
+                border-right: 1px solid #21262d;
+            }}
+            .sidebar ul li a {{
+                color: #c9d1d9;
+            }}
+            .sidebar ul li.active > a,
+            .sidebar ul li a:hover {{
+                color: #4da6ff;
+                border-right: 2px solid #4da6ff;
+            }}
+            .sidebar-toggle {{
+                background: #4da6ff;
+            }}
+            .sidebar-nav .docs-icon,
+            .sidebar-nav svg {{
+                display: none;
+            }}
+            .markdown-section {{
+                color: #c9d1d9;
+            }}
+            .markdown-section h1,
+            .markdown-section h2,
+            .markdown-section h3 {{
+                color: #ffffff;
+            }}
+            .markdown-section h2 {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                border-bottom: 2px solid #21262d;
+                padding-bottom: 12px;
+                margin-top: 40px;
+            }}
+            .markdown-section h2 svg {{
+                flex-shrink: 0;
+            }}
+            .markdown-section code {{
+                background: #161b22;
+                color: #79c0ff;
+            }}
+            .markdown-section a {{
+                color: #4da6ff;
+            }}
+            .app-nav {{
+                background: #0d1117;
+            }}
+            .app-nav a {{
+                color: #c9d1d9;
+            }}
+            .app-name, .app-name-link {{
+                color: #ffffff !important;
+            }}
         </style>
         <script>
             window.$docsify = {{
-                name: 'Solid Link',
-                repo: '',
+                name: 'Solid',
                 loadSidebar: false,
                 subMaxLevel: 2,
                 basePath: '/docs/',
@@ -1542,7 +1644,6 @@ def docs_html(lang: str, token: str) -> str:
                 executeScript: false,
                 noEmoji: false,
                 mergeNavbar: true,
-                formatUpdated: '{{YYYY}}/{{MM}}/{{DD}} {{HH}}:{{mm}}',
                 search: {{
                     placeholder: 'Поиск...',
                     noData: 'Ничего не найдено'
@@ -1554,16 +1655,6 @@ def docs_html(lang: str, token: str) -> str:
         <div id="app"></div>
         <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
         <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
-        <script>
-            // Кнопка назад
-            document.addEventListener('DOMContentLoaded', function() {{
-                const backBtn = document.createElement('a');
-                backBtn.href = '/';
-                backBtn.textContent = '← На главную';
-                backBtn.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#4da6ff;color:#fff;padding:10px 18px;border-radius:5px;text-decoration:none;font-weight:bold;z-index:9999;';
-                document.body.appendChild(backBtn);
-            }});
-        </script>
     </body>
     </html>
     """
