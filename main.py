@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.25"
+APP_VERSION = "0.26"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -23,7 +23,6 @@ S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
 
-# ================= ВНУТРЕННИЙ КЭШ В ОПЕРАТИВКЕ =================
 CACHE = {"posts": [], "users": {}}
 
 @app.on_event("startup")
@@ -38,7 +37,6 @@ async def load_cache():
         print(f"Успешно загружено: {len(CACHE['posts'])} постов, {len(CACHE['users'])} пользователей.")
     except Exception as e:
         print(f"Ошибка при загрузке кэша: {e}")
-# ==============================================================
 
 deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
@@ -646,7 +644,6 @@ SVG_ICONS = {
     "bug": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='6' width='8' height='14' rx='4'/><path d='M19 7l-3 2'/><path d='M5 7l3 2'/><path d='M19 19l-3-2'/><path d='M5 19l3-2'/><path d='M20 13h-4'/><path d='M4 13h4'/><path d='M10 4l1 2'/><path d='M14 4l-1 2'/></svg>",
 }
 
-SVG_NAV_FEED = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><polyline points='9 22 9 12 15 12 15 22'/></svg>"""
 SVG_NAV_CREATE = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/></svg>"""
 SVG_NAV_CABINET = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
 SVG_NAV_SETTINGS = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"""
@@ -654,16 +651,12 @@ SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='2
 
 def bottom_nav_html(lang):
     current = _current_path.get() or "/"
-    feed_active = "active" if current == "/cabinet" else ""
     create_active = "active" if current == "/cabinet/new" else ""
-    profile_active = "active" if current == "/cabinet/profile" else ""
+    profile_active = "active" if current in ("/cabinet", "/cabinet/profile") else ""
     sug_active = "active" if current == "/cabinet/suggestions" else ""
     set_active = "active" if current == "/settings" else ""
     return f"""
     <nav class="bottom-nav" aria-label="Навигация">
-        <a href="/cabinet" class="bottom-nav-item {feed_active}">
-            {SVG_NAV_FEED}
-        </a>
         <a href="/cabinet/new" class="bottom-nav-item {create_active}">
             {SVG_NAV_CREATE}
         </a>
@@ -991,7 +984,7 @@ def get_css():
                 body.has-bottom-nav .page-content { padding-bottom: 70px; }
                 
                 .container { flex-direction: column; padding: 15px; border: none; background: #000; gap: 15px; width: 100%; }
-                .auth-wrapper { width: 100%; max-width: 100%; background: transparent; padding: 0; box-shadow: none; }
+                .auth-wrapper { width: 100%; max-width: 100%; background: transparent; padding: 10px; box-shadow: none; }
                 .label-text { color: #fff; font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
                 .form-box { border: 1px solid #333; background: #111; }
                 .captcha-container { background: #222; color: #fff; border: 1px solid #333; }
@@ -1003,6 +996,8 @@ def get_css():
                 .sidebar { width: 100%; max-width: 100%; padding: 15px; border-radius: 0; background: #000; border-bottom: 1px solid #222; gap: 8px; margin-bottom: 0; }
                 .sidebar h2 { color: #fff; font-size: 20px; margin: 5px 0 10px; }
                 .info-card { background: #111; color: #fff; border: 1px solid #222; padding: 12px; font-size: 15px; border-radius: 0; }
+                .info-card a { color: #4da6ff !important; text-decoration: none; }
+                .info-card b { color: #888; }
                 .main-content { width: 100%; gap: 0; background: #000; }
                 
                 .posts-area { background: #000; padding: 0; border-radius: 0; min-height: 100vh; }
@@ -1018,15 +1013,15 @@ def get_css():
                 .action-btn { background: #333; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; font-size: 12px; }
                 .action-btn:hover { background: #555; }
                 
+                /* Скрываем создание поста на мобилках */
+                .create-post-box { display: none !important; }
+                
                 .sugg-actions { flex-direction: column; gap: 8px; }
                 .modal-box { background: #111; color: #fff; border: 1px solid #333; border-radius: 0; }
                 .modal-box p, .modal-box h3 { color: #fff; }
                 .og-box { background: #222; border-color: #333; color: #fff; }
                 .og-title { color: #fff; }
                 .og-desc { color: #aaa; }
-                
-                .create-post-box { background: #000; padding: 15px; border-radius: 0; border-bottom: 1px solid #222; }
-                .create-post-box textarea { background: #222; color: #fff; }
                 
                 .settings-card { background: #111; border: 1px solid #222; border-radius: 0; margin-bottom: 1px; }
                 .settings-about-text { color: #aaa; }
@@ -1278,7 +1273,7 @@ def get_js(lang, token, current_user=""):
             try {
                 await rpc('create_record', { content: c, image_data: img });
                 showToast(L.tn);
-                setTimeout(() => { window.location.href = '/cabinet'; }, 500);
+                setTimeout(() => { window.location.href = '/cabinet/profile'; }, 500);
             } catch (x) {
                 showToast(L.tf + ' ' + x.message);
                 btn.disabled = false; btn.innerHTML = originalText;
@@ -1421,7 +1416,6 @@ def render_records(records, lang, own=False, uid=None):
         pc = "pinned" if pinned else ""
         
         acts = "<div class='post-actions'>"
-        # Кнопка "Ссылка" теперь доступна всем, даже гостям
         acts += f"<button class='action-btn link-btn' data-user='{safe_nick}' data-rid='{rid}' onclick='copyLink(this)'>{t('copy_link', lang)}</button>"
         if own:
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
@@ -1854,8 +1848,6 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         s = s.replace(k, v)
     return s
 
-# ---------- Docsify / FAQ ----------
-
 def faq_markdown(lang: str) -> str:
     sections = FAQ_DATA.get(lang, FAQ_DATA["ru"])
     lines = [f"# {t('faq_title', lang)}", "", t('faq_intro', lang), ""]
@@ -1941,7 +1933,6 @@ def docs_html(lang: str, token: str) -> str:
     </html>
     """
 
-# ---------- ROUTES ----------
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, r: Request, next: str = "/"):
     effective_lang = lang if lang in ("ru", "en") else "ru"
