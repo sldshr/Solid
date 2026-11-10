@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.26"
+APP_VERSION = "0.27"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -651,10 +651,17 @@ SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='2
 
 def bottom_nav_html(lang):
     current = _current_path.get() or "/"
+    
+    # Логика определения активного таба для всех подразделов
     create_active = "active" if current == "/cabinet/new" else ""
-    profile_active = "active" if current in ("/cabinet", "/cabinet/profile") else ""
     sug_active = "active" if current == "/cabinet/suggestions" else ""
     set_active = "active" if current == "/settings" else ""
+    
+    # Все маршруты начинающиеся на /cabinet (кроме /new и /suggestions) относятся к профилю
+    profile_active = ""
+    if current.startswith("/cabinet") and current not in ("/cabinet/new", "/cabinet/suggestions"):
+        profile_active = "active"
+        
     return f"""
     <nav class="bottom-nav" aria-label="Навигация">
         <a href="/cabinet/new" class="bottom-nav-item {create_active}">
@@ -1003,7 +1010,7 @@ def get_css():
                 .posts-area { background: #000; padding: 0; border-radius: 0; min-height: 100vh; }
                 .posts-area h2 { color: #fff; background: #111; padding: 15px; margin: 0; border-bottom: 1px solid #222; }
                 .post-item { background: #111; color: #fff; border-bottom: 1px solid #222; border-radius: 0; margin-bottom: 0; border-left: none; }
-                .post-content { padding: 15px; color: #eee; font-size: 16px; text-align: left; }
+                .post-content { padding: 15px; color: #eee; font-size: 16px; text-align: center !important; }
                 .post-footer { padding: 10px 15px; border-top: 1px solid #222; flex-direction: row; align-items: center; justify-content: space-between; }
                 .post-date { color: #888; }
                 .post-suggested { color: #4da6ff; }
@@ -1016,6 +1023,10 @@ def get_css():
                 /* Скрываем создание поста на мобилках */
                 .create-post-box { display: none !important; }
                 
+                /* Скрываем смену языка везде на телефоне, кроме настроек */
+                .lang-switch { display: none !important; }
+                .settings-card .lang-switch { display: flex !important; }
+
                 .sugg-actions { flex-direction: column; gap: 8px; }
                 .modal-box { background: #111; color: #fff; border: 1px solid #333; border-radius: 0; }
                 .modal-box p, .modal-box h3 { color: #fff; }
@@ -1160,13 +1171,41 @@ def get_js(lang, token, current_user=""):
         }
         window.postImageCache = ""; window.suggImageCache = "";
         async function handlePostImage(input) {
-            const file = input.files[0]; const preview = document.getElementById('post-img-preview'); const btn = document.getElementById('create-post-btn');
-            if (!file) { window.postImageCache = ""; if(preview) preview.style.display='none'; return; }
+            const file = input.files[0]; 
+            const container = document.getElementById('post-img-container'); 
+            const preview = document.getElementById('post-img-preview'); 
+            const btn = document.getElementById('create-post-btn');
+            if (!file) { window.postImageCache = ""; if(container) container.style.display='none'; return; }
             showToast(L.ic); if(btn) btn.disabled = true;
-            try { const b64 = await compressImage(file, 1000, 0.75); window.postImageCache = b64; if (preview) { preview.src = b64; preview.style.display = 'block'; preview.onclick = () => viewImage(b64); } showToast(L.ir); }
-            catch (e) { window.postImageCache = ""; showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; if(preview) preview.style.display='none'; }
+            try { 
+                const b64 = await compressImage(file, 1000, 0.75); 
+                window.postImageCache = b64; 
+                if (preview) { 
+                    preview.src = b64; 
+                    if (container) container.style.display = 'block'; 
+                    preview.onclick = () => viewImage(b64); 
+                } 
+                showToast(L.ir); 
+            }
+            catch (e) { 
+                window.postImageCache = ""; 
+                showToast(e === 'Image too big' ? L.ib : L.ie); 
+                input.value = ''; 
+                if(container) container.style.display='none'; 
+            }
             finally { if(btn) btn.disabled = false; }
         }
+        
+        function removePostImage() {
+            window.postImageCache = "";
+            const input = document.getElementById('post-file-input');
+            if(input) input.value = "";
+            const container = document.getElementById('post-img-container');
+            if(container) container.style.display = 'none';
+            const preview = document.getElementById('post-img-preview');
+            if(preview) preview.src = "";
+        }
+
         async function handleSuggImage(input) {
             const file = input.files[0]; const preview = document.getElementById('sugg-img-preview'); const btn = document.getElementById('sugg-submit-btn');
             if (!file) { window.suggImageCache = ""; if(preview) preview.style.display='none'; return; }
@@ -1193,7 +1232,27 @@ def get_js(lang, token, current_user=""):
         connectWS();
         function copyLink(btn) { const user = btn.dataset.user || ''; const rid = btn.dataset.rid || ''; if (!user) return; const url = window.location.origin + '/' + encodeURIComponent(user) + '/' + encodeURIComponent(rid); navigator.clipboard.writeText(url).then(() => showToast(L.tl)).catch(() => showToast(L.tc)); }
         function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-        function showConfirm(msg, cb) { const m = document.getElementById('modal-overlay'); document.getElementById('modal-text').textContent = msg; m.classList.add('show'); const cBtn = document.getElementById('modal-confirm'); const xBtn = document.getElementById('modal-cancel'); const nC = cBtn.cloneNode(true); const nX = xBtn.cloneNode(true); cBtn.parentNode.replaceChild(nC, cBtn); xBtn.parentNode.replaceChild(nX, xBtn); nC.onclick = () => { m.classList.remove('show'); cb(true); }; nX.onclick = () => { m.classList.remove('show'); cb(false); }; }
+        
+        function showConfirm(msg, cb) { 
+            const m = document.getElementById('modal-overlay'); 
+            document.getElementById('modal-text').textContent = msg; 
+            m.classList.add('show'); 
+            const cBtn = document.getElementById('modal-confirm'); 
+            const xBtn = document.getElementById('modal-cancel'); 
+            const nC = cBtn.cloneNode(true); 
+            const nX = xBtn.cloneNode(true); 
+            cBtn.parentNode.replaceChild(nC, cBtn); 
+            xBtn.parentNode.replaceChild(nX, xBtn); 
+            nC.onclick = () => { m.classList.remove('show'); cb(true); }; 
+            nX.onclick = () => { m.classList.remove('show'); cb(false); }; 
+        }
+        
+        function confirmLogout() {
+            showConfirm("Вы уверены, что хотите выйти?", (yes) => {
+                if (yes) window.location.href = '/logout';
+            });
+        }
+
         let pendingUrl = "";
         async function showLinkWarning(e, el) {
             e.preventDefault(); pendingUrl = el.getAttribute('data-url'); if (!pendingUrl) return;
@@ -1257,7 +1316,7 @@ def get_js(lang, token, current_user=""):
             let inserted = false; const wrappers = a.querySelectorAll('.post-wrapper');
             for (let ww of wrappers) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
             if (!inserted) a.appendChild(w);
-            f.reset(); window.postImageCache = ""; const preview = document.getElementById('post-img-preview'); if (preview) preview.style.display = 'none';
+            f.reset(); window.postImageCache = ""; removePostImage();
             try { await rpc('create_record', { content: c, client_id: i, image_data: img }); } catch (x) { w.remove(); showToast(L.tf + ' ' + x.message); }
         }
 
@@ -1357,6 +1416,7 @@ def auth_html(lang, error_msg="", token=""):
     og_title = "Solid — Вход / Регистрация" if lang == "ru" else "Solid — Login / Registration"
     og_desc = "Solid — простая социальная платформа с записями и предложкой" if lang == "ru" else "Solid — simple social platform with records and suggestions"
     og = og_tags(og_title, og_desc, "/", lang=lang)
+    # Исправленная верстка для мобилки (лейбл наверху)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
@@ -1364,25 +1424,31 @@ def auth_html(lang, error_msg="", token=""):
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="container">
-        <div class="auth-wrapper"><div class="label-text">__REG__</div><div class="form-box"><form action="/register" method="post">
-            <input type="hidden" name="csrf_token" value="__TOKEN__">
-            <input type="text" name="username" placeholder="__USERNAME__" required maxlength="60">
-            <input type="text" name="nickname" placeholder="__NICKNAME__" required maxlength="30" pattern="[a-zA-Z0-9_\\-]{3,30}" title="3-30: a-z 0-9 _ -">
-            <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
-            <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-            <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
-            <button type="submit">__REG_BTN__</button>
-        </form></div></div>
-        <div class="auth-wrapper"><div class="auth-wrapper-inner"><div class="form-box"><form action="/login" method="post">
-            <input type="hidden" name="csrf_token" value="__TOKEN__">
-            <input type="text" name="nickname" placeholder="__NICKNAME__" required>
-            <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
-            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-            <button type="submit">__LOGIN_BTN__</button>
-        </form></div><div class="label-text">__LOGIN__</div></div>
+        <div class="auth-wrapper">
+            <div class="label-text">__REG__</div>
+            <div class="form-box"><form action="/register" method="post">
+                <input type="hidden" name="csrf_token" value="__TOKEN__">
+                <input type="text" name="username" placeholder="__USERNAME__" required maxlength="60">
+                <input type="text" name="nickname" placeholder="__NICKNAME__" required maxlength="30" pattern="[a-zA-Z0-9_\\-]{3,30}" title="3-30: a-z 0-9 _ -">
+                <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
+                <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
+                <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+                <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
+                <button type="submit">__REG_BTN__</button>
+            </form></div>
+        </div>
+        <div class="auth-wrapper">
+            <div class="label-text">__LOGIN__</div>
+            <div class="form-box"><form action="/login" method="post">
+                <input type="hidden" name="csrf_token" value="__TOKEN__">
+                <input type="text" name="nickname" placeholder="__NICKNAME__" required>
+                <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
+                <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+                <button type="submit">__LOGIN_BTN__</button>
+            </form></div>
+        </div>
         <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn __EN_ACTIVE__">EN</a></div></div>
-        __ERROR__</div>
+        __ERROR__
     </div>
     </div>__FOOTER____OVERLAY__</body></html>
     """
@@ -1468,13 +1534,16 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
         <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
         <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
         <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE____BADGE__</a>
-        <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">__LOGOUT__</button></form>
+        <button type="button" onclick="confirmLogout()" class="logout-btn">__LOGOUT__</button>
         <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div>
     <div class="main-content">
         <div class="create-post-box"><form id="create-form" onsubmit="hc(event)">
             <textarea name="content" placeholder="__CREATE_POST_PLACEHOLDER__" required maxlength="5000"></textarea>
-            <img id="post-img-preview" class="img-preview" style="display:none;">
+            <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
+                <img id="post-img-preview" class="img-preview">
+                <button type="button" onclick="removePostImage()" style="position:absolute; top:5px; right:5px; background:red; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; line-height:1;">&times;</button>
+            </div>
             <div class="post-buttons-row">
                 <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
                 <input type="file" id="post-file-input" accept="image/*" onchange="handlePostImage(this)" style="display:none;">
@@ -1499,12 +1568,16 @@ def create_page_html(nickname, lang, token):
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
     <title>__TITLE__ — Solid</title>__OG__
     __CSS____JS__</head><body>
+    <script>if(window.innerWidth > 768) window.location.href='/cabinet';</script>
     <div class="page-content">
         <div class="create-page-container">
             <h1 class="create-page-title">__TITLE__</h1>
             <form class="create-page-form" onsubmit="hcNew(event)">
                 <textarea class="create-page-textarea" name="content" placeholder="__PLACEHOLDER__" required maxlength="5000" autofocus></textarea>
-                <img id="post-img-preview" class="img-preview" style="display:none;">
+                <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
+                    <img id="post-img-preview" class="img-preview">
+                    <button type="button" onclick="removePostImage()" style="position:absolute; top:5px; right:5px; background:red; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; line-height:1;">&times;</button>
+                </div>
                 <div class="post-buttons-row">
                     <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
                     <input type="file" id="post-file-input" accept="image/*" onchange="handlePostImage(this)" style="display:none;">
@@ -1625,7 +1698,6 @@ def edit_html(nickname, user, lang, token):
             <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
             <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
         </form>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>
     </div>
     __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
@@ -1796,9 +1868,7 @@ def settings_html(nickname, user, lang, token):
                 <a href="/bugreport" class="settings-link">__BUGREPORT_TITLE__</a>
             </div>
 
-            <form action="/logout" method="get" style="margin: 0; width: 100%;">
-                <button type="submit" class="logout-btn" style="border-radius:10px;">__LOGOUT__</button>
-            </form>
+            <button type="button" onclick="confirmLogout()" class="logout-btn" style="border-radius:10px;">__LOGOUT__</button>
         </div>
     </div></div>
     </div>
