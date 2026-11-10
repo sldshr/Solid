@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 app = FastAPI()
 
-APP_VERSION = "0.13"
+APP_VERSION = "0.14"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -74,7 +74,6 @@ async def generic_handler(request: Request, exc: Exception):
     msg = "Ошибка сервера" if lang == "ru" else "Server error"
     return HTMLResponse(f"<h1 style='color:red'>{msg}</h1><a href='/'>OK</a>", status_code=500)
 
-# --- UTILS ---
 def esc(val): return html.escape(str(val)) if val is not None else ""
 
 def strip_html(s):
@@ -103,7 +102,6 @@ def _uptime_str(lang="ru"):
     parts.append(f"{h:02d}:{m:02d}:{s:02d}")
     return " ".join(parts)
 
-# --- OPENGRAPH TAGS ---
 def og_tags(title, description="", path="", image="", lang="ru"):
     full_url = SITE_URL + path if path else SITE_URL
     desc = strip_html(description)[:250] if description else ""
@@ -125,7 +123,6 @@ def og_tags(title, description="", path="", image="", lang="ru"):
         parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
     return "".join(parts)
 
-# --- DB FETCH ---
 async def _fetch_user(nickname):
     for sel in ('username,description,sugges_rules,avatar_data,sugges_enabled,sugges_photo_enabled',
                 'username,description,sugges_rules,avatar_data,sugges_enabled',
@@ -182,7 +179,6 @@ def user_sugges_enabled(u):
 def user_sugges_photo_enabled(u):
     return bool(u) and u.get('sugges_photo_enabled') is not False
 
-# --- WEBSOCKET ---
 class ConnectionManager:
     def __init__(self): self.active_connections = []
     async def connect(self, ws): await ws.accept(); self.active_connections.append(ws)
@@ -389,8 +385,9 @@ def get_css():
     if _CSS_CACHE is None:
         _CSS_CACHE = """
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap');
             * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+            body { font-family: 'Titillium Web', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
             a { color: black; text-decoration: none; font-weight: bold; }
             a:hover { text-decoration: underline; }
             .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
@@ -408,11 +405,11 @@ def get_css():
             .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
             .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
             .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
+            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; outline: none; }
             textarea { text-align: left; resize: vertical; }
             .file-label { display: block; background: #a9a9a9; padding: 12px; text-align: center; cursor: pointer; font-weight: bold; border-radius: 3px; margin-top: 5px; font-size: 16px; color: black; }
             .file-label:hover { background: #8c8c8c; }
-            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
+            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
             button:hover, .btn:hover { background-color: #8c8c8c; }
             button:disabled { opacity: 0.6; cursor: wait; }
             .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
@@ -440,7 +437,7 @@ def get_css():
             .img-preview { max-width: 100%; max-height: 200px; border-radius: 5px; margin-top: 8px; display: block; margin-left: auto; margin-right: auto; cursor: zoom-in;}
             .post-item { background: #a9a9a9; padding: 0; overflow: hidden; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px; }
             .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-            .post-content { padding: 15px 15px 0; margin-bottom: 10px; font-size: 18px; text-align: center; }
+            .post-content { padding: 15px 15px 0; margin-bottom: 10px; font-size: 18px; text-align: center; word-break: break-word; }
             .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
             .post-image { width: 100%; max-height: 500px; object-fit: cover; display: block; margin: 10px 0 0; cursor: zoom-in; }
             .post-footer { padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #888; flex-wrap: wrap; gap: 10px; }
@@ -451,7 +448,7 @@ def get_css():
             .post-wrapper { position: relative; transition: opacity 0.3s ease; }
             .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
             .post-wrapper:hover .post-actions { opacity: 1; }
-            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal;}
+            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal; font-family: 'Titillium Web', Arial, sans-serif;}
             .action-btn:hover { background: #ff4d4d; }
             .action-btn.pin-btn:hover { background: #4da6ff; }
             .action-btn.link-btn:hover { background: #f1c40f; color: black; }
@@ -476,7 +473,7 @@ def get_css():
             .status-Исправлено, .status-Fixed { background: #2ecc71; }
             .status-Отклонено, .status-Rejected { background: #e74c3c; }
             .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s;}
+            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'Titillium Web', Arial, sans-serif;}
             .lang-btn:hover { background: #a9a9a9; color: black; }
             .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
             .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
@@ -553,6 +550,26 @@ def get_js(lang, token, current_user=""):
             tar: "__TOAST_APPROVED_REMOVED__", trr: "__TOAST_REJECTED_REMOVED__", tf: "__TOAST_FAILED__",
             ptl: "__POST_TOO_LONG__"
         };
+        
+        // ============ LOCAL TIME FORMATTER ============
+        function formatLocalDates() {
+            const opts = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+            document.querySelectorAll('[data-iso]').forEach(el => {
+                const iso = el.getAttribute('data-iso');
+                if (!iso) return;
+                try {
+                    const d = new Date(iso);
+                    if (isNaN(d.getTime())) return;
+                    el.innerText = d.toLocaleString(undefined, opts);
+                } catch(e) {}
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', formatLocalDates);
+        } else {
+            formatLocalDates();
+        }
+        
         function viewImage(src) { if (!src) return; document.getElementById('img-viewer-img').src = src; document.getElementById('img-viewer').classList.add('show'); document.body.style.overflow = 'hidden'; }
         function closeImgViewer() { document.getElementById('img-viewer').classList.remove('show'); document.body.style.overflow = ''; }
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImgViewer(); });
@@ -637,12 +654,14 @@ def get_js(lang, token, current_user=""):
             e.preventDefault(); const f = e.target, c = f.querySelector('textarea').value.trim(); if (!c) return;
             if (c.length > 5000) { showToast(L.ptl); return; }
             const i = crypto.randomUUID(), n = new Date();
-            const d = n.toLocaleDateString('ru-RU') + ' ' + n.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'});
+            const dateOpts = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+            const d = n.toLocaleString(undefined, dateOpts);
+            const iso = n.toISOString();
             const img = window.postImageCache || "";
             const a = document.querySelector('#my-records-container');
             const m = a.querySelector('.empty-state'); if (m) m.remove();
             const w = document.createElement('div'); w.className = 'post-wrapper'; w.id = 'post-' + i;
-            w.innerHTML = `<div class="post-actions"><button onclick="copyLink('${ME}','${i}',this)" class="action-btn link-btn">${L.cl}</button><button onclick="hp('${i}',this)" class="action-btn pin-btn">${L.p}</button><button onclick="hd('${i}',this)" class="action-btn">${L.d}</button></div><div class="post-item"><div class="post-content">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>${img ? `<img class="post-image" src="${img}" onclick="viewImage(this.src)">` : ''}<div class="post-footer"><div class="post-date">${d}</div></div></div>`;
+            w.innerHTML = `<div class="post-actions"><button onclick="copyLink('${ME}','${i}',this)" class="action-btn link-btn">${L.cl}</button><button onclick="hp('${i}',this)" class="action-btn pin-btn">${L.p}</button><button onclick="hd('${i}',this)" class="action-btn">${L.d}</button></div><div class="post-item"><div class="post-content">${c.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>${img ? `<img class="post-image" src="${img}" onclick="viewImage(this.src)">` : ''}<div class="post-footer"><div class="post-date" data-iso="${iso}">${d}</div></div></div>`;
             let inserted = false; const wrappers = a.querySelectorAll('.post-wrapper');
             for (let ww of wrappers) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
             if (!inserted) a.appendChild(w);
@@ -758,6 +777,7 @@ def render_records(records, lang, own=False, uid=None):
         pinned = bool(x.get('is_pinned', False))
         content = linkify(x.get('content'))
         date = format_date(esc(x.get('created_at')))
+        iso = esc(x.get('created_at', ''))
         sugg_by = esc(x.get('suggested_by', ''))
         img = esc(x.get('image_data', ''))
         pc = "pinned" if pinned else ""
@@ -769,7 +789,7 @@ def render_records(records, lang, own=False, uid=None):
         acts += "</div>"
         sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
         img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
-        out += f"<div class='post-wrapper' id='post-{rid}'>{acts}<div class='post-item {pc}'><div class='post-content'>{content}</div>{img_html}<div class='post-footer'>{sugg_html}<div class='post-date'>{date}</div></div></div></div>"
+        out += f"<div class='post-wrapper' id='post-{rid}'>{acts}<div class='post-item {pc}'><div class='post-content'>{content}</div>{img_html}<div class='post-footer'>{sugg_html}<div class='post-date' data-iso='{iso}'>{date}</div></div></div></div>"
     return out
 
 def merge_memory(db_records, nickname):
@@ -839,9 +859,10 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             sugg_by = esc(s.get('suggested_by_name'))
             content = linkify(s.get('content'))
             date = format_date(esc(s.get('created_at')))
+            iso = esc(s.get('created_at', ''))
             img = esc(s.get('image_data', ''))
             img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
-            rh += f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
+            rh += f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date' data-iso='{iso}'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
     og_title = t('suggestions_title', lang) + " — " + nickname
     og = og_tags(og_title, "Solid Link — suggestions", "/cabinet/suggestions", lang=lang)
     s = """
@@ -996,7 +1017,9 @@ def record_page_html(nickname, user, record, lang, token, viewer):
 def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else ""
     for x in reports:
-        rh += f"<div class='post-item' style='border-left-color:transparent'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;'><b>{t('bugreport_title',lang)}</b><span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span></div><div class='post-content' style='text-align:left;'>{esc(x.get('content'))}</div><div class='post-date'>{format_date(esc(x.get('created_at')))}</div></div>"
+        date_str = format_date(esc(x.get('created_at')))
+        iso_str = esc(x.get('created_at', ''))
+        rh += f"<div class='post-item' style='border-left-color:transparent'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;'><b>{t('bugreport_title',lang)}</b><span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span></div><div class='post-content' style='text-align:left;'>{esc(x.get('content'))}</div><div class='post-date' data-iso='{iso_str}'>{date_str}</div></div>"
     og_title = "Баг-репорт — Solid Link" if lang == "ru" else "Bug Report — Solid Link"
     og = og_tags(og_title, "Solid Link", "/bugreport", lang=lang)
     s = """
@@ -1047,6 +1070,7 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
     uptime = _uptime_str(lang)
     started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
     last_upd = format_date(last_update_iso) if last_update_iso else "—"
+    last_upd_iso = esc(last_update_iso or "")
     contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}'>{e}</a></div>" for e in CONTACT_EMAILS)
     og_title = "Статистика — Solid Link" if lang == "ru" else "Stats — Solid Link"
     og_desc = f"Пользователей: {users_count}, записей: {posts_count}" if lang == "ru" else f"Users: {users_count}, records: {posts_count}"
@@ -1063,7 +1087,7 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
             <div class="stats-card"><b>__STATS_POSTS__</b><span class="stats-value">__POSTS_COUNT__</span></div>
             <div class="stats-card"><b>__STATS_SUGGES__</b><span class="stats-value">__SUGG_COUNT__</span></div>
             <div class="stats-card"><b>__STATS_STARTED__</b><span style="font-size:15px;">__STARTED__</span></div>
-            <div class="stats-card"><b>__STATS_LAST_UPDATE__</b><span style="font-size:15px;">__LAST_UPDATE__</span></div>
+            <div class="stats-card"><b>__STATS_LAST_UPDATE__</b><span style="font-size:15px;" data-iso="__LAST_UPDATE_ISO__">__LAST_UPDATE__</span></div>
             <div class="stats-card"><b>__STATS_UPTIME__</b><span class="stats-value" style="color:#2a5db0;">__UPTIME__</span></div>
             <div class="contacts-box">
                 <b>__STATS_CONTACTS__</b>
@@ -1075,7 +1099,7 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
