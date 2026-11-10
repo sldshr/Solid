@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.21"
+APP_VERSION = "0.22"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -361,40 +361,36 @@ class RPCRequest(BaseModel):
     params: dict = {}
 
 PRIVACY_RU = """1. Общие положения<br>
-Настоящая Политика конфиденциальности описывает, какие данные собирает Solid, как они используются, хранятся и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>
+Настоящая Политика конфиденциальности описывает, какие данные собирает Solid, как они используются и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>
 
 2. Какие данные мы собираем<br>
-• <b>Имя (юзернейм)</b> — отображаемое имя, указанное вами при регистрации.<br>
-• <b>Никнейм</b> — уникальный идентификатор, используемый для входа.<br>
-• <b>Пароль</b> — хранится исключительно в виде bcrypt-хеша; оригинал не сохраняется и не может быть восстановлен.<br>
-• <b>Описание профиля и аватар</b> — по вашему желанию.<br>
-• <b>Записи и предложки</b> — контент, который вы публикуете.<br>
-• <b>Технические данные</b> — cookies для сессии, CSRF-токен, предпочитаемый язык.<br><br>
+• Имя (юзернейм) — отображаемое имя, указанное при регистрации.<br>
+• Никнейм — уникальный идентификатор для входа.<br>
+• Пароль — хранится в защищённом виде.<br>
+• Описание профиля и аватар — по вашему желанию.<br>
+• Записи и предложки — контент, который вы публикуете.<br>
+• Технические данные — служебные файлы для работы сайта.<br><br>
 
 3. Как мы используем данные<br>
 • Аутентификация и поддержание сессии.<br>
 • Отображение профиля, записей и предложек.<br>
-• Борьба со злоупотреблениями (rate limiting, CSRF-защита).<br>
+• Защита от злоупотреблений.<br>
 • Мы не используем ваши данные для рекламы и не продаём их третьим лицам.<br><br>
 
 4. Хранение данных<br>
-Данные хранятся на серверах Supabase (PostgreSQL). Мы принимаем разумные меры для их защиты, однако ни один метод передачи через интернет не является абсолютно безопасным.<br><br>
+Данные хранятся на защищённых серверах. Мы принимаем разумные меры для их защиты, однако ни один метод передачи через интернет не является абсолютно безопасным.<br><br>
 
-5. Cookies<br>
-Сайт использует следующие cookies:<br>
-• <code>nickname</code> — поддержание сессии пользователя.<br>
-• <code>csrf_token</code> — защита от CSRF-атак.<br>
-• <code>lang</code> — запоминание выбранного языка.<br>
-Вы можете удалить cookies в настройках браузера, но это разлогинит вас и сбросит настройки.<br><br>
+5. Служебные файлы<br>
+Сайт использует служебные файлы браузера для поддержания сессии, защиты форм и запоминания языка. Вы можете очистить их в настройках браузера, но это разлогинит вас.<br><br>
 
 6. Ваш контент<br>
 Все записи, комментарии и предложки являются вашей интеллектуальной собственностью. Публикуя контент, вы подтверждаете, что имеете на него право. Мы не несём ответственности за контент пользователей.<br><br>
 
 7. Передача третьим лицам<br>
-Мы не передаём ваши персональные данные третьим лицам, за исключением случаев, предусмотренных законом, или когда это необходимо для работы сервиса (например, хостинг Supabase).<br><br>
+Мы не передаём ваши персональные данные третьим лицам, за исключением случаев, предусмотренных законом.<br><br>
 
 8. Безопасность<br>
-Пароли хешируются алгоритмом bcrypt. Используются CSRF-токены, rate limiting, CSP-заголовки, защищённые cookies (HttpOnly, SameSite=Lax, Secure на HTTPS).<br><br>
+Мы используем современные методы защиты аккаунтов и данных.<br><br>
 
 9. Ваши права<br>
 • Изменить имя, описание и аватар в личном кабинете.<br>
@@ -412,40 +408,36 @@ PRIVACY_RU = """1. Общие положения<br>
 По вопросам конфиденциальности: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
 PRIVACY_EN = """1. General provisions<br>
-This Privacy Policy describes what data Solid collects, how it is used, stored and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>
+This Privacy Policy describes what data Solid collects, how it is used and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>
 
 2. Data we collect<br>
-• <b>Name (username)</b> — the display name you provide during registration.<br>
-• <b>Nickname</b> — a unique identifier used for login.<br>
-• <b>Password</b> — stored exclusively as a bcrypt hash; the original is never stored and cannot be recovered.<br>
-• <b>Profile description and avatar</b> — at your discretion.<br>
-• <b>Records and suggestions</b> — content you publish.<br>
-• <b>Technical data</b> — session cookies, CSRF token, preferred language.<br><br>
+• Name (username) — display name you provide during registration.<br>
+• Nickname — a unique identifier for login.<br>
+• Password — stored in a protected form.<br>
+• Profile description and avatar — at your discretion.<br>
+• Records and suggestions — content you publish.<br>
+• Technical data — service files required for site operation.<br><br>
 
 3. How we use data<br>
 • Authentication and session maintenance.<br>
 • Displaying profile, records and suggestions.<br>
-• Abuse prevention (rate limiting, CSRF protection).<br>
+• Abuse prevention.<br>
 • We do not use your data for advertising and do not sell it to third parties.<br><br>
 
 4. Data storage<br>
-Data is stored on Supabase (PostgreSQL) servers. We take reasonable measures to protect it, however no method of transmission over the internet is completely secure.<br><br>
+Data is stored on protected servers. We take reasonable measures to protect it, however no method of transmission over the internet is completely secure.<br><br>
 
-5. Cookies<br>
-The Site uses the following cookies:<br>
-• <code>nickname</code> — maintains your session.<br>
-• <code>csrf_token</code> — protects against CSRF attacks.<br>
-• <code>lang</code> — remembers your chosen language.<br>
-You can delete cookies in your browser settings, but this will log you out and reset preferences.<br><br>
+5. Service files<br>
+The Site uses browser service files to maintain session, protect forms and remember language. You can clear them in browser settings, but this will log you out.<br><br>
 
 6. Your content<br>
 All records, comments and suggestions are your intellectual property. By publishing content, you confirm you have the right to it. We are not responsible for user content.<br><br>
 
 7. Third parties<br>
-We do not share your personal data with third parties, except as required by law, or when necessary for the service to function (e.g., Supabase hosting).<br><br>
+We do not share your personal data with third parties, except as required by law.<br><br>
 
 8. Security<br>
-Passwords are hashed with bcrypt. We use CSRF tokens, rate limiting, CSP headers, and secure cookies (HttpOnly, SameSite=Lax, Secure on HTTPS).<br><br>
+We use modern methods to protect accounts and data.<br><br>
 
 9. Your rights<br>
 • Edit your name, description and avatar in your cabinet.<br>
@@ -462,15 +454,15 @@ We may update this Policy. The current version is always available at /privacy. 
 12. Contacts<br>
 For privacy-related questions: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
-# FAQ_DATA — emoji here act only as keys; SVG_ICONS maps them to inline SVG at render time.
+# FAQ: user-facing only. No internal implementation details (no hashing algorithms,
+# no CSRF, no CSP, no cookie names, no rate limits, no DB stack).
 FAQ_DATA = {
     "ru": [
         ("lock", "Регистрация и вход", [
             ("Как зарегистрироваться?", 'На главной странице заполните форму «Регистрация»: укажите юзернейм (ваше имя), никнейм (уникальный логин), пароль не короче 8 символов и его повтор. Поставьте обе галочки — «Я не робот» и согласие с политикой. Нажмите «Зарегистрироваться!».'),
             ("Какой никнейм можно выбрать?", 'От 3 до 30 символов: латинские буквы a–z, цифры 0–9, знаки подчёркивания <code>_</code> и дефис <code>-</code>. Никнейм уникален — если он занят, выберите другой.'),
             ("Забыли пароль — что делать?", 'Напишите администрации по адресам из подвала сайта: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> или <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Укажите ваш никнейм.'),
-            ("Как выйти из аккаунта?", 'В личном кабинете нажмите красную кнопку «Выйти» в левой панели.'),
-            ("Что за ошибка «Too Many Requests»?", 'Сработал rate limit: слишком много попыток за минуту. Подождите 60 секунд, для логина — до 5 минут.'),
+            ("Как выйти из аккаунта?", 'В личном кабинете нажмите красную кнопку «Выйти» в левой панели или откройте раздел «Настройки» и нажмите «Выйти» там.'),
         ]),
         ("pencil", "Записи и посты", [
             ("Как создать запись?", 'В личном кабинете введите текст в поле «Напишите что-нибудь...» и нажмите «Создать». Запись сразу появится в разделе «Мои записи» и на вашей публичной странице.'),
@@ -484,36 +476,34 @@ FAQ_DATA = {
         ("lightbulb", "Предложка", [
             ("Что такое предложка?", 'Это форма обратной связи для ваших читателей: они могут предложить пост, который вы одобрите или отклоните. Найти её можно по адресу /ваш_никнейм/sugges.'),
             ("Как предложить пост?", 'Откройте страницу пользователя и нажмите «Предложить пост». Введите ваше имя и текст, при желании прикрепите фото, нажмите «Отправить».'),
-            ("Как включить или отключить предложку?", 'В /cabinet/edit есть переключатель «Разрешить предложку». Отключённая предложка скрывает кнопку у всех посетителей.'),
+            ("Как включить или отключить предложку?", 'В разделе «Редактировать профиль» есть переключатель «Разрешить предложку». Отключённая предложка скрывает кнопку у всех посетителей.'),
             ("Как отключить фото в предложке?", 'Там же — переключатель «Разрешить фото в предложке». Если выключить, форма предложки будет без загрузки фото.'),
-            ("Как модерировать предложки?", 'В личном кабинете нажмите «Предложки». Каждую можно «Одобрить» (превратится в вашу запись с пометкой автора) или «Отклонить» (удалить).'),
-            ("Как задать правила для предложки?", 'В /cabinet/edit в поле «Правила предложки» (до 1000 символов). Они будут показаны всем, кто открывает форму.'),
+            ("Как модерировать предложки?", 'В личном кабинете нажмите «Предложки» (или вкладка «Предложки» на телефоне). Каждую можно «Одобрить» (превратится в вашу запись с пометкой автора) или «Отклонить» (удалить).'),
+            ("Как задать правила для предложки?", 'В «Редактировать профиль» в поле «Правила предложки» (до 1000 символов). Они будут показаны всем, кто открывает форму.'),
             ("Можно ли предложить пост самому себе?", 'Нет. Свои посты создавайте напрямую в личном кабинете.'),
         ]),
         ("gear", "Профиль и настройки", [
-            ("Как изменить имя или описание?", 'В /cabinet/edit укажите новое имя и описание (до 300 символов) и сохраните изменения.'),
-            ("Как сменить аватар?", 'На странице редактирования нажмите на аватар — откроется выбор файла. Фото сожмётся до 300×300 пикселей.'),
-            ("Как сменить язык?", 'Кнопки RU / EN в подвале любой страницы или в сайдбаре. Выбор запоминается в cookie на год.'),
-            ("Где посмотреть статистику сайта?", 'Ссылка «Статистика» в подвале: количество пользователей, записей, предложек, аптайм и контакты администрации.'),
+            ("Как изменить имя или описание?", 'В «Редактировать профиль» укажите новое имя и описание (до 300 символов) и сохраните изменения.'),
+            ("Как сменить аватар?", 'На странице редактирования профиля нажмите на аватар — откроется выбор файла. Фото автоматически подстроится под аватар.'),
+            ("Где найти настройки?", 'Откройте раздел «Настройки» — в сайдбаре слева или на нижней панели на телефоне. Там можно сменить язык и посмотреть информацию о приложении.'),
+            ("Как сменить язык?", 'В разделе «Настройки» выберите RU или EN. Выбор запоминается автоматически.'),
+            ("Где посмотреть статистику сайта?", 'Ссылка «Статистика» в подвале или в настройках: количество пользователей, записей, предложек и время работы сервера.'),
             ("Как удалить аккаунт?", 'Напишите администрации. Мы удалим аккаунт и все связанные записи в течение 7 дней.'),
         ]),
         ("image", "Фото и изображения", [
-            ("Какие форматы фото поддерживаются?", 'Любые, которые умеет открывать браузер: JPEG, PNG, WebP, GIF. На сервер отправляется сжатый JPEG.'),
-            ("Почему фото сжимаются?", 'Чтобы сайт работал быстро и не перегружал хранилище. Сжатие происходит в браузере до отправки: до 1000px по ширине для постов и до 300px для аватара.'),
-            ("Максимальный размер изображения?", 'После сжатия — до ~800 КБ в base64. Если оригинал огромный, сжатие произойдёт с потерей качества.'),
+            ("Какие форматы фото поддерживаются?", 'Любые, которые умеет открывать браузер: JPEG, PNG, WebP, GIF.'),
+            ("Почему фото сжимаются?", 'Чтобы сайт работал быстрее и не занимал много места. Сжатие происходит автоматически при загрузке.'),
+            ("Фото не загружается — что делать?", 'Попробуйте выбрать файл поменьше или изображение попроще. Если проблема повторяется — сообщите через баг-репорт.'),
             ("Как посмотреть фото в полном размере?", 'Кликните по изображению — откроется просмотрщик. Закрыть можно клавишей Esc или кликом вне фото.'),
         ]),
-        ("shield", "Безопасность и приватность", [
-            ("Как хранятся пароли?", 'Только в виде bcrypt-хеша. Оригинал пароля не сохраняется и не может быть восстановлен.'),
-            ("Кто видит мои данные?", 'Публично видны: имя, никнейм, описание, аватар, записи. Пароль, CSRF-токен и служебные cookies — нет.'),
-            ("Что такое CSRF-токен?", 'Скрытый токен, который защищает формы от подделки запросов. Без него действие не выполнится.'),
-            ("Что за ошибка «CSRF Error»?", 'Cookie устарел или очистился. Обновите страницу — токен выдастся заново.'),
-            ("Как защищены сессии?", 'Cookies HttpOnly, SameSite=Lax, Secure на HTTPS. Плюс заголовки CSP, X-Frame-Options, HSTS.'),
+        ("shield", "Безопасность", [
+            ("Мои данные в безопасности?", 'Да, мы используем современные методы защиты аккаунтов и данных.'),
+            ("Кто видит мои данные?", 'Публично видны только те данные, которые вы указали в профиле: имя, никнейм, описание, аватар и записи.'),
             ("Что такое политика конфиденциальности?", 'Документ, описывающий какие данные мы собираем и как их используем. Полный текст — по ссылке в подвале или на /privacy.'),
         ]),
         ("bug", "Проблемы и поддержка", [
             ("Как сообщить о баге?", 'Откройте /bugreport, опишите проблему. Все ваши заявки видны там же со статусом: Принято, В работе, Исправлено, Отклонено.'),
-            ("Не работает вход — что проверить?", '1) Никнейм точно такой, как при регистрации. 2) Пароль не короче 8 символов. 3) Галочка «Я не робот» поставлена. 4) Нет блокировки по rate limit.'),
+            ("Не работает вход — что проверить?", '1) Никнейм точно такой, как при регистрации. 2) Пароль не короче 8 символов. 3) Галочка «Я не робот» поставлена. Если не помогает — напишите администрации.'),
             ("Почему не приходит письмо?", 'Письма мы не отправляем — вся связь через форму баг-репорта или контакты в подвале.'),
             ("С кем связаться?", 'Email администрации: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. Отвечаем в течение 1–2 дней.'),
             ("Что такое «аптайм» в статистике?", 'Время с момента запуска сервера. Если сервер перезапущен — счётчик начинается заново.'),
@@ -524,8 +514,7 @@ FAQ_DATA = {
             ("How do I register?", 'On the home page, fill in the "Registration" form: enter a username (your name), nickname (unique login), a password of at least 8 characters, and repeat it. Tick both boxes — "I am not a robot" and the privacy policy agreement. Click "Register!".'),
             ("What nickname can I choose?", 'From 3 to 30 characters: latin letters a–z, digits 0–9, underscores <code>_</code> and hyphens <code>-</code>. Nickname is unique — pick another if taken.'),
             ("I forgot my password — what now?", 'Email the administration at the addresses in the footer: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> or <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Include your nickname.'),
-            ("How do I log out?", 'In your personal cabinet click the red "Logout" button in the left panel.'),
-            ("What is the 'Too Many Requests' error?", 'Rate limit triggered: too many attempts in a minute. Wait 60 seconds, for login — up to 5 minutes.'),
+            ("How do I log out?", 'In your cabinet click the red "Logout" button in the left panel, or open "Settings" and tap "Logout" there.'),
         ]),
         ("pencil", "Records & Posts", [
             ("How do I create a record?", 'In your cabinet type text into the "Write something..." field and click "Create". The record appears immediately in "My records" and on your public page.'),
@@ -539,36 +528,34 @@ FAQ_DATA = {
         ("lightbulb", "Suggestions", [
             ("What is the suggestion box?", 'It is a feedback form for your readers: they can suggest a post that you approve or reject. Available at /your_nickname/sugges.'),
             ("How do I suggest a post?", 'Open a user page and click "Suggest a post". Enter your name and text, optionally attach a photo, click "Send".'),
-            ("How do I enable or disable suggestions?", 'In /cabinet/edit there is a toggle "Enable suggestions". Disabled suggestions hide the button from all visitors.'),
+            ("How do I enable or disable suggestions?", 'In "Edit Profile" there is a toggle "Enable suggestions". Disabled suggestions hide the button from all visitors.'),
             ("How do I disable photos in suggestions?", 'Same place — "Allow photos in suggestions" toggle. If off, the suggestion form has no photo upload.'),
-            ("How do I moderate suggestions?", 'In your cabinet click "Suggestions". Each can be "Approve" (becomes your record with the author noted) or "Reject" (deleted).'),
-            ("How do I set rules for suggestions?", 'In /cabinet/edit under "Suggestion rules" (up to 1000 chars). They are shown to everyone who opens the form.'),
+            ("How do I moderate suggestions?", 'In your cabinet click "Suggestions" (or the "Suggestions" tab on mobile). Each can be "Approve" (becomes your record with the author noted) or "Reject" (deleted).'),
+            ("How do I set rules for suggestions?", 'In "Edit Profile" under "Suggestion rules" (up to 1000 chars). They are shown to everyone who opens the form.'),
             ("Can I suggest a post to myself?", 'No. Create your posts directly in your cabinet.'),
         ]),
         ("gear", "Profile & Settings", [
-            ("How do I change name or description?", 'In /cabinet/edit enter a new name and description (up to 300 chars) and save.'),
-            ("How do I change my avatar?", 'On the edit page click the avatar — a file picker opens. The photo is compressed to 300×300 pixels.'),
-            ("How do I change the language?", 'RU / EN buttons in the footer of any page or in the sidebar. The choice is stored in a cookie for a year.'),
-            ("Where can I see site statistics?", 'The "Stats" link in the footer: users, records, suggestions, uptime and admin contacts.'),
+            ("How do I change name or description?", 'In "Edit Profile" enter a new name and description (up to 300 chars) and save.'),
+            ("How do I change my avatar?", 'On the profile edit page click the avatar — a file picker opens. The photo is adjusted automatically.'),
+            ("Where do I find settings?", 'Open "Settings" — in the sidebar on the left, or on the bottom bar on mobile. There you can change language and view app info.'),
+            ("How do I change the language?", 'In "Settings" choose RU or EN. The choice is remembered automatically.'),
+            ("Where can I see site statistics?", 'The "Stats" link in the footer or in settings: users, records, suggestions and server uptime.'),
             ("How do I delete my account?", 'Email the administration. We will delete the account and all related records within 7 days.'),
         ]),
         ("image", "Photos & Images", [
-            ("Which photo formats are supported?", 'Any your browser can open: JPEG, PNG, WebP, GIF. A compressed JPEG is uploaded.'),
-            ("Why are photos compressed?", 'To keep the site fast and storage light. Compression happens in the browser before upload: up to 1000px wide for posts, 300px for avatars.'),
-            ("What is the max image size?", 'After compression — up to ~800 KB in base64. Very large originals will be compressed with quality loss.'),
+            ("Which photo formats are supported?", 'Any your browser can open: JPEG, PNG, WebP, GIF.'),
+            ("Why are photos compressed?", 'To keep the site fast and storage light. Compression happens automatically on upload.'),
+            ("A photo fails to upload — what to do?", 'Try a smaller file or a simpler image. If it keeps failing — report via bug-report.'),
             ("How do I view a photo full-size?", 'Click the image — a viewer opens. Close with Esc or click outside the photo.'),
         ]),
-        ("shield", "Security & Privacy", [
-            ("How are passwords stored?", 'Only as a bcrypt hash. The original is never stored and cannot be recovered.'),
-            ("Who sees my data?", 'Publicly visible: name, nickname, description, avatar, records. Password, CSRF token and service cookies — no.'),
-            ("What is a CSRF token?", 'A hidden token protecting forms from request forgery. Without it, the action will not run.'),
-            ("What is the 'CSRF Error'?", 'The cookie expired or was cleared. Refresh the page — a new token is issued.'),
-            ("How are sessions protected?", 'HttpOnly cookies, SameSite=Lax, Secure on HTTPS. Plus CSP, X-Frame-Options, HSTS headers.'),
+        ("shield", "Security", [
+            ("Is my data safe?", 'Yes, we use modern methods to protect accounts and data.'),
+            ("Who sees my data?", 'Publicly visible: only what you put in your profile — name, nickname, description, avatar and records.'),
             ("What is the privacy policy?", 'A document describing what data we collect and how we use it. Full text — at /privacy.'),
         ]),
         ("bug", "Problems & Support", [
             ("How do I report a bug?", 'Open /bugreport and describe the issue. Your reports are listed there with status: Accepted, In Progress, Fixed, Rejected.'),
-            ("Login doesn\'t work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. 4) No rate limit block.'),
+            ("Login doesn\'t work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. If it still fails — email the administration.'),
             ("Why don\'t I receive emails?", 'We do not send emails — all contact via the bug-report form or footer addresses.'),
             ("Who do I contact?", 'Admin email: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. We reply within 1–2 days.'),
             ("What is \'uptime\' in stats?", 'Time since server start. If the server restarts, the counter starts over.'),
@@ -633,7 +620,16 @@ LOCALES = {
         "err_user_format": "Имя: 1-60 символов, только буквы/цифры/пробел/_-",
         "err_pass_short": "Пароль должен быть не короче 8 символов",
         "faq_title": "ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ",
-        "faq_intro": "Здесь собраны ответы на частые вопросы о Solid. Если не нашли ответ — напишите администрации по контактам ниже."
+        "faq_intro": "Здесь собраны ответы на частые вопросы о Solid. Если не нашли ответ — напишите администрации по контактам ниже.",
+        "nav_cabinet": "Кабинет", "nav_settings": "Настройки", "nav_sugges": "Предложки",
+        "settings_title": "НАСТРОЙКИ",
+        "settings_language": "Язык интерфейса",
+        "settings_about": "О приложении",
+        "settings_about_text": "Solid — простая социальная платформа для записей и предложек. Делитесь мыслями, собирайте предложки от читателей и оставайтесь на связи.",
+        "settings_links": "Полезные ссылки",
+        "settings_btn": "Настройки",
+        "settings_version": "Версия",
+        "settings_back": "Назад в кабинет",
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -691,7 +687,16 @@ LOCALES = {
         "err_user_format": "Name: 1-60 chars, letters/digits/space/_-",
         "err_pass_short": "Password must be at least 8 chars",
         "faq_title": "FREQUENTLY ASKED QUESTIONS",
-        "faq_intro": "Here are answers to frequently asked questions about Solid. If you couldn't find an answer — contact the administration below."
+        "faq_intro": "Here are answers to frequently asked questions about Solid. If you couldn't find an answer — contact the administration below.",
+        "nav_cabinet": "Cabinet", "nav_settings": "Settings", "nav_sugges": "Suggestions",
+        "settings_title": "SETTINGS",
+        "settings_language": "Interface language",
+        "settings_about": "About",
+        "settings_about_text": "Solid is a simple social platform for records and suggestions. Share your thoughts, collect suggestions from readers and stay in touch.",
+        "settings_links": "Useful links",
+        "settings_btn": "Settings",
+        "settings_version": "Version",
+        "settings_back": "Back to cabinet",
     }
 }
 
@@ -707,7 +712,6 @@ SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' 
 SVG_UPLOAD = """<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'></path><polyline points='17 8 12 3 7 8'></polyline><line x1='12' y1='3' x2='12' y2='15'></line></svg>"""
 SVG_CAMERA = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'></path><circle cx='12' cy='13' r='4'></circle></svg>"""
 
-# SVG icons for the docs page (replaces emoji). All use stroke='#4da6ff' to blend with dark theme.
 SVG_ICONS = {
     "lock": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
     "pencil": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>",
@@ -717,6 +721,34 @@ SVG_ICONS = {
     "shield": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg>",
     "bug": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='6' width='8' height='14' rx='4'/><path d='M19 7l-3 2'/><path d='M5 7l3 2'/><path d='M19 19l-3-2'/><path d='M5 19l3-2'/><path d='M20 13h-4'/><path d='M4 13h4'/><path d='M10 4l1 2'/><path d='M14 4l-1 2'/></svg>",
 }
+
+# Bottom-nav icons use currentColor so CSS can highlight the active tab
+SVG_NAV_CABINET = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
+SVG_NAV_SETTINGS = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"""
+SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 16 12 14 15 10 15 8 12 2 12'/><path d='M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>"""
+
+def bottom_nav_html(lang):
+    current = _current_path.get() or "/"
+    cab_active = "active" if current in ("/cabinet", "/cabinet/edit") else ""
+    set_active = "active" if current == "/settings" else ""
+    sug_active = "active" if current == "/cabinet/suggestions" else ""
+    return f"""
+    <nav class="bottom-nav" aria-label="Основная навигация">
+        <a href="/cabinet" class="bottom-nav-item {cab_active}">
+            {SVG_NAV_CABINET}
+            <span>{t('nav_cabinet', lang)}</span>
+        </a>
+        <a href="/settings" class="bottom-nav-item {set_active}">
+            {SVG_NAV_SETTINGS}
+            <span>{t('nav_settings', lang)}</span>
+        </a>
+        <a href="/cabinet/suggestions" class="bottom-nav-item {sug_active}">
+            {SVG_NAV_SUGGES}
+            <span>{t('nav_sugges', lang)}</span>
+        </a>
+    </nav>
+    <script>document.body.classList.add('has-bottom-nav');</script>
+    """
 
 _CSS_CACHE = None
 def get_css():
@@ -799,6 +831,8 @@ def get_css():
             .logout-btn:hover { background: #cc0000; }
             .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
             .edit-btn:hover { background: #1a82e2; }
+            .settings-btn { background: #f39c12; color: white; margin-top: 5px; }
+            .settings-btn:hover { background: #d68910; }
             .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; position: relative; }
             .sugges-btn:hover { background: #8e44ad; }
             .badge { background: #ff4d4d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; font-weight: bold; }
@@ -879,36 +913,130 @@ def get_css():
             .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
             .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
             .contacts-box a { color: #4da6ff; }
+
+            /* ===== Settings page ===== */
+            .settings-card { background: #161b22; border-radius: 12px; padding: 18px; margin-bottom: 12px; border: 1px solid #21262d; }
+            .settings-card h3 { color: #4da6ff; margin: 0 0 14px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: bold; }
+            .settings-card .lang-switch { justify-content: flex-start; margin: 0; }
+            .settings-about-text { color: #c9d1d9; font-size: 15px; line-height: 1.55; margin: 0 0 12px 0; }
+            .settings-version { color: #666; font-size: 13px; margin: 0; }
+            .settings-link { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px; border-bottom: 1px solid #21262d; color: #c9d1d9; font-size: 15px; font-weight: bold; }
+            .settings-link:last-child { border-bottom: none; }
+            .settings-link:hover { color: #4da6ff; text-decoration: none; }
+            .settings-link::after { content: '›'; color: #666; font-size: 20px; font-weight: normal; }
+
+            /* ===== Bottom navigation (mobile only) ===== */
+            .bottom-nav { display: none; }
+
+            /* ===== Mobile app-like styles ===== */
             @media (max-width: 768px) {
-                .page-content { padding: 8px; }
-                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
+                body { background-color: #ececec; }
+                .page-content {
+                    justify-content: flex-start;
+                    padding: 12px 12px 40px 12px;
+                    min-height: 100vh;
+                }
+                body.has-bottom-nav .page-content {
+                    padding-bottom: 92px;
+                }
+                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; border-radius: 16px; }
                 .auth-wrapper { width: 100%; }
                 .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
                 .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
-                .dashboard-container { flex-direction: column; gap: 15px; }
-                .sidebar { width: 100%; }
+                .dashboard-container { flex-direction: column; gap: 12px; }
+                .sidebar { width: 100%; border-radius: 18px; padding: 14px; }
+                .sidebar .lang-switch { display: none; }
                 .main-content { width: 100%; }
                 .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
                 .error-msg { text-align: center; }
                 .login-lang-wrapper { justify-content: center; }
-                .create-post-box { padding: 10px; }
-                .post-item { padding: 0; }
-                .post-content { padding: 10px 10px 0; font-size: 16px; }
+                .create-post-box { padding: 12px; border-radius: 18px; }
+                .post-item { padding: 0; border-radius: 12px; }
+                .post-content { padding: 12px 12px 0; font-size: 16px; }
                 .post-footer { padding: 10px; flex-direction: column; align-items: flex-start; gap: 5px; }
                 .post-date { margin-left: 0; }
-                input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
-                button, .btn, .file-label { font-size: 16px; padding: 14px; }
-                .post-content { font-size: 16px; }
+                input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 14px; border-radius: 10px; }
+                button, .btn, .file-label { font-size: 16px; padding: 14px; border-radius: 10px; }
                 .sidebar h2 { font-size: 20px; }
-                .avatar, .avatar-upload { width: 100px; height: 100px; }
+                .avatar, .avatar-upload { width: 100px; height: 100px; border-radius: 16px; }
                 .avatar-upload-icon { opacity: 1; background: rgba(0,0,0,0.35); }
-                .post-image { max-height: 400px; }
+                .post-image { max-height: 400px; border-radius: 10px; }
                 .sugg-actions { flex-direction: column; }
-                .action-btn { padding: 8px 12px; font-size: 13px; }
-                .modal-box { padding: 20px; }
-                .stats-card { font-size: 15px;}
+                .action-btn { padding: 8px 12px; font-size: 13px; border-radius: 8px; }
+                .modal-box { padding: 20px; border-radius: 16px; }
+                .stats-card { font-size: 15px; border-radius: 12px; }
                 .stats-value { font-size: 18px;}
-                .footer-badge img { width: 160px; height: 36px; }
+                .info-card { border-radius: 12px; }
+                .posts-area { border-radius: 18px; padding: 12px; }
+                .suggestion-card { border-radius: 14px; }
+
+                /* Footer compact on mobile */
+                .footer { padding: 12px 8px; font-size: 13px; gap: 6px; }
+                .footer-links { font-size: 12px; }
+                .footer-contacts { font-size: 11px; }
+                .footer-badge { margin-top: 6px; }
+                .footer-badge img { width: 140px; height: 32px; }
+
+                /* Bottom navigation bar */
+                .bottom-nav {
+                    display: flex;
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    background: #000;
+                    border-top: 1px solid #222;
+                    z-index: 5000;
+                    padding-top: 6px;
+                    padding-bottom: max(6px, env(safe-area-inset-bottom));
+                    box-shadow: 0 -6px 24px rgba(0,0,0,0.15);
+                }
+                .bottom-nav-item {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 6px 4px;
+                    color: #777;
+                    font-size: 10px;
+                    gap: 3px;
+                    text-decoration: none;
+                    font-weight: bold;
+                    transition: color 0.15s ease;
+                    -webkit-tap-highlight-color: transparent;
+                    cursor: pointer;
+                    user-select: none;
+                }
+                .bottom-nav-item span {
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    max-width: 100%;
+                }
+                .bottom-nav-item svg {
+                    width: 22px;
+                    height: 22px;
+                    display: block;
+                }
+                .bottom-nav-item.active {
+                    color: #4da6ff;
+                }
+                .bottom-nav-item.active::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    width: 24px;
+                    height: 3px;
+                    border-radius: 0 0 3px 3px;
+                    background: #4da6ff;
+                }
+                .bottom-nav-item { position: relative; }
+
+                /* Settings mobile tweaks */
+                .settings-card { padding: 16px; border-radius: 14px; }
+                .settings-card h3 { font-size: 13px; }
+                .settings-link { padding: 16px 4px; }
             }
         </style>
         """
@@ -1237,6 +1365,7 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
         <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
         <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
         <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE____BADGE__</a>
+        <a href="/settings" class="btn settings-btn">__SETTINGS_BTN__</a>
         <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">__LOGOUT__</button></form>
         <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div>
@@ -1252,9 +1381,9 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
         </form></div>
         <div class="posts-area" id="my-records-container"><h2>__MY_POSTS__</h2>__RECORDS_HTML__</div>
     </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICK_URL__",safe_nick_url),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICK_URL__",safe_nick_url),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__SETTINGS_BTN__",t('settings_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1286,9 +1415,9 @@ def suggestions_page_html(nickname, suggestions, lang, token):
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__BACK__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1364,9 +1493,9 @@ def edit_html(nickname, user, lang, token):
         </form>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1399,9 +1528,9 @@ def public_html(nickname, user, records, lang, token, viewer):
         <div class="lang-switch"><a href="/set_lang/ru?next=/__NICK_URL__" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area" style="min-height:500px"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1431,13 +1560,13 @@ def record_page_html(nickname, user, record, lang, token, viewer):
         __SUGG_BTN__
         <a href="/__NICK_URL__" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>__RECORDS_HTML__</div></div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
-def bugreport_html(username, reports, lang, token):
+def bugreport_html(username, reports, lang, token, show_nav=False):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else ""
     for x in reports:
         date_str = format_date(esc(x.get('created_at')))
@@ -1465,9 +1594,9 @@ def bugreport_html(username, reports, lang, token):
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__CANCEL__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if show_nav else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1490,6 +1619,53 @@ def privacy_html(lang, token):
     </div>__FOOTER__</body></html>
     """
     for k, v in [("__LANG__",lang),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__OG__",og),("__CSS__",get_css()),("__PRIVACY_TEXT__",t('privacy_text',lang)),("__BACK_HOME__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang))]:
+        s = s.replace(k, v)
+    return s
+
+def settings_html(nickname, user, lang, token):
+    og_title = "Настройки — Solid" if lang == "ru" else "Settings — Solid"
+    og_desc = "Настройки приложения Solid"
+    og = og_tags(og_title, og_desc, "/settings", lang=lang)
+    s = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>__SETTINGS_TITLE__ — Solid</title>__OG__
+    __CSS____JS__</head><body>
+    <div class="page-content">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
+        <div class="posts-area" style="padding:20px;">
+            <h2 style="color:#fff;text-align:center;margin-bottom:20px">__SETTINGS_TITLE__</h2>
+
+            <div class="settings-card">
+                <h3>__SETTINGS_LANGUAGE__</h3>
+                <div class="lang-switch">
+                    <a href="/set_lang/ru?next=/settings" class="btn lang-btn __RU_ACTIVE__">RU</a>
+                    <a href="/set_lang/en?next=/settings" class="btn lang-btn __EN_ACTIVE__">EN</a>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <h3>__SETTINGS_ABOUT__</h3>
+                <p class="settings-about-text">__SETTINGS_ABOUT_TEXT__</p>
+                <p class="settings-version">__SETTINGS_VERSION__: v__APP_VERSION__ (__SERVER_START_DATE__)</p>
+            </div>
+
+            <div class="settings-card">
+                <h3>__SETTINGS_LINKS__</h3>
+                <a href="/privacy" class="settings-link">__PRIVACY_TITLE__</a>
+                <a href="/docs" class="settings-link">__FAQ_LINK__</a>
+                <a href="/stats" class="settings-link">__STATS_LINK__</a>
+                <a href="/bugreport" class="settings-link">__BUGREPORT_TITLE__</a>
+            </div>
+
+            <form action="/logout" method="get" style="margin: 0; width: 100%;">
+                <button type="submit" class="logout-btn" style="border-radius:10px;">__LOGOUT__</button>
+            </form>
+        </div>
+    </div></div>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    """
+    for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SETTINGS_TITLE__",t('settings_title',lang)),("__SETTINGS_LANGUAGE__",t('settings_language',lang)),("__SETTINGS_ABOUT__",t('settings_about',lang)),("__SETTINGS_ABOUT_TEXT__",t('settings_about_text',lang)),("__SETTINGS_VERSION__",t('settings_version',lang)),("__SETTINGS_LINKS__",t('settings_links',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__LOGOUT__",t('logout',lang)),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1526,9 +1702,9 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1703,6 +1879,21 @@ async def privacy(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
     res = HTMLResponse(privacy_html(lang, token)); set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    user_data = await _fetch_user(nickname)
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
+    if not user_data: return RedirectResponse("/", 303)
+    token = get_csrf_token(r)
+    res = HTMLResponse(settings_html(nickname, user_data, lang, token))
+    set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
 
@@ -1932,8 +2123,9 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
 async def bugreport(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     nickname = r.cookies.get("nickname")
-    u = ""; rp = []
+    u = ""; rp = []; show_nav = False
     if nickname:
+        show_nav = True
         try:
             x = await asyncio.to_thread(lambda: sb.table('users').select('username').eq('nickname', nickname).execute())
             if x.data: u = x.data[0].get('username') or ""
@@ -1941,7 +2133,7 @@ async def bugreport(r: Request, setlang: str = None):
             rp = y.data or []
         except Exception: pass
     token = get_csrf_token(r)
-    res = HTMLResponse(bugreport_html(u, rp, lang, token))
+    res = HTMLResponse(bugreport_html(u, rp, lang, token, show_nav=show_nav))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
