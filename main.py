@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.23"
+APP_VERSION = "0.24"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -22,6 +22,26 @@ _current_path: ContextVar[str] = ContextVar("current_path", default="/")
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 sb: Client = create_client(S_URL, S_KEY)
+
+# ================= ВНУТРЕННИЙ КЭШ В ОПЕРАТИВКЕ =================
+CACHE = {"posts": [], "users": {}}
+
+@app.on_event("startup")
+async def load_cache():
+    print("Загрузка данных из БД в оперативку...")
+    try:
+        # Загружаем посты
+        res_posts = await asyncio.to_thread(lambda: sb.table('posts').select('*').execute())
+        CACHE["posts"] = res_posts.data or []
+        # Загружаем пользователей
+        res_users = await asyncio.to_thread(lambda: sb.table('users').select('*').execute())
+        for u in (res_users.data or []):
+            CACHE["users"][u['nickname']] = u
+        print(f"Успешно загружено: {len(CACHE['posts'])} постов, {len(CACHE['users'])} пользователей.")
+    except Exception as e:
+        print(f"Ошибка при загрузке кэша: {e}")
+
+# ==============================================================
 
 deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
@@ -186,7 +206,13 @@ def og_tags(title, description="", path="", image="", lang="ru"):
         parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
     return "".join(parts)
 
+# ОБНОВЛЕННЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КЭШЕМ
 async def _fetch_user(nickname):
+    if nickname in CACHE["users"]:
+        u = dict(CACHE["users"][nickname])
+        return u
+    
+    # Если нет в кэше, идем в БД
     for sel in ('username,description,sugges_rules,avatar_data,sugges_enabled,sugges_photo_enabled',
                 'username,description,sugges_rules,avatar_data,sugges_enabled',
                 'username,description,sugges_rules,avatar_data',
@@ -194,22 +220,30 @@ async def _fetch_user(nickname):
                 'username,description'):
         try:
             res = await asyncio.to_thread(lambda: sb.table('users').select(sel).eq('nickname', nickname).execute())
-            return res.data[0] if res.data else None
+            if res.data:
+                CACHE["users"][nickname] = res.data[0]
+                return res.data[0]
+            return None
         except Exception:
             continue
     return DB_UNAVAILABLE
 
 async def _fetch_posts(nickname):
+    # Берем из кэша, фильтруем и сортируем
     try:
-        res = await asyncio.to_thread(lambda: sb.table('posts').select('*').eq('user_nickname', nickname).execute())
-        return res.data or []
-    except Exception: return []
+        user_posts = [p for p in CACHE["posts"] if p.get('user_nickname') == nickname]
+        user_posts.sort(key=lambda x: str(x.get('created_at') or ''), reverse=True)
+        return user_posts
+    except Exception: 
+        return []
 
 async def _fetch_feed(limit=30):
+    # Берем последние посты из кэша
     try:
-        res = await asyncio.to_thread(lambda: sb.table('posts').select('*').order('created_at', desc=True).limit(limit).execute())
-        return res.data or []
-    except Exception: return []
+        sorted_posts = sorted(CACHE["posts"], key=lambda x: str(x.get('created_at') or ''), reverse=True)
+        return sorted_posts[:limit]
+    except Exception: 
+        return []
 
 async def _fetch_suggestions(nickname):
     try:
@@ -224,23 +258,18 @@ async def _fetch_suggestion_count(nickname):
     except Exception: return 0
 
 async def _stats_data():
-    users_count, posts_count, sugg_count, last_update = 0, 0, 0, None
-    try:
-        u = await asyncio.to_thread(lambda: sb.table('users').select('nickname', count='exact').execute())
-        users_count = u.count if getattr(u, 'count', None) is not None else len(u.data or [])
-    except Exception: pass
-    try:
-        p = await asyncio.to_thread(lambda: sb.table('posts').select('id', count='exact').execute())
-        posts_count = p.count if getattr(p, 'count', None) is not None else len(p.data or [])
-    except Exception: pass
+    users_count = len(CACHE["users"])
+    posts_count = len(CACHE["posts"])
+    sugg_count, last_update = 0, None
     try:
         s = await asyncio.to_thread(lambda: sb.table('suggestions').select('id', count='exact').execute())
         sugg_count = s.count if getattr(s, 'count', None) is not None else len(s.data or [])
     except Exception: pass
-    try:
-        r = await asyncio.to_thread(lambda: sb.table('posts').select('created_at').order('created_at', desc=True).limit(1).execute())
-        if r.data: last_update = r.data[0].get('created_at')
-    except Exception: pass
+    if CACHE["posts"]:
+        try:
+            last_update = max([p.get('created_at') for p in CACHE["posts"] if p.get('created_at')])
+        except Exception:
+            pass
     return users_count, posts_count, sugg_count, last_update
 
 def user_sugges_enabled(u):
@@ -636,11 +665,11 @@ SVG_ICONS = {
     "bug": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='6' width='8' height='14' rx='4'/><path d='M19 7l-3 2'/><path d='M5 7l3 2'/><path d='M19 19l-3-2'/><path d='M5 19l3-2'/><path d='M20 13h-4'/><path d='M4 13h4'/><path d='M10 4l1 2'/><path d='M14 4l-1 2'/></svg>",
 }
 
-SVG_NAV_FEED = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><polyline points='9 22 9 12 15 12 15 22'/></svg>"""
-SVG_NAV_CREATE = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/></svg>"""
-SVG_NAV_CABINET = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
-SVG_NAV_SETTINGS = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"""
-SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 16 12 14 15 10 15 8 12 2 12'/><path d='M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>"""
+SVG_NAV_FEED = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><polyline points='9 22 9 12 15 12 15 22'/></svg>"""
+SVG_NAV_CREATE = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/></svg>"""
+SVG_NAV_CABINET = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
+SVG_NAV_SETTINGS = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"""
+SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 16 12 14 15 10 15 8 12 2 12'/><path d='M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>"""
 
 def bottom_nav_html(lang):
     current = _current_path.get() or "/"
@@ -653,23 +682,18 @@ def bottom_nav_html(lang):
     <nav class="bottom-nav" aria-label="Навигация">
         <a href="/cabinet" class="bottom-nav-item {feed_active}">
             {SVG_NAV_FEED}
-            <span>{t('nav_feed', lang)}</span>
         </a>
         <a href="/cabinet/new" class="bottom-nav-item {create_active}">
             {SVG_NAV_CREATE}
-            <span>{t('nav_create', lang)}</span>
         </a>
         <a href="/cabinet/profile" class="bottom-nav-item {profile_active}">
             {SVG_NAV_CABINET}
-            <span>{t('nav_profile', lang)}</span>
         </a>
         <a href="/cabinet/suggestions" class="bottom-nav-item {sug_active}">
             {SVG_NAV_SUGGES}
-            <span>{t('nav_sugges', lang)}</span>
         </a>
         <a href="/settings" class="bottom-nav-item {set_active}">
             {SVG_NAV_SETTINGS}
-            <span>{t('nav_settings', lang)}</span>
         </a>
     </nav>
     <script>document.body.classList.add('has-bottom-nav');</script>
@@ -696,9 +720,11 @@ def get_css():
                 display: flex;
                 flex-direction: column;
                 min-height: 100vh;
+                min-height: 100dvh;
             }
             .page-content {
                 min-height: 100vh;
+                min-height: 100dvh;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
@@ -718,7 +744,7 @@ def get_css():
             .footer-badge { margin-top: 10px; display: flex; justify-content: center; }
             .footer-badge a { border: none; }
             .footer-badge img { display: block; border: 0; }
-            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
+            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 100%; max-width: 340px; }
             .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
             .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
             .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
@@ -736,7 +762,7 @@ def get_css():
             .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
             .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
             .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
-            .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+            .sidebar { background: black; padding: 10px; width: 100%; max-width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
             .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
             .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
             .avatar { width: 120px; height: 120px; border-radius: 8px; object-fit: cover; display: block; margin: 0 auto 10px auto; border: 3px solid #a9a9a9; background: #333; cursor: zoom-in; }
@@ -759,7 +785,7 @@ def get_css():
             .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; position: relative; }
             .sugges-btn:hover { background: #8e44ad; }
             .badge { background: #ff4d4d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; font-weight: bold; }
-            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; width: 100%; }
             .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
             .create-post-box form { display: flex; flex-direction: column; gap: 8px; }
             .create-post-box textarea { height: 120px; font-size: 16px; padding: 10px; border-radius: 3px; }
@@ -955,31 +981,6 @@ def get_css():
             .desktop-only { display: block; }
             .mobile-only { display: none; }
 
-            /* ===== Feed layout ===== */
-            .mobile-feed { padding: 12px 12px 20px; }
-            .mobile-feed .feed-title {
-                color: #fff;
-                font-size: 20px;
-                margin: 0 0 12px;
-                text-align: center;
-                background: #000;
-                padding: 14px;
-                border-radius: 14px;
-                letter-spacing: 1px;
-            }
-            .feed-list { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-            .feed-list .post-item { border-radius: 12px; }
-            .feed-post-header {
-                padding: 12px 15px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 1px solid rgba(0,0,0,0.12);
-                font-size: 14px;
-            }
-            .feed-post-header a { color: #2a5db0; font-weight: bold; }
-            .feed-post-time { color: #555; font-weight: normal; font-size: 12px; }
-
             /* ===== Create page ===== */
             .create-page-container {
                 width: 100%;
@@ -987,7 +988,7 @@ def get_css():
                 margin: 0 auto;
             }
             .create-page-title {
-                color: #fff;
+                color: #333;
                 font-size: 24px;
                 text-align: center;
                 margin: 0 0 20px;
@@ -1016,58 +1017,63 @@ def get_css():
 
             /* ===== Mobile app-like styles ===== */
             @media (max-width: 768px) {
-                body { background-color: #ececec; }
+                body { background-color: #ececec; overflow-x: hidden; }
                 .page-content {
                     justify-content: flex-start;
-                    padding: 12px 12px 40px 12px;
+                    padding: 0;
                     min-height: 100vh;
                     min-height: 100dvh;
                 }
                 body.has-bottom-nav .page-content {
-                    padding-bottom: 100px;
+                    padding-bottom: 70px;
                 }
                 .desktop-only { display: none !important; }
-                .mobile-only { display: block; }
-                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; border-radius: 16px; }
-                .auth-wrapper { width: 100%; }
+                .mobile-only { display: block; width: 100%; }
+                
+                .container { flex-direction: column; padding: 15px; gap: 20px; border: none; width: 100%; border-radius: 0; background: transparent; }
+                .auth-wrapper { width: 100%; max-width: 100%; background: #fff; padding: 15px; border-radius: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
                 .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
                 .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
-                .dashboard-container { flex-direction: column; gap: 12px; }
-                .sidebar { width: 100%; border-radius: 18px; padding: 14px; }
-                .sidebar .lang-switch { display: none; }
-                .main-content { width: 100%; }
-                .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0;}
+                .dashboard-container { flex-direction: column; gap: 0; width: 100%; max-width: 100%; }
+                
+                .sidebar { width: 100%; max-width: 100%; padding: 15px; border-radius: 0; gap: 6px; margin-bottom: 0; }
+                .sidebar h2 { font-size: 18px; margin: 5px 0 10px; }
+                .main-content { width: 100%; gap: 0; }
+                
+                .post-actions { opacity: 1; position: relative; margin-top: 10px; justify-content: flex-end; top: 0; right: 0; padding: 0 10px 10px 10px; background: #a9a9a9; }
                 .error-msg { text-align: center; }
                 .login-lang-wrapper { justify-content: center; }
-                .create-post-box { padding: 12px; border-radius: 18px; }
-                .post-item { padding: 0; border-radius: 12px; }
-                .post-content { padding: 12px 12px 0; font-size: 16px; }
-                .post-footer { padding: 10px; flex-direction: column; align-items: flex-start; gap: 5px; }
+                .create-post-box { padding: 15px; border-radius: 0; }
+                .post-item { border-radius: 0; margin-bottom: 2px; }
+                .post-content { padding: 15px 15px 0; font-size: 16px; }
+                .post-footer { padding: 10px 15px; flex-direction: column; align-items: flex-start; gap: 5px; }
                 .post-date { margin-left: 0; }
-                input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 14px; border-radius: 10px; }
-                button, .btn, .file-label { font-size: 16px; padding: 14px; border-radius: 10px; }
+                
+                input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 14px; border-radius: 0; }
+                button, .btn, .file-label { font-size: 16px; padding: 14px; border-radius: 0; }
                 .sidebar h2 { font-size: 20px; }
-                .avatar, .avatar-upload, .avatar-skeleton { width: 100px; height: 100px; border-radius: 16px; }
+                
+                .avatar, .avatar-upload, .avatar-skeleton { width: 80px; height: 80px; border-radius: 0; }
                 .avatar-upload-icon { opacity: 1; background: rgba(0,0,0,0.35); }
-                .post-image { max-height: 400px; border-radius: 10px; }
-                .sugg-actions { flex-direction: column; }
-                .action-btn { padding: 8px 12px; font-size: 13px; border-radius: 8px; }
-                .modal-box { padding: 20px; border-radius: 16px; }
-                .stats-card { font-size: 15px; border-radius: 12px; }
-                .stats-value { font-size: 18px;}
-                .info-card { border-radius: 12px; }
-                .posts-area { border-radius: 18px; padding: 12px; }
-                .suggestion-card { border-radius: 14px; }
+                .post-image { max-height: 400px; border-radius: 0; }
+                
+                .sugg-actions { flex-direction: column; gap: 5px; }
+                .action-btn { padding: 8px 12px; font-size: 13px; border-radius: 0; }
+                .modal-box { padding: 20px; border-radius: 0; border: none; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+                
+                .info-card { border-radius: 0; padding: 12px; font-size: 15px; }
+                .posts-area { border-radius: 0; padding: 0; }
+                .suggestion-card { border-radius: 0; border-left: none; margin-bottom: 2px; }
 
                 /* Footer mobile: only on settings, as compact info */
                 .footer { display: none; }
                 body.show-footer .footer {
                     display: flex;
-                    margin: 20px 12px 12px;
-                    padding: 18px 14px;
+                    margin: 20px 0 0;
+                    padding: 20px 15px;
                     background: #161b22;
-                    border-radius: 14px;
-                    border: 1px solid #21262d;
+                    border-radius: 0;
+                    border: none;
                     gap: 10px;
                     font-size: 13px;
                     color: #c9d1d9;
@@ -1087,7 +1093,7 @@ def get_css():
                     padding: 4px 8px;
                     border-bottom: none;
                     background: rgba(77, 166, 255, 0.1);
-                    border-radius: 8px;
+                    border-radius: 0;
                 }
                 body.show-footer .footer-contacts { font-size: 11px; color: #888; word-break: break-all; }
                 body.show-footer .footer-contacts a { color: #4da6ff; border-bottom: none; }
@@ -1103,64 +1109,53 @@ def get_css():
                     background: #000;
                     border-top: 1px solid #1a1a1a;
                     z-index: 5000;
-                    padding-top: 6px;
-                    padding-bottom: max(6px, env(safe-area-inset-bottom));
+                    padding-bottom: max(8px, env(safe-area-inset-bottom));
                     box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+                    height: 60px;
                 }
                 .bottom-nav-item {
                     flex: 1;
                     display: flex;
-                    flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    padding: 6px 2px;
                     color: #777;
-                    font-size: 10px;
-                    gap: 3px;
-                    text-decoration: none;
-                    font-weight: bold;
                     transition: color 0.15s ease;
                     -webkit-tap-highlight-color: transparent;
                     cursor: pointer;
                     user-select: none;
                     position: relative;
                 }
-                .bottom-nav-item span {
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    max-width: 100%;
-                    font-size: 10px;
-                }
-                .bottom-nav-item svg { width: 22px; height: 22px; display: block; }
+                .bottom-nav-item svg { width: 28px; height: 28px; display: block; }
                 .bottom-nav-item.active { color: #4da6ff; }
                 .bottom-nav-item.active::before {
                     content: '';
                     position: absolute;
                     top: 0;
                     width: 24px; height: 3px;
-                    border-radius: 0 0 3px 3px;
+                    border-radius: 0;
                     background: #4da6ff;
                 }
 
                 /* Settings mobile tweaks */
-                .settings-card { padding: 16px; border-radius: 14px; }
+                .settings-card { padding: 16px; border-radius: 0; margin-bottom: 5px; }
                 .settings-card h3 { font-size: 13px; }
                 .settings-link { padding: 16px 4px; }
 
                 /* Create page full height on mobile */
+                .create-page-container { padding: 15px; }
                 .create-page-textarea {
-                    min-height: 45vh;
-                    height: 45vh;
+                    min-height: 40vh;
+                    height: 40vh;
                     font-size: 16px;
+                    border-radius: 0;
                 }
-                .create-page-title { font-size: 20px; margin-bottom: 16px; }
+                .create-page-title { font-size: 22px; margin-bottom: 16px; color: #333; }
 
                 /* Toast above nav */
-                #toast { bottom: 100px; }
+                #toast { bottom: 70px; }
 
                 .mobile-feed { padding: 8px 4px 8px; }
-                .mobile-feed .feed-title { font-size: 18px; padding: 12px; }
+                .mobile-feed .feed-title { font-size: 18px; padding: 12px; border-radius: 0; background: #000; color: #fff; text-align: center; margin: 0 0 5px; }
                 .feed-post-header { padding: 10px 14px; font-size: 13px; }
             }
         </style>
@@ -2242,6 +2237,9 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
         x = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
         if x.data: return auth_html(lang, t('alert_nick_taken', lang), token)
         await asyncio.to_thread(lambda: sb.table('users').insert({"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}).execute())
+        
+        # Обновляем кэш
+        CACHE["users"][nickname] = {"username": username, "nickname": nickname, "password": hash_password(password), "description": ""}
     except Exception as e:
         return auth_html(lang, f"DB Error: {str(e)}", token)
     resp = RedirectResponse("/cabinet", 303)
@@ -2258,12 +2256,19 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
         resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
     if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     try:
-        x = await asyncio.to_thread(lambda: sb.table('users').select('password').eq('nickname', nickname).execute())
-        user = x.data[0] if x.data else None
+        user = CACHE["users"].get(nickname)
+        if not user:
+            x = await asyncio.to_thread(lambda: sb.table('users').select('password').eq('nickname', nickname).execute())
+            user = x.data[0] if x.data else None
+            if user:
+                CACHE["users"][nickname] = user
+                
         if user and verify_password(password, user.get("password", "")):
             _login_clear(ip)
             if len(user["password"]) == 64:
-                await asyncio.to_thread(lambda: sb.table('users').update({"password": hash_password(password)}).eq('nickname', nickname).execute())
+                new_hash = hash_password(password)
+                await asyncio.to_thread(lambda: sb.table('users').update({"password": new_hash}).eq('nickname', nickname).execute())
+                CACHE["users"][nickname]["password"] = new_hash
             resp = RedirectResponse("/cabinet", 303)
             secure = r.url.scheme == "https"
             resp.set_cookie("nickname", nickname, httponly=True, samesite="lax", secure=secure)
@@ -2278,6 +2283,7 @@ async def cabinet(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
+    
     user_data, p_data, sc, feed_data = await asyncio.gather(
         _fetch_user(nickname), _fetch_posts(nickname), _fetch_suggestion_count(nickname), _fetch_feed(30)
     )
@@ -2388,11 +2394,19 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             except Exception:
                 pd.pop("image_data", None)
                 await asyncio.to_thread(lambda: sb.table('posts').insert(pd).execute())
+            
+            # Обновляем кэш
+            CACHE["posts"].append(pd)
+            
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
         elif req.method == "delete_record":
             rid = req.params.get("post_id")
             await asyncio.to_thread(lambda: sb.table('posts').delete().eq('id', rid).eq('user_nickname', nickname).execute())
+            
+            # Обновляем кэш
+            CACHE["posts"] = [p for p in CACHE["posts"] if p.get("id") != rid]
+            
             await manager.broadcast({"type": "delete_record", "post_id": rid})
             return {"status": "ok"}
         elif req.method == "pin_record":
@@ -2403,6 +2417,12 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
             if ns:
                 await asyncio.to_thread(lambda: sb.table('posts').update({"is_pinned": False}).eq('user_nickname', nickname).neq('id', rid).execute())
             await asyncio.to_thread(lambda: sb.table('posts').update({"is_pinned": ns}).eq('id', rid).eq('user_nickname', nickname).execute())
+            
+            # Обновляем кэш
+            for p in CACHE["posts"]:
+                if p.get("user_nickname") == nickname:
+                    p["is_pinned"] = (p.get("id") == rid) and ns
+                    
             return {"status": "ok", "is_pinned": ns}
         elif req.method == "approve_suggestion":
             sid = req.params.get("suggestion_id")
@@ -2416,6 +2436,10 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
                 np.pop("suggested_by", None); np.pop("image_data", None)
                 await asyncio.to_thread(lambda: sb.table('posts').insert(np).execute())
             await asyncio.to_thread(lambda: sb.table('suggestions').delete().eq('id', sid).execute())
+            
+            # Обновляем кэш
+            CACHE["posts"].append(np)
+            
             await manager.broadcast({"type": "new_record", "post_id": i})
             return {"status": "ok", "id": i}
         elif req.method == "reject_suggestion":
@@ -2454,10 +2478,17 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
     update = {"username": username, "description": description, "sugges_rules": sugges_rules, "sugges_enabled": bool(sugges_enabled), "sugges_photo_enabled": bool(sugges_photo_enabled)}
     av = valid_b64(avatar_data)
     if av: update["avatar_data"] = av
-    try: await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
+    try: 
+        await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
+        # Обновляем кэш
+        if nickname in CACHE["users"]:
+            CACHE["users"][nickname].update(update)
     except Exception:
         update.pop("avatar_data", None); update.pop("sugges_enabled", None); update.pop("sugges_photo_enabled", None)
-        try: await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
+        try: 
+            await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
+            if nickname in CACHE["users"]:
+                CACHE["users"][nickname].update(update)
         except Exception: pass
     return RedirectResponse("/cabinet/profile", 303)
 
@@ -2496,18 +2527,22 @@ async def logout():
 async def record_page(nickname: str, rid: str, r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     try:
-        u, x = await asyncio.gather(
-            asyncio.to_thread(lambda: sb.table('users').select('username,avatar_data,sugges_enabled,sugges_photo_enabled').eq('nickname', nickname).execute()),
-            asyncio.to_thread(lambda: sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute())
-        )
-        if not u.data: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
-        if not x.data: return HTMLResponse(f"<h2>{t('no_posts', lang)}</h2>", 404)
-        u_data = u.data[0]; rec = x.data[0]
+        u = await _fetch_user(nickname)
+        if u is DB_UNAVAILABLE: return HTMLResponse("<h2>DB Error</h2>", 500)
+        
+        # Ищем запись в кэше
+        rec = next((p for p in CACHE["posts"] if p.get("id") == rid and p.get("user_nickname") == nickname), None)
+        if not rec:
+            x = await asyncio.to_thread(lambda: sb.table('posts').select('*').eq('id', rid).eq('user_nickname', nickname).execute())
+            rec = x.data[0] if x.data else None
+            
+        if not u: return HTMLResponse(f"<h2>{t('user_not_found', lang)}</h2>", 404)
+        if not rec: return HTMLResponse(f"<h2>{t('no_posts', lang)}</h2>", 404)
     except Exception:
         return HTMLResponse(f"<h2>DB Error</h2>", 500)
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
-    res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token, viewer))
+    res = HTMLResponse(record_page_html(nickname, u, rec, lang, token, viewer))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
