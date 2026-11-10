@@ -1,24 +1,20 @@
-from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Form, Cookie, Request, Response, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from supabase import create_client, Client
 import uvicorn, html, bcrypt, secrets, uuid, hashlib, re, httpx, asyncio, time as time_module, traceback, os
 from datetime import datetime, timezone
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 app = FastAPI()
 
-APP_VERSION = "0.17"
+APP_VERSION = "0.16"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
 SITE_URL = "https://solid.fastapicloud.dev"
 BADGE_URL = "https://destroy.spritefusion.com/?from=badge&url=https%3A%2F%2Fsolid.fastapicloud.dev"
-
-RECAPTCHA_SITE_KEY = "6Le5UhkuAAAAAGBoFbFs22_cjA74eef3-GPw8qwb"
-RECAPTCHA_SECRET_KEY = "6Le5UhkuAAAAAHP5amuOqkxsqVH56iZrEkQG9tDd"
-RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
@@ -27,7 +23,6 @@ sb: Client = create_client(S_URL, S_KEY)
 deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
 POST_MAX_LEN = 5000
-
 VALID_NICK_RE = re.compile(r'^[a-zA-Z0-9_\-]{3,30}$')
 VALID_USER_RE = re.compile(r'^[a-zA-Z0-9_\- ]{1,60}$')
 
@@ -54,15 +49,35 @@ def _login_fail(ip):
 
 def _login_clear(ip): _LOGIN_FAILS.pop(ip, None)
 
+def _resolve_lang(r: Request, setlang: str = None) -> str:
+    """Приоритет: ?setlang= → cookie lang → 'ru'"""
+    if setlang in ("ru", "en"):
+        return setlang
+    c = r.cookies.get("lang")
+    if c in ("ru", "en"):
+        return c
+    return "ru"
+
+def _set_lang_cookie(res: Response, r: Request, lang: str):
+    res.set_cookie(
+        "lang", lang,
+        path="/",
+        max_age=31536000,
+        samesite="lax",
+        secure=(r.url.scheme == "https"),
+        httponly=True,
+    )
+
 CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; "
+    "script-src 'self' 'unsafe-inline'; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src 'self' data: https://fonts.gstatic.com; "
     "img-src 'self' data: https: blob:; "
     "connect-src 'self' https: wss:; "
-    "frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; "
-    "frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
+    "frame-ancestors 'self'; "
+    "base-uri 'self'; "
+    "form-action 'self';"
 )
 
 @app.middleware("http")
@@ -85,27 +100,39 @@ async def security_mw(request: Request, call_next):
     response.headers["Content-Security-Policy"] = CSP
     if request.url.scheme == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Cache-control: static = cache, dynamic HTML = no-store
+    try:
+        if path.startswith("/static/") or path in ("/manifest.json", "/sw.js"):
+            pass  # already set by route
+        elif path == "/api/og":
+            response.headers["Cache-Control"] = "public, max-age=3600"
+        else:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+    except Exception:
+        pass
     return response
 
 @app.exception_handler(Exception)
 async def generic_handler(request: Request, exc: Exception):
     traceback.print_exc()
-    lang = request.cookies.get("lang", "ru")
+    lang = _resolve_lang(request)
     msg = "Ошибка сервера" if lang == "ru" else "Server error"
     return HTMLResponse(f"<h1 style='color:red'>{msg}</h1><a href='/'>OK</a>", status_code=500)
 
-async def verify_recaptcha(token: str, ip: str = "") -> bool:
-    if not token: return False
-    try:
-        async with httpx.AsyncClient() as client:
-            data = {"secret": RECAPTCHA_SECRET_KEY, "response": token}
-            if ip: data["remoteip"] = ip
-            r = await client.post(RECAPTCHA_VERIFY_URL, data=data, timeout=5.0)
-            return bool(r.json().get("success"))
-    except Exception: return False
+@app.get("/static/ru_font.ttf")
+async def ru_font():
+    for p in ("/app/static/ru_font.ttf", "static/ru_font.ttf", "/app/ru_font.ttf", "ru_font.ttf", "./static/ru_font.ttf"):
+        if os.path.exists(p):
+            return FileResponse(p, media_type="font/ttf", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    return Response("Font not found", status_code=404)
 
 def esc(val): return html.escape(str(val)) if val is not None else ""
-def strip_html(s): return re.sub(r'<[^>]+>', '', str(s)) if s else ""
+
+def strip_html(s):
+    if not s: return ""
+    return re.sub(r'<[^>]+>', '', str(s))
 
 def sanitize_url(u):
     if not u: return ""
@@ -127,13 +154,16 @@ def valid_b64(s):
 
 def clean_content(s):
     if not s: return ""
-    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', str(s))
+    s = str(s)
+    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', s)
     return s[:POST_MAX_LEN]
 
 def _uptime_str(lang="ru"):
     delta = datetime.now(timezone.utc) - SERVER_START_DT
     sec = int(delta.total_seconds())
-    d, rem = divmod(sec, 86400); h, rem = divmod(rem, 3600); m, s = divmod(rem, 60)
+    d, rem = divmod(sec, 86400)
+    h, rem = divmod(rem, 3600)
+    m, s = divmod(rem, 60)
     parts = []
     if d: parts.append(f"{d}д" if lang == "ru" else f"{d}d")
     parts.append(f"{h:02d}:{m:02d}:{s:02d}")
@@ -153,17 +183,20 @@ def og_tags(title, description="", path="", image="", lang="ru"):
     if desc:
         parts.append(f'<meta property="og:description" content="{esc(desc)}">')
         parts.append(f'<meta name="description" content="{esc(desc)}">')
-    if safe_img: parts.append(f'<meta property="og:image" content="{esc(safe_img)}">')
+    if safe_img:
+        parts.append(f'<meta property="og:image" content="{esc(safe_img)}">')
     parts.append('<meta name="twitter:card" content="summary">')
     parts.append(f'<meta name="twitter:title" content="{esc(title)}">')
-    if desc: parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
+    if desc:
+        parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
     return "".join(parts)
 
 async def _fetch_user(nickname):
     for sel in ('username,description,sugges_rules,avatar_data,sugges_enabled,sugges_photo_enabled',
                 'username,description,sugges_rules,avatar_data,sugges_enabled',
                 'username,description,sugges_rules,avatar_data',
-                'username,description,sugges_rules', 'username,description'):
+                'username,description,sugges_rules',
+                'username,description'):
         try:
             res = await asyncio.to_thread(lambda: sb.table('users').select(sel).eq('nickname', nickname).execute())
             return res.data[0] if res.data else None
@@ -208,8 +241,11 @@ async def _stats_data():
     except Exception: pass
     return users_count, posts_count, sugg_count, last_update
 
-def user_sugges_enabled(u): return bool(u) and u.get('sugges_enabled') is not False
-def user_sugges_photo_enabled(u): return bool(u) and u.get('sugges_photo_enabled') is not False
+def user_sugges_enabled(u):
+    return bool(u) and u.get('sugges_enabled') is not False
+
+def user_sugges_photo_enabled(u):
+    return bool(u) and u.get('sugges_photo_enabled') is not False
 
 class ConnectionManager:
     def __init__(self): self.active_connections = []
@@ -230,17 +266,12 @@ async def ws_endpoint(websocket: WebSocket):
         while True: await websocket.receive_text()
     except WebSocketDisconnect: manager.disconnect(websocket)
 
-@app.get("/favicon.ico")
-async def favicon():
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#000"/><text x="32" y="44" font-size="32" font-weight="bold" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif">SL</text></svg>'''
-    return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=31536000"})
-
 @app.get("/manifest.json")
 async def manifest():
     return JSONResponse(
         {"name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
          "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
-         "icons": [{"src": "/favicon.ico", "sizes": "192x192", "type": "image/svg+xml"}]},
+         "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]},
         headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/sw.js")
@@ -284,18 +315,13 @@ def set_csrf_cookie(res, t, r):
     secure = r.url.scheme == "https"
     res.set_cookie("csrf_token", t, httponly=True, samesite="lax", secure=secure, max_age=86400*365)
 
-def no_cache(res):
-    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    res.headers["Pragma"] = "no-cache"
-    return res
-
 @app.exception_handler(RequestValidationError)
 async def val_handler(request: Request, exc: RequestValidationError):
-    lang = request.cookies.get("lang", "ru")
+    lang = _resolve_lang(request, request.query_params.get("setlang"))
     em = "Заполните все обязательные поля!" if lang == "ru" else "Please fill all required fields!"
     token = get_csrf_token(request)
     res = HTMLResponse(content=auth_html(lang, em, token), status_code=422)
-    set_csrf_cookie(res, token, request); no_cache(res)
+    set_csrf_cookie(res, token, request)
     return res
 
 class RPCRequest(BaseModel):
@@ -308,24 +334,24 @@ LOCALES = {
         "password": "пароль", "re_pass": "повтор пароля", "captcha": "Я не робот",
         "register_btn": "Зарегистрироваться!", "login_btn": "Войти", "profile": "ПРОФИЛЬ",
         "total_posts": "Всего записей", "logout": "Выйти", "edit_profile": "Редактировать профиль",
-        "save_changes": "Сохранить изменения", "description": "Описание", 
+        "save_changes": "Сохранить изменения", "description": "Описание",
         "desc_placeholder": "Расскажите о себе...",
         "create_post_btn": "Создать запись", "create_post_placeholder": "Напишите что-нибудь...",
-        "my_posts": "МОИ ЗАПИСИ", "user_posts": "ЗАПИСИ ПОЛЬЗОВАТЕЛЯ", 
-        "no_posts": "Записей пока нет...", "pin": "Закрепить", "unpin": "Открепить", "delete": "Удалить", 
-        "confirm_delete": "Удалить запись?", "created_by": "Создано:", "hosting": "Хостинг:", 
-        "back_home": "На главную", "user_not_found": "Пользователь не найден.", 
-        "alert_captcha": "Подтвердите, что вы не робот!", "alert_pass_mismatch": "Пароли не совпадают!", 
-        "alert_nick_taken": "Такой никнейм уже занят!", "alert_bad_login": "Неверный никнейм или пароль!", 
-        "alert_desc_long": "Описание > 300 символов!", "link_profile": "(Ссылка)", "cancel": "Отмена", 
-        "username_label": "Имя", "nickname_label": "Никнейм", "bugreport_title": "Баг-репорт", 
-        "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы", "bugreport_send": "Отправить", 
+        "my_posts": "МОИ ЗАПИСИ", "user_posts": "ЗАПИСИ ПОЛЬЗОВАТЕЛЯ",
+        "no_posts": "Записей пока нет...", "pin": "Закрепить", "unpin": "Открепить", "delete": "Удалить",
+        "confirm_delete": "Удалить запись?", "created_by": "Создано:", "hosting": "Хостинг:",
+        "back_home": "На главную", "user_not_found": "Пользователь не найден.",
+        "alert_captcha": "Подтвердите, что вы не робот!", "alert_pass_mismatch": "Пароли не совпадают!",
+        "alert_nick_taken": "Такой никнейм уже занят!", "alert_bad_login": "Неверный никнейм или пароль!",
+        "alert_desc_long": "Описание > 300 символов!", "link_profile": "(Ссылка)", "cancel": "Отмена",
+        "username_label": "Имя", "nickname_label": "Никнейм", "bugreport_title": "Баг-репорт",
+        "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы", "bugreport_send": "Отправить",
         "bugreport_my": "Мои заявки", "privacy_title": "Политика конфиденциальности",
         "privacy_text": "1. Сбор информации. Мы собираем только ваш юзернейм, никнейм и хеш пароля.<br><br>2. Использование данных. Данные используются для аутентификации.<br><br>3. Контент. Ваши записи хранятся на серверах Supabase.<br><br>4. Cookies. Сайт использует cookies для сессии и языка.<br><br>5. Ваши права. Вы можете изменить профиль или удалить записи.",
         "privacy_agree": "Я согласен с", "privacy_link": "Политикой конфиденциальности",
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
-        "record_page": "Запись", "copy_link": "Ссылка", 
-        "ext_title": "Переход на внешний сайт", "ext_desc": "Вы покидаете наш сайт и переходите по ссылке:", 
+        "record_page": "Запись", "copy_link": "Ссылка",
+        "ext_title": "Переход на внешний сайт", "ext_desc": "Вы покидаете наш сайт и переходите по ссылке:",
         "ext_continue": "Перейти", "ext_loading": "Загрузка превью...",
         "suggestions_title": "ПРЕДЛОЖКИ", "suggestions_btn": "Предложить пост",
         "sugges_title": "Предложить пост для", "sugges_name": "Ваше имя",
@@ -357,32 +383,31 @@ LOCALES = {
         "post_too_long": "Пост слишком длинный (макс 5000 символов)",
         "err_nick_format": "Никнейм: 3-30 символов, только a-z, 0-9, _, -",
         "err_user_format": "Имя: 1-60 символов, только буквы/цифры/пробел/_-",
-        "err_pass_short": "Пароль должен быть не короче 8 символов",
-        "captcha_fail": "Проверка «Я не робот» не пройдена. Попробуйте снова."
+        "err_pass_short": "Пароль должен быть не короче 8 символов"
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
         "password": "password", "re_pass": "re enter pass", "captcha": "I am not a robot",
         "register_btn": "Register!", "login_btn": "Login", "profile": "PROFILE",
         "total_posts": "Total records", "logout": "Logout", "edit_profile": "Edit Profile",
-        "save_changes": "Save changes", "description": "Description", 
+        "save_changes": "Save changes", "description": "Description",
         "desc_placeholder": "Tell about yourself...",
         "create_post_btn": "Create record", "create_post_placeholder": "Write something...",
-        "my_posts": "MY RECORDS", "user_posts": "USER RECORDS", 
-        "no_posts": "No records yet...", "pin": "Pin", "unpin": "Unpin", "delete": "Delete", 
-        "confirm_delete": "Delete record?", "created_by": "Created by:", "hosting": "Hosting:", 
-        "back_home": "Back to home", "user_not_found": "User not found.", 
-        "alert_captcha": "Confirm you are not a robot!", "alert_pass_mismatch": "Passwords do not match!", 
-        "alert_nick_taken": "Nickname is taken!", "alert_bad_login": "Invalid login!", 
-        "alert_desc_long": "Description > 300 chars!", "link_profile": "(Link)", "cancel": "Cancel", 
-        "username_label": "Name", "nickname_label": "Nickname", "bugreport_title": "Bug Report", 
-        "bugreport_name": "Your Name", "bugreport_desc": "Issue Description", "bugreport_send": "Send", 
+        "my_posts": "MY RECORDS", "user_posts": "USER RECORDS",
+        "no_posts": "No records yet...", "pin": "Pin", "unpin": "Unpin", "delete": "Delete",
+        "confirm_delete": "Delete record?", "created_by": "Created by:", "hosting": "Hosting:",
+        "back_home": "Back to home", "user_not_found": "User not found.",
+        "alert_captcha": "Confirm you are not a robot!", "alert_pass_mismatch": "Passwords do not match!",
+        "alert_nick_taken": "Nickname is taken!", "alert_bad_login": "Invalid login!",
+        "alert_desc_long": "Description > 300 chars!", "link_profile": "(Link)", "cancel": "Cancel",
+        "username_label": "Name", "nickname_label": "Nickname", "bugreport_title": "Bug Report",
+        "bugreport_name": "Your Name", "bugreport_desc": "Issue Description", "bugreport_send": "Send",
         "bugreport_my": "My Reports", "privacy_title": "Privacy Policy",
         "privacy_text": "1. Data Collection. We collect only your username, nickname, and hashed password.<br><br>2. Data Usage. Data is used for authentication.<br><br>3. Content. Your records are stored on Supabase.<br><br>4. Cookies. The site uses cookies for session and language.<br><br>5. Your Rights. You can edit your profile or delete records.",
         "privacy_agree": "I agree to the", "privacy_link": "Privacy Policy",
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
-        "record_page": "Record", "copy_link": "Link", 
-        "ext_title": "Leaving site", "ext_desc": "You are leaving our site and going to:", 
+        "record_page": "Record", "copy_link": "Link",
+        "ext_title": "Leaving site", "ext_desc": "You are leaving our site and going to:",
         "ext_continue": "Continue", "ext_loading": "Loading preview...",
         "suggestions_title": "SUGGESTIONS", "suggestions_btn": "Suggest a post",
         "sugges_title": "Suggest a post for", "sugges_name": "Your Name",
@@ -414,8 +439,7 @@ LOCALES = {
         "post_too_long": "Post too long (max 5000 chars)",
         "err_nick_format": "Nickname: 3-30 chars, only a-z, 0-9, _, -",
         "err_user_format": "Name: 1-60 chars, letters/digits/space/_-",
-        "err_pass_short": "Password must be at least 8 chars",
-        "captcha_fail": "reCAPTCHA verification failed. Please try again."
+        "err_pass_short": "Password must be at least 8 chars"
     }
 }
 
@@ -435,12 +459,19 @@ def get_css():
     if _CSS_CACHE is None:
         _CSS_CACHE = """
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext');
+            @font-face {
+                font-family: 'RuFont';
+                src: url('/static/ru_font.ttf') format('truetype');
+                font-weight: 300 700;
+                font-display: swap;
+                unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+2DE0-2DFF, U+A640-A69F;
+            }
+            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap');
             * { box-sizing: border-box; }
-            body { font-family: 'Titillium Web', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+            body { font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
             a { color: black; text-decoration: none; font-weight: bold; }
             a:hover { text-decoration: underline; }
-            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 30px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
             .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
             .footer a { color: #000; border-bottom: 2px solid #000; }
             .footer-links { font-size: 14px; color: #777; }
@@ -450,23 +481,22 @@ def get_css():
             .footer-badge { margin-top: 10px; display: flex; justify-content: center; }
             .footer-badge a { border: none; }
             .footer-badge img { display: block; border: 0; }
-            .auth-wrapper { display: flex; gap: 15px; flex-direction: column; width: 360px; max-width: 100%; }
-            .auth-wrapper-inner { display: flex; gap: 15px; align-items: flex-end; width: 100%;}
+            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
+            .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
             .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
             .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
             .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; outline: none; }
+            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; outline: none; }
             textarea { text-align: left; resize: vertical; }
             .file-label { display: block; background: #a9a9a9; padding: 12px; text-align: center; cursor: pointer; font-weight: bold; border-radius: 3px; margin-top: 5px; font-size: 16px; color: black; }
             .file-label:hover { background: #8c8c8c; }
-            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
+            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
             button:hover, .btn:hover { background-color: #8c8c8c; }
             button:disabled { opacity: 0.6; cursor: wait; }
             .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
-            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 5px; white-space: nowrap; }
-            .captcha-wrap { background-color: #ffffff; padding: 10px 5px; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 78px; border: 1px solid #444; }
-            .privacy-check { background-color: #8c8c8c; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 15px; font-weight: bold; text-align: center; color: #000; }
-            .privacy-check input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; }
+            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
+            .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
+            .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
             .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
             .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
             .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -480,6 +510,8 @@ def get_css():
             .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; position: relative; }
             .sugges-btn:hover { background: #8e44ad; }
             .badge { background: #ff4d4d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; font-weight: bold; }
+            .stats-sidebar-btn { background: #34495e; color: white; margin-top: 5px; }
+            .stats-sidebar-btn:hover { background: #2c3e50; }
             .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
             .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
             .create-post-box textarea { height: 120px; font-size: 16px; padding: 10px; border-radius: 3px; }
@@ -497,7 +529,7 @@ def get_css():
             .post-wrapper { position: relative; transition: opacity 0.3s ease; }
             .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
             .post-wrapper:hover .post-actions { opacity: 1; }
-            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal; font-family: 'Titillium Web', Arial, sans-serif;}
+            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;}
             .action-btn:hover { background: #ff4d4d; }
             .action-btn.pin-btn:hover { background: #4da6ff; }
             .action-btn.link-btn:hover { background: #f1c40f; color: black; }
@@ -521,8 +553,8 @@ def get_css():
             .status-В-работе, .status-In-Progress { background: #f1c40f; }
             .status-Исправлено, .status-Fixed { background: #2ecc71; }
             .status-Отклонено, .status-Rejected { background: #e74c3c; }
-            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 5px; }
-            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'Titillium Web', Arial, sans-serif;}
+            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;}
             .lang-btn:hover { background: #a9a9a9; color: black; }
             .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
             .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
@@ -552,13 +584,9 @@ def get_css():
             .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
             .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
             .contacts-box a { color: #4da6ff; }
-            @media (min-width: 769px) and (max-width: 1100px) {
-                .sidebar { width: 300px; }
-                .auth-wrapper { width: 340px; }
-            }
             @media (max-width: 768px) {
                 body { padding: 8px; }
-                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; align-items: stretch; }
+                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
                 .auth-wrapper { width: 100%; }
                 .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
                 .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
@@ -569,11 +597,13 @@ def get_css():
                 .error-msg { text-align: center; }
                 .login-lang-wrapper { justify-content: center; }
                 .create-post-box { padding: 10px; }
+                .post-item { padding: 0; }
                 .post-content { padding: 10px 10px 0; font-size: 16px; }
                 .post-footer { padding: 10px; flex-direction: column; align-items: flex-start; gap: 5px; }
                 .post-date { margin-left: 0; }
                 input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
                 button, .btn { font-size: 16px; padding: 14px; }
+                .post-content { font-size: 16px; }
                 .sidebar h2 { font-size: 20px; }
                 .avatar { width: 100px; height: 100px; }
                 .post-image { max-height: 400px; }
@@ -584,19 +614,12 @@ def get_css():
                 .stats-value { font-size: 18px;}
                 .footer-badge img { width: 160px; height: 36px; }
             }
-            @media (max-width: 380px) {
-                .captcha-wrap { transform: scale(0.88); transform-origin: center; }
-            }
         </style>
-        <link rel="icon" type="image/svg+xml" href="/favicon.ico">
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         """
     return _CSS_CACHE
 
 def get_js(lang, token, current_user=""):
     js = """
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <script>
         const T = "__TOKEN__";
         const ME = "__ME__";
@@ -606,37 +629,20 @@ def get_js(lang, token, current_user=""):
             ic: "__IMG_COMPRESSING__", ir: "__IMG_READY__", ie: "__IMG_ERROR__", ib: "__IMG_BIG__",
             tn: "__TOAST_NEW__", tl: "__TOAST_LINK__", tc: "__TOAST_COPY_FAIL__",
             tar: "__TOAST_APPROVED_REMOVED__", trr: "__TOAST_REJECTED_REMOVED__", tf: "__TOAST_FAILED__",
-            ptl: "__POST_TOO_LONG__", cf: "__CAPTCHA_FAIL__"
+            ptl: "__POST_TOO_LONG__"
         };
-        
-        function escHtml(s) {
-            return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-        }
-        function safeUrl(u) {
-            if (!u) return '';
-            u = String(u);
-            if (/^https?:\\/\\//i.test(u) || /^data:image\\//i.test(u)) return u;
-            return '';
-        }
-        
+        function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+        function safeUrl(u) { if (!u) return ''; u = String(u); if (/^https?:\\/\\//i.test(u) || /^data:image\\//i.test(u)) return u; return ''; }
         function formatLocalDates() {
             const opts = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
             document.querySelectorAll('[data-iso]').forEach(el => {
                 const iso = el.getAttribute('data-iso');
                 if (!iso) return;
-                try {
-                    const d = new Date(iso);
-                    if (isNaN(d.getTime())) return;
-                    el.textContent = d.toLocaleString(undefined, opts);
-                } catch(e) {}
+                try { const d = new Date(iso); if (isNaN(d.getTime())) return; el.textContent = d.toLocaleString(undefined, opts); } catch(e) {}
             });
         }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', formatLocalDates);
-        } else {
-            formatLocalDates();
-        }
-        
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', formatLocalDates);
+        else formatLocalDates();
         function viewImage(src) { if (!src) return; document.getElementById('img-viewer-img').src = src; document.getElementById('img-viewer').classList.add('show'); document.body.style.overflow = 'hidden'; }
         function closeImgViewer() { document.getElementById('img-viewer').classList.remove('show'); document.body.style.overflow = ''; }
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImgViewer(); });
@@ -701,51 +707,38 @@ def get_js(lang, token, current_user=""):
             ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.type === 'delete_record') { const p = document.getElementById('post-' + d.post_id); if (p) p.remove(); } else if (d.type === 'new_record') { showToast(L.tn); } };
             ws.onclose = () => setTimeout(connectWS, 3000);
         }
-        if (typeof ME !== 'undefined' && ME) connectWS();
-        
-        function copyLink(btn) {
-            const user = btn.dataset.user || '';
-            const rid = btn.dataset.rid || '';
-            if (!user) return;
-            const url = window.location.origin + '/' + encodeURIComponent(user) + '/' + encodeURIComponent(rid);
-            navigator.clipboard.writeText(url).then(() => showToast(L.tl)).catch(() => showToast(L.tc));
-        }
-        function showToast(msg) { const t = document.getElementById('toast'); if(!t) return; t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-        function showConfirm(msg, cb) { const m = document.getElementById('modal-overlay'); if(!m) return; document.getElementById('modal-text').textContent = msg; m.classList.add('show'); const cBtn = document.getElementById('modal-confirm'); const xBtn = document.getElementById('modal-cancel'); const nC = cBtn.cloneNode(true); const nX = xBtn.cloneNode(true); cBtn.parentNode.replaceChild(nC, cBtn); xBtn.parentNode.replaceChild(nX, xBtn); nC.onclick = () => { m.classList.remove('show'); cb(true); }; nX.onclick = () => { m.classList.remove('show'); cb(false); }; }
-        
+        connectWS();
+        function copyLink(btn) { const user = btn.dataset.user || ''; const rid = btn.dataset.rid || ''; if (!user) return; const url = window.location.origin + '/' + encodeURIComponent(user) + '/' + encodeURIComponent(rid); navigator.clipboard.writeText(url).then(() => showToast(L.tl)).catch(() => showToast(L.tc)); }
+        function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+        function showConfirm(msg, cb) { const m = document.getElementById('modal-overlay'); document.getElementById('modal-text').textContent = msg; m.classList.add('show'); const cBtn = document.getElementById('modal-confirm'); const xBtn = document.getElementById('modal-cancel'); const nC = cBtn.cloneNode(true); const nX = xBtn.cloneNode(true); cBtn.parentNode.replaceChild(nC, cBtn); xBtn.parentNode.replaceChild(nX, xBtn); nC.onclick = () => { m.classList.remove('show'); cb(true); }; nX.onclick = () => { m.classList.remove('show'); cb(false); }; }
         let pendingUrl = "";
         async function showLinkWarning(e, el) {
             e.preventDefault(); pendingUrl = el.getAttribute('data-url'); if (!pendingUrl) return;
-            document.getElementById('link-modal-confirm').href = pendingUrl; 
-            const ogBox = document.getElementById('og-preview'); 
-            ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">' + escHtml('__EXT_LOADING__') + '</p>'; 
+            document.getElementById('link-modal-confirm').href = pendingUrl;
+            const ogBox = document.getElementById('og-preview');
+            ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">' + escHtml('__EXT_LOADING__') + '</p>';
             document.getElementById('link-modal').classList.add('show');
-            try { 
-                const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl)); 
-                const data = await res.json(); 
-                if (data.title || data.description || data.image) { 
-                    let html = ''; 
+            try {
+                const res = await fetch('/api/og?url=' + encodeURIComponent(pendingUrl));
+                const data = await res.json();
+                if (data.title || data.description || data.image) {
+                    let html = '';
                     const imgUrl = safeUrl(data.image);
-                    if (imgUrl) html += '<img src="' + escHtml(imgUrl) + '" class="og-img">'; 
-                    if (data.title) html += '<h4 class="og-title">' + escHtml(data.title) + '</h4>'; 
-                    if (data.description) html += '<p class="og-desc">' + escHtml(data.description) + '</p>'; 
-                    ogBox.innerHTML = html; 
-                } else { 
-                    ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">No preview</p>'; 
-                } 
-            }
-            catch (err) { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">Failed to load</p>'; }
+                    if (imgUrl) html += '<img src="' + escHtml(imgUrl) + '" class="og-img">';
+                    if (data.title) html += '<h4 class="og-title">' + escHtml(data.title) + '</h4>';
+                    if (data.description) html += '<p class="og-desc">' + escHtml(data.description) + '</p>';
+                    ogBox.innerHTML = html;
+                } else { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">No preview</p>'; }
+            } catch (err) { ogBox.innerHTML = '<p style="margin:0; font-size:14px; color:#666;">Failed to load</p>'; }
         }
         function closeLinkModal() { document.getElementById('link-modal').classList.remove('show'); }
-        
         async function rpc(method, params) { const res = await fetch('/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': T }, body: JSON.stringify({ method, params }) }); const data = await res.json(); if (!res.ok) throw new Error(data.detail || data.error || 'RPC Error'); return data; }
         function tp(i, b) { const x = document.getElementById(i); if (x.type === 'password') { x.type = 'text'; b.innerHTML = `__SVG_EYE_OFF__`; } else { x.type = 'password'; b.innerHTML = `__SVG_EYE__`; } }
         function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
         function ucRules(e) { document.getElementById('rules-count').innerText = e.value.length + ' / 1000'; }
-        
         async function hc(e) {
-            e.preventDefault(); 
-            const f = e.target, c = f.querySelector('textarea').value.trim(); 
+            e.preventDefault();
+            const f = e.target, c = f.querySelector('textarea').value.trim();
             if (!c) return;
             if (c.length > 5000) { showToast(L.ptl); return; }
             const i = crypto.randomUUID(), n = new Date();
@@ -754,9 +747,7 @@ def get_js(lang, token, current_user=""):
             const img = window.postImageCache || "";
             const a = document.querySelector('#my-records-container');
             const m = a.querySelector('.empty-state'); if (m) m.remove();
-            
             const w = document.createElement('div'); w.className = 'post-wrapper'; w.id = 'post-' + i;
-            
             const acts = document.createElement('div'); acts.className = 'post-actions';
             const linkBtn = document.createElement('button'); linkBtn.className = 'action-btn link-btn'; linkBtn.textContent = L.cl; linkBtn.dataset.user = ME; linkBtn.dataset.rid = i;
             linkBtn.addEventListener('click', function() { copyLink(this); });
@@ -765,18 +756,14 @@ def get_js(lang, token, current_user=""):
             const delBtn = document.createElement('button'); delBtn.className = 'action-btn'; delBtn.textContent = L.d;
             delBtn.addEventListener('click', function() { hd(i); });
             acts.append(linkBtn, pinBtn, delBtn);
-            
             const item = document.createElement('div'); item.className = 'post-item';
             const contentEl = document.createElement('div'); contentEl.className = 'post-content'; contentEl.textContent = c;
-            
             item.appendChild(contentEl);
             if (img) { const imgEl = document.createElement('img'); imgEl.className = 'post-image'; imgEl.src = img; imgEl.onclick = function() { viewImage(this.src); }; item.appendChild(imgEl); }
             const footer = document.createElement('div'); footer.className = 'post-footer';
             const dateEl = document.createElement('div'); dateEl.className = 'post-date'; dateEl.dataset.iso = iso; dateEl.textContent = d;
             footer.appendChild(dateEl); item.appendChild(footer);
-            
             w.appendChild(acts); w.appendChild(item);
-            
             let inserted = false; const wrappers = a.querySelectorAll('.post-wrapper');
             for (let ww of wrappers) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
             if (!inserted) a.appendChild(w);
@@ -810,7 +797,7 @@ def get_js(lang, token, current_user=""):
         async function rejectSugg(suggId) { try { await rpc('reject_suggestion', { suggestion_id: suggId }); const card = document.getElementById('sugg-' + suggId); if (card) card.remove(); showToast(L.trr); } catch (x) { showToast(L.tf + ' ' + x.message); } }
     </script>
     """
-    reps = [("__TOKEN__", token),("__ME__", current_user),("__DEL__", t('delete',lang)),("__PIN__", t('pin',lang)),("__UNPIN__", t('unpin',lang)),("__CONFIRM__", t('confirm_delete',lang)),("__NOPOSTS__", t('no_posts',lang)),("__COPYLINK__", t('copy_link',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__SUGG_FILL__", t('sugges_error_fill',lang)),("__SUGG_SELF__", t('sugges_error_self',lang)),("__SUGG_SUCCESS__", t('sugges_success',lang)),("__IMG_COMPRESSING__", t('img_compressing',lang)),("__IMG_READY__", t('img_ready',lang)),("__IMG_ERROR__", t('img_error',lang)),("__IMG_BIG__", t('img_too_big',lang)),("__TOAST_NEW__", t('toast_new',lang)),("__TOAST_LINK__", t('toast_link',lang)),("__TOAST_COPY_FAIL__", t('toast_copy_fail',lang)),("__TOAST_APPROVED_REMOVED__", t('toast_approved_removed',lang)),("__TOAST_REJECTED_REMOVED__", t('toast_rejected_removed',lang)),("__TOAST_FAILED__", t('toast_failed',lang)),("__POST_TOO_LONG__", t('post_too_long',lang)),("__CAPTCHA_FAIL__", t('captcha_fail',lang)),("__SVG_EYE_OFF__", SVG_EYE_OFF),("__SVG_EYE__", SVG_EYE)]
+    reps = [("__TOKEN__", token),("__ME__", current_user),("__DEL__", t('delete',lang)),("__PIN__", t('pin',lang)),("__UNPIN__", t('unpin',lang)),("__CONFIRM__", t('confirm_delete',lang)),("__NOPOSTS__", t('no_posts',lang)),("__COPYLINK__", t('copy_link',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__SUGG_FILL__", t('sugges_error_fill',lang)),("__SUGG_SELF__", t('sugges_error_self',lang)),("__SUGG_SUCCESS__", t('sugges_success',lang)),("__IMG_COMPRESSING__", t('img_compressing',lang)),("__IMG_READY__", t('img_ready',lang)),("__IMG_ERROR__", t('img_error',lang)),("__IMG_BIG__", t('img_too_big',lang)),("__TOAST_NEW__", t('toast_new',lang)),("__TOAST_LINK__", t('toast_link',lang)),("__TOAST_COPY_FAIL__", t('toast_copy_fail',lang)),("__TOAST_APPROVED_REMOVED__", t('toast_approved_removed',lang)),("__TOAST_REJECTED_REMOVED__", t('toast_rejected_removed',lang)),("__TOAST_FAILED__", t('toast_failed',lang)),("__POST_TOO_LONG__", t('post_too_long',lang)),("__SVG_EYE_OFF__", SVG_EYE_OFF),("__SVG_EYE__", SVG_EYE)]
     for k, v in reps: js = js.replace(k, v)
     return js
 
@@ -863,22 +850,22 @@ def auth_html(lang, error_msg="", token=""):
             <input type="text" name="nickname" placeholder="__NICKNAME__" required maxlength="30" pattern="[a-zA-Z0-9_\\-]{3,30}" title="3-30: a-z 0-9 _ -">
             <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
             <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
-            <div class="captcha-wrap"><div class="g-recaptcha" data-sitekey="__RECAPTCHA_SITE_KEY__"></div></div>
-            <label class="privacy-check"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
+            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
+            <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
             <button type="submit">__REG_BTN__</button>
         </form></div></div>
         <div class="auth-wrapper"><div class="auth-wrapper-inner"><div class="form-box"><form action="/login" method="post">
             <input type="hidden" name="csrf_token" value="__TOKEN__">
             <input type="text" name="nickname" placeholder="__NICKNAME__" required>
             <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
-            <div class="captcha-wrap"><div class="g-recaptcha" data-sitekey="__RECAPTCHA_SITE_KEY__"></div></div>
+            <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
             <button type="submit">__LOGIN_BTN__</button>
         </form></div><div class="label-text">__LOGIN__</div></div>
         <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn __EN_ACTIVE__">EN</a></div></div>
         __ERROR__</div>
     </div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__RECAPTCHA_SITE_KEY__",RECAPTCHA_SITE_KEY),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
+    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
         s = s.replace(k, v)
     return s
 
@@ -1224,25 +1211,39 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         s = s.replace(k, v)
     return s
 
+# --- ROUTES ---
 @app.get("/set_lang/{lang}")
-async def set_lang(lang: str, next: str = "/"):
-    res = RedirectResponse(next, 303)
-    res.set_cookie("lang", lang if lang in ["ru", "en"] else "ru", max_age=31536000)
+async def set_lang(lang: str, r: Request, next: str = "/"):
+    effective_lang = lang if lang in ("ru", "en") else "ru"
+    # Sanitize next: only relative path starting with / but not //
+    if not next.startswith("/") or next.startswith("//"):
+        next = "/"
+    sep = "&" if "?" in next else "?"
+    target = next + sep + f"setlang={effective_lang}"
+    res = RedirectResponse(target, 303)
+    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    _set_lang_cookie(res, r, effective_lang)
     return res
 
 @app.get("/", response_class=HTMLResponse)
-async def index(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def index(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
+    nickname = r.cookies.get("nickname")
     if nickname:
         try:
             rdb = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
             if rdb.data:
                 resp = RedirectResponse("/cabinet", 303); set_csrf_cookie(resp, token, r); return resp
         except Exception: pass
-    res = HTMLResponse(auth_html(lang, "", token)); set_csrf_cookie(res, token, r); no_cache(res); return res
+    res = HTMLResponse(auth_html(lang, "", token)); set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.get("/stats", response_class=HTMLResponse)
-async def stats_page(r: Request, lang: str = Cookie("ru")):
+async def stats_page(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
     try:
@@ -1251,32 +1252,33 @@ async def stats_page(r: Request, lang: str = Cookie("ru")):
         print(f"stats error: {e}")
         uc, pc, sc, lu = 0, 0, 0, None
     res = HTMLResponse(stats_html(lang, token, uc, pc, sc, lu, viewer))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.get("/privacy", response_class=HTMLResponse)
-async def privacy(r: Request, lang: str = Cookie("ru")):
+async def privacy(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
-    res = HTMLResponse(privacy_html(lang, token)); set_csrf_cookie(res, token, r); return res
+    res = HTMLResponse(privacy_html(lang, token)); set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.post("/register", response_class=HTMLResponse)
-async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
-    form = await r.form()
-    g_recaptcha_response = form.get("g-recaptcha-response", "")
+async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), captcha: str = Form(None), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+    if lang not in ("ru", "en"): lang = "ru"
     token = get_csrf_token(r)
     if not check_csrf(r, csrf_token):
-        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); no_cache(resp); return resp
+        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
+    if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
-    ip = r.client.host if r.client else ""
-    if not await verify_recaptcha(g_recaptcha_response, ip):
-        return auth_html(lang, t('captcha_fail', lang), token)
     username = (username or "").strip()[:60]
     nickname = (nickname or "").strip()
-    if not VALID_USER_RE.match(username):
-        return auth_html(lang, t('err_user_format', lang), token)
-    if not VALID_NICK_RE.match(nickname):
-        return auth_html(lang, t('err_nick_format', lang), token)
-    if len(password) < 8:
-        return auth_html(lang, t('err_pass_short', lang), token)
+    if not VALID_USER_RE.match(username): return auth_html(lang, t('err_user_format', lang), token)
+    if not VALID_NICK_RE.match(nickname): return auth_html(lang, t('err_nick_format', lang), token)
+    if len(password) < 8: return auth_html(lang, t('err_pass_short', lang), token)
     if password != re_pass: return auth_html(lang, t('alert_pass_mismatch', lang), token)
     try:
         x = await asyncio.to_thread(lambda: sb.table('users').select('nickname').eq('nickname', nickname).execute())
@@ -1290,15 +1292,13 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
     set_csrf_cookie(resp, token, r); return resp
 
 @app.post("/login", response_class=HTMLResponse)
-async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), csrf_token: str = Form(None), lang: str = Cookie("ru")):
-    form = await r.form()
-    g_recaptcha_response = form.get("g-recaptcha-response", "")
+async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), captcha: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+    if lang not in ("ru", "en"): lang = "ru"
     token = get_csrf_token(r)
     ip = r.client.host if r.client else "0.0.0.0"
     if not check_csrf(r, csrf_token):
-        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); no_cache(resp); return resp
-    if not await verify_recaptcha(g_recaptcha_response, ip):
-        return auth_html(lang, t('captcha_fail', lang), token)
+        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
+    if not captcha: return auth_html(lang, t('alert_captcha', lang), token)
     try:
         x = await asyncio.to_thread(lambda: sb.table('users').select('password').eq('nickname', nickname).execute())
         user = x.data[0] if x.data else None
@@ -1316,7 +1316,9 @@ async def login(r: Request, res: Response, nickname: str = Form(...), password: 
     return auth_html(lang, t('alert_bad_login', lang), token)
 
 @app.get("/cabinet", response_class=HTMLResponse)
-async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def cabinet(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
     user_data, p_data, sc = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname), _fetch_suggestion_count(nickname))
     if not user_data:
@@ -1324,18 +1326,27 @@ async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname, sc))
-    set_csrf_cookie(res, token, r); no_cache(res); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.get("/cabinet/suggestions", response_class=HTMLResponse)
-async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def cabinet_suggestions(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
     s_data = await _fetch_suggestions(nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(suggestions_page_html(nickname, s_data, lang, token))
-    set_csrf_cookie(res, token, r); no_cache(res); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.get("/{nickname}/sugges", response_class=HTMLResponse)
-async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
+async def sugges_form(nickname: str, r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
     user_data = await _fetch_user(nickname)
@@ -1344,7 +1355,10 @@ async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
     enabled = user_sugges_enabled(user_data)
     photo_enabled = user_sugges_photo_enabled(user_data)
     res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer, rules=rules, enabled=enabled, photo_enabled=photo_enabled))
-    set_csrf_cookie(res, token, r); no_cache(res); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.post("/rpc")
 async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
@@ -1424,16 +1438,22 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
     except Exception as e: raise HTTPException(500, str(e))
 
 @app.get("/cabinet/edit", response_class=HTMLResponse)
-async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def edit(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
     user_data = await _fetch_user(nickname)
     if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
     res = HTMLResponse(edit_html(nickname, user_data, lang, token))
-    set_csrf_cookie(res, token, r); no_cache(res); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
 async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), sugges_enabled: str = Form(None), sugges_photo_enabled: str = Form(None), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
+    if lang not in ("ru", "en"): lang = "ru"
     if not nickname: return RedirectResponse("/", 303)
     if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
     username = (username or "").strip()[:60]
@@ -1452,7 +1472,9 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
     return RedirectResponse("/cabinet", 303)
 
 @app.get("/bugreport", response_class=HTMLResponse)
-async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
+async def bugreport(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
     u = ""; rp = []
     if nickname:
         try:
@@ -1463,7 +1485,10 @@ async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie
         except Exception: pass
     token = get_csrf_token(r)
     res = HTMLResponse(bugreport_html(u, rp, lang, token))
-    set_csrf_cookie(res, token, r); no_cache(res); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.post("/bugreport", response_class=HTMLResponse)
 async def bugreport_submit(r: Request, res: Response, name: str = Form(...), content: str = Form(...), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
@@ -1478,7 +1503,8 @@ async def logout():
     res = RedirectResponse("/", 303); res.delete_cookie("nickname"); return res
 
 @app.get("/{nickname}/{rid}", response_class=HTMLResponse)
-async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("ru")):
+async def record_page(nickname: str, rid: str, r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
     try:
         u, x = await asyncio.gather(
             asyncio.to_thread(lambda: sb.table('users').select('username,avatar_data,sugges_enabled,sugges_photo_enabled').eq('nickname', nickname).execute()),
@@ -1492,10 +1518,14 @@ async def record_page(nickname: str, rid: str, r: Request, lang: str = Cookie("r
     token = get_csrf_token(r)
     viewer = r.cookies.get("nickname") or ""
     res = HTMLResponse(record_page_html(nickname, u_data, rec, lang, token, viewer))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 @app.get("/{nickname}", response_class=HTMLResponse)
-async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
+async def public_profile(nickname: str, r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
     user_data, p_data = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname))
     if not user_data:
         return HTMLResponse(f"<h2>{t('user_not_found', lang)} <a href='/'>OK</a></h2>", 404)
@@ -1503,7 +1533,10 @@ async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(public_html(nickname, user_data, po, lang, token, viewer))
-    set_csrf_cookie(res, token, r); no_cache(res); return res
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"):
+        _set_lang_cookie(res, r, lang)
+    return res
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
