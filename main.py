@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.22"
+APP_VERSION = "0.23"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -187,7 +187,6 @@ def og_tags(title, description="", path="", image="", lang="ru"):
     return "".join(parts)
 
 async def _fetch_user(nickname):
-    last_exc = None
     for sel in ('username,description,sugges_rules,avatar_data,sugges_enabled,sugges_photo_enabled',
                 'username,description,sugges_rules,avatar_data,sugges_enabled',
                 'username,description,sugges_rules,avatar_data',
@@ -196,14 +195,19 @@ async def _fetch_user(nickname):
         try:
             res = await asyncio.to_thread(lambda: sb.table('users').select(sel).eq('nickname', nickname).execute())
             return res.data[0] if res.data else None
-        except Exception as e:
-            last_exc = e
+        except Exception:
             continue
     return DB_UNAVAILABLE
 
 async def _fetch_posts(nickname):
     try:
         res = await asyncio.to_thread(lambda: sb.table('posts').select('*').eq('user_nickname', nickname).execute())
+        return res.data or []
+    except Exception: return []
+
+async def _fetch_feed(limit=30):
+    try:
+        res = await asyncio.to_thread(lambda: sb.table('posts').select('*').order('created_at', desc=True).limit(limit).execute())
         return res.data or []
     except Exception: return []
 
@@ -360,117 +364,25 @@ class RPCRequest(BaseModel):
     method: str
     params: dict = {}
 
-PRIVACY_RU = """1. Общие положения<br>
-Настоящая Политика конфиденциальности описывает, какие данные собирает Solid, как они используются и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>
+PRIVACY_RU = """1. Общие положения<br>Настоящая Политика конфиденциальности описывает, какие данные собирает Solid, как они используются и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>2. Какие данные мы собираем<br>• Имя (юзернейм) — отображаемое имя, указанное при регистрации.<br>• Никнейм — уникальный идентификатор для входа.<br>• Пароль — хранится в защищённом виде.<br>• Описание профиля и аватар — по вашему желанию.<br>• Записи и предложки — контент, который вы публикуете.<br>• Технические данные — служебные файлы для работы сайта.<br><br>3. Как мы используем данные<br>• Аутентификация и поддержание сессии.<br>• Отображение профиля, записей и предложек.<br>• Защита от злоупотреблений.<br>• Мы не используем ваши данные для рекламы и не продаём их третьим лицам.<br><br>4. Хранение данных<br>Данные хранятся на защищённых серверах. Мы принимаем разумные меры для их защиты, однако ни один метод передачи через интернет не является абсолютно безопасным.<br><br>5. Служебные файлы<br>Сайт использует служебные файлы браузера для поддержания сессии, защиты форм и запоминания языка. Вы можете очистить их в настройках браузера, но это разлогинит вас.<br><br>6. Ваш контент<br>Все записи, комментарии и предложки являются вашей интеллектуальной собственностью. Публикуя контент, вы подтверждаете, что имеете на него право. Мы не несём ответственности за контент пользователей.<br><br>7. Передача третьим лицам<br>Мы не передаём ваши персональные данные третьим лицам, за исключением случаев, предусмотренных законом.<br><br>8. Безопасность<br>Мы используем современные методы защиты аккаунтов и данных.<br><br>9. Ваши права<br>• Изменить имя, описание и аватар в личном кабинете.<br>• Удалить свои записи.<br>• Отключить предложку.<br>• Запросить удаление аккаунта через контакты администрации.<br><br>10. Дети<br>Сайт не предназначен для лиц младше 13 лет. Если вы младше — не регистрируйтесь.<br><br>11. Изменения политики<br>Мы можем обновлять эту Политику. Актуальная версия всегда доступна по адресу /privacy. Дата последнего обновления указана в подвале сайта.<br><br>12. Контакты<br>По вопросам конфиденциальности: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
-2. Какие данные мы собираем<br>
-• Имя (юзернейм) — отображаемое имя, указанное при регистрации.<br>
-• Никнейм — уникальный идентификатор для входа.<br>
-• Пароль — хранится в защищённом виде.<br>
-• Описание профиля и аватар — по вашему желанию.<br>
-• Записи и предложки — контент, который вы публикуете.<br>
-• Технические данные — служебные файлы для работы сайта.<br><br>
+PRIVACY_EN = """1. General provisions<br>This Privacy Policy describes what data Solid collects, how it is used and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>2. Data we collect<br>• Name (username) — display name you provide during registration.<br>• Nickname — a unique identifier for login.<br>• Password — stored in a protected form.<br>• Profile description and avatar — at your discretion.<br>• Records and suggestions — content you publish.<br>• Technical data — service files required for site operation.<br><br>3. How we use data<br>• Authentication and session maintenance.<br>• Displaying profile, records and suggestions.<br>• Abuse prevention.<br>• We do not use your data for advertising and do not sell it to third parties.<br><br>4. Data storage<br>Data is stored on protected servers. We take reasonable measures to protect it, however no method of transmission over the internet is completely secure.<br><br>5. Service files<br>The Site uses browser service files to maintain session, protect forms and remember language. You can clear them in browser settings, but this will log you out.<br><br>6. Your content<br>All records, comments and suggestions are your intellectual property. By publishing content, you confirm you have the right to it. We are not responsible for user content.<br><br>7. Third parties<br>We do not share your personal data with third parties, except as required by law.<br><br>8. Security<br>We use modern methods to protect accounts and data.<br><br>9. Your rights<br>• Edit your name, description and avatar in your cabinet.<br>• Delete your records.<br>• Disable suggestions.<br>• Request account deletion via administrator contacts.<br><br>10. Children<br>The Site is not intended for persons under 13 years of age. If you are younger — do not register.<br><br>11. Policy changes<br>We may update this Policy. The current version is always available at /privacy. The date of the last update is shown in the site footer.<br><br>12. Contacts<br>For privacy-related questions: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
 
-3. Как мы используем данные<br>
-• Аутентификация и поддержание сессии.<br>
-• Отображение профиля, записей и предложек.<br>
-• Защита от злоупотреблений.<br>
-• Мы не используем ваши данные для рекламы и не продаём их третьим лицам.<br><br>
-
-4. Хранение данных<br>
-Данные хранятся на защищённых серверах. Мы принимаем разумные меры для их защиты, однако ни один метод передачи через интернет не является абсолютно безопасным.<br><br>
-
-5. Служебные файлы<br>
-Сайт использует служебные файлы браузера для поддержания сессии, защиты форм и запоминания языка. Вы можете очистить их в настройках браузера, но это разлогинит вас.<br><br>
-
-6. Ваш контент<br>
-Все записи, комментарии и предложки являются вашей интеллектуальной собственностью. Публикуя контент, вы подтверждаете, что имеете на него право. Мы не несём ответственности за контент пользователей.<br><br>
-
-7. Передача третьим лицам<br>
-Мы не передаём ваши персональные данные третьим лицам, за исключением случаев, предусмотренных законом.<br><br>
-
-8. Безопасность<br>
-Мы используем современные методы защиты аккаунтов и данных.<br><br>
-
-9. Ваши права<br>
-• Изменить имя, описание и аватар в личном кабинете.<br>
-• Удалить свои записи.<br>
-• Отключить предложку.<br>
-• Запросить удаление аккаунта через контакты администрации.<br><br>
-
-10. Дети<br>
-Сайт не предназначен для лиц младше 13 лет. Если вы младше — не регистрируйтесь.<br><br>
-
-11. Изменения политики<br>
-Мы можем обновлять эту Политику. Актуальная версия всегда доступна по адресу /privacy. Дата последнего обновления указана в подвале сайта.<br><br>
-
-12. Контакты<br>
-По вопросам конфиденциальности: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
-
-PRIVACY_EN = """1. General provisions<br>
-This Privacy Policy describes what data Solid collects, how it is used and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>
-
-2. Data we collect<br>
-• Name (username) — display name you provide during registration.<br>
-• Nickname — a unique identifier for login.<br>
-• Password — stored in a protected form.<br>
-• Profile description and avatar — at your discretion.<br>
-• Records and suggestions — content you publish.<br>
-• Technical data — service files required for site operation.<br><br>
-
-3. How we use data<br>
-• Authentication and session maintenance.<br>
-• Displaying profile, records and suggestions.<br>
-• Abuse prevention.<br>
-• We do not use your data for advertising and do not sell it to third parties.<br><br>
-
-4. Data storage<br>
-Data is stored on protected servers. We take reasonable measures to protect it, however no method of transmission over the internet is completely secure.<br><br>
-
-5. Service files<br>
-The Site uses browser service files to maintain session, protect forms and remember language. You can clear them in browser settings, but this will log you out.<br><br>
-
-6. Your content<br>
-All records, comments and suggestions are your intellectual property. By publishing content, you confirm you have the right to it. We are not responsible for user content.<br><br>
-
-7. Third parties<br>
-We do not share your personal data with third parties, except as required by law.<br><br>
-
-8. Security<br>
-We use modern methods to protect accounts and data.<br><br>
-
-9. Your rights<br>
-• Edit your name, description and avatar in your cabinet.<br>
-• Delete your records.<br>
-• Disable suggestions.<br>
-• Request account deletion via administrator contacts.<br><br>
-
-10. Children<br>
-The Site is not intended for persons under 13 years of age. If you are younger — do not register.<br><br>
-
-11. Policy changes<br>
-We may update this Policy. The current version is always available at /privacy. The date of the last update is shown in the site footer.<br><br>
-
-12. Contacts<br>
-For privacy-related questions: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
-
-# FAQ: user-facing only. No internal implementation details (no hashing algorithms,
-# no CSRF, no CSP, no cookie names, no rate limits, no DB stack).
 FAQ_DATA = {
     "ru": [
         ("lock", "Регистрация и вход", [
             ("Как зарегистрироваться?", 'На главной странице заполните форму «Регистрация»: укажите юзернейм (ваше имя), никнейм (уникальный логин), пароль не короче 8 символов и его повтор. Поставьте обе галочки — «Я не робот» и согласие с политикой. Нажмите «Зарегистрироваться!».'),
             ("Какой никнейм можно выбрать?", 'От 3 до 30 символов: латинские буквы a–z, цифры 0–9, знаки подчёркивания <code>_</code> и дефис <code>-</code>. Никнейм уникален — если он занят, выберите другой.'),
             ("Забыли пароль — что делать?", 'Напишите администрации по адресам из подвала сайта: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> или <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Укажите ваш никнейм.'),
-            ("Как выйти из аккаунта?", 'В личном кабинете нажмите красную кнопку «Выйти» в левой панели или откройте раздел «Настройки» и нажмите «Выйти» там.'),
+            ("Как выйти из аккаунта?", 'В разделе «Настройки» нажмите «Выйти» или найдите красную кнопку в левой панели на компьютере.'),
         ]),
         ("pencil", "Записи и посты", [
-            ("Как создать запись?", 'В личном кабинете введите текст в поле «Напишите что-нибудь...» и нажмите «Создать». Запись сразу появится в разделе «Мои записи» и на вашей публичной странице.'),
+            ("Как создать запись?", 'Откройте раздел «Создать» (на телефоне — иконка плюса внизу). Напишите текст и нажмите «Создать». Запись сразу появится в ленте и на вашей странице.'),
             ("Какая максимальная длина записи?", 'До 5000 символов. Символы переноса строки сохраняются.'),
             ("Как прикрепить фото?", 'В форме создания записи нажмите «Фото» и выберите изображение. Фото автоматически сожмётся и прикрепится к записи.'),
             ("Как закрепить запись?", 'Наведите на запись и нажмите «Закрепить» в правом верхнем углу. Закреплённая запись всегда будет наверху. Можно закрепить только одну запись одновременно.'),
             ("Как удалить запись?", 'Наведите на запись, нажмите «Удалить», подтвердите действие. Удаление необратимо.'),
-            ("Как поделиться ссылкой на запись?", 'Наведите на запись и нажмите «Ссылка» — ссылка скопируется в буфер обмена. Она ведёт на страницу этой конкретной записи.'),
+            ("Как поделиться ссылкой на запись?", 'Наведите на запись и нажмите «Ссылка» — ссылка скопируется в буфер обмена.'),
             ("Что такое автопревью ссылок?", 'Если в записи есть URL, при клике откроется диалог с превью: заголовок, описание и картинка с того сайта. Это защита от случайных переходов.'),
         ]),
         ("lightbulb", "Предложка", [
@@ -478,23 +390,23 @@ FAQ_DATA = {
             ("Как предложить пост?", 'Откройте страницу пользователя и нажмите «Предложить пост». Введите ваше имя и текст, при желании прикрепите фото, нажмите «Отправить».'),
             ("Как включить или отключить предложку?", 'В разделе «Редактировать профиль» есть переключатель «Разрешить предложку». Отключённая предложка скрывает кнопку у всех посетителей.'),
             ("Как отключить фото в предложке?", 'Там же — переключатель «Разрешить фото в предложке». Если выключить, форма предложки будет без загрузки фото.'),
-            ("Как модерировать предложки?", 'В личном кабинете нажмите «Предложки» (или вкладка «Предложки» на телефоне). Каждую можно «Одобрить» (превратится в вашу запись с пометкой автора) или «Отклонить» (удалить).'),
+            ("Как модерировать предложки?", 'Нажмите «Предложки» (вкладка внизу на телефоне). Каждую можно «Одобрить» (превратится в вашу запись с пометкой автора) или «Отклонить» (удалить).'),
             ("Как задать правила для предложки?", 'В «Редактировать профиль» в поле «Правила предложки» (до 1000 символов). Они будут показаны всем, кто открывает форму.'),
-            ("Можно ли предложить пост самому себе?", 'Нет. Свои посты создавайте напрямую в личном кабинете.'),
+            ("Можно ли предложить пост самому себе?", 'Нет. Свои посты создавайте напрямую в разделе «Создать».'),
         ]),
         ("gear", "Профиль и настройки", [
             ("Как изменить имя или описание?", 'В «Редактировать профиль» укажите новое имя и описание (до 300 символов) и сохраните изменения.'),
             ("Как сменить аватар?", 'На странице редактирования профиля нажмите на аватар — откроется выбор файла. Фото автоматически подстроится под аватар.'),
-            ("Где найти настройки?", 'Откройте раздел «Настройки» — в сайдбаре слева или на нижней панели на телефоне. Там можно сменить язык и посмотреть информацию о приложении.'),
+            ("Где найти настройки?", 'Откройте раздел «Настройки» — на телефоне это нижняя панель, на компьютере — прямая ссылка /settings. Там можно сменить язык и посмотреть информацию о приложении.'),
             ("Как сменить язык?", 'В разделе «Настройки» выберите RU или EN. Выбор запоминается автоматически.'),
-            ("Где посмотреть статистику сайта?", 'Ссылка «Статистика» в подвале или в настройках: количество пользователей, записей, предложек и время работы сервера.'),
+            ("Где посмотреть статистику сайта?", 'Ссылка «Статистика» в подвале или в настройках.'),
             ("Как удалить аккаунт?", 'Напишите администрации. Мы удалим аккаунт и все связанные записи в течение 7 дней.'),
         ]),
         ("image", "Фото и изображения", [
             ("Какие форматы фото поддерживаются?", 'Любые, которые умеет открывать браузер: JPEG, PNG, WebP, GIF.'),
             ("Почему фото сжимаются?", 'Чтобы сайт работал быстрее и не занимал много места. Сжатие происходит автоматически при загрузке.'),
             ("Фото не загружается — что делать?", 'Попробуйте выбрать файл поменьше или изображение попроще. Если проблема повторяется — сообщите через баг-репорт.'),
-            ("Как посмотреть фото в полном размере?", 'Кликните по изображению — откроется просмотрщик. Закрыть можно клавишей Esc или кликом вне фото.'),
+            ("Как посмотреть фото в полном размере?", 'Кликните по изображению — откроется просмотрщик. В нём можно кликнуть по фото, чтобы увеличить. Закрыть — крестик сверху справа или клавишей Esc.'),
         ]),
         ("shield", "Безопасность", [
             ("Мои данные в безопасности?", 'Да, мы используем современные методы защиты аккаунтов и данных.'),
@@ -514,39 +426,39 @@ FAQ_DATA = {
             ("How do I register?", 'On the home page, fill in the "Registration" form: enter a username (your name), nickname (unique login), a password of at least 8 characters, and repeat it. Tick both boxes — "I am not a robot" and the privacy policy agreement. Click "Register!".'),
             ("What nickname can I choose?", 'From 3 to 30 characters: latin letters a–z, digits 0–9, underscores <code>_</code> and hyphens <code>-</code>. Nickname is unique — pick another if taken.'),
             ("I forgot my password — what now?", 'Email the administration at the addresses in the footer: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> or <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Include your nickname.'),
-            ("How do I log out?", 'In your cabinet click the red "Logout" button in the left panel, or open "Settings" and tap "Logout" there.'),
+            ("How do I log out?", 'In "Settings" tap "Logout", or find the red button in the left panel on desktop.'),
         ]),
         ("pencil", "Records & Posts", [
-            ("How do I create a record?", 'In your cabinet type text into the "Write something..." field and click "Create". The record appears immediately in "My records" and on your public page.'),
+            ("How do I create a record?", 'Open "Create" (on mobile — the plus icon at the bottom). Type your text and tap "Create". The record appears immediately in the feed and on your page.'),
             ("What is the max record length?", 'Up to 5000 characters. Line breaks are preserved.'),
-            ("How do I attach a photo?", 'In the create-record form click "Photo" and pick an image. The photo is auto-compressed and attached.'),
-            ("How do I pin a record?", 'Hover over the record and click "Pin" in the top-right corner. The pinned record stays at the top. Only one record can be pinned at a time.'),
+            ("How do I attach a photo?", 'In the create form tap "Photo" and pick an image. The photo is auto-compressed and attached.'),
+            ("How do I pin a record?", 'Hover over the record and click "Pin" in the top-right corner. Only one record can be pinned at a time.'),
             ("How do I delete a record?", 'Hover over the record, click "Delete", confirm. Deletion is irreversible.'),
-            ("How do I share a link to a record?", 'Hover over the record and click "Link" — the URL is copied to clipboard. It links to that exact record page.'),
-            ("What is auto link preview?", 'If a record contains a URL, clicking it opens a dialog with a preview: title, description and image from that site. This prevents accidental clicks.'),
+            ("How do I share a link to a record?", 'Hover over the record and click "Link" — the URL is copied to clipboard.'),
+            ("What is auto link preview?", 'If a record contains a URL, clicking it opens a dialog with a preview: title, description and image from that site.'),
         ]),
         ("lightbulb", "Suggestions", [
             ("What is the suggestion box?", 'It is a feedback form for your readers: they can suggest a post that you approve or reject. Available at /your_nickname/sugges.'),
             ("How do I suggest a post?", 'Open a user page and click "Suggest a post". Enter your name and text, optionally attach a photo, click "Send".'),
             ("How do I enable or disable suggestions?", 'In "Edit Profile" there is a toggle "Enable suggestions". Disabled suggestions hide the button from all visitors.'),
-            ("How do I disable photos in suggestions?", 'Same place — "Allow photos in suggestions" toggle. If off, the suggestion form has no photo upload.'),
-            ("How do I moderate suggestions?", 'In your cabinet click "Suggestions" (or the "Suggestions" tab on mobile). Each can be "Approve" (becomes your record with the author noted) or "Reject" (deleted).'),
-            ("How do I set rules for suggestions?", 'In "Edit Profile" under "Suggestion rules" (up to 1000 chars). They are shown to everyone who opens the form.'),
-            ("Can I suggest a post to myself?", 'No. Create your posts directly in your cabinet.'),
+            ("How do I disable photos in suggestions?", 'Same place — "Allow photos in suggestions" toggle.'),
+            ("How do I moderate suggestions?", 'Tap "Suggestions" (bottom tab on mobile). Each can be "Approve" or "Reject".'),
+            ("How do I set rules for suggestions?", 'In "Edit Profile" under "Suggestion rules" (up to 1000 chars).'),
+            ("Can I suggest a post to myself?", 'No. Create your posts directly in "Create".'),
         ]),
         ("gear", "Profile & Settings", [
             ("How do I change name or description?", 'In "Edit Profile" enter a new name and description (up to 300 chars) and save.'),
-            ("How do I change my avatar?", 'On the profile edit page click the avatar — a file picker opens. The photo is adjusted automatically.'),
-            ("Where do I find settings?", 'Open "Settings" — in the sidebar on the left, or on the bottom bar on mobile. There you can change language and view app info.'),
+            ("How do I change my avatar?", 'On the profile edit page click the avatar — a file picker opens.'),
+            ("Where do I find settings?", 'Open "Settings" — bottom bar on mobile, or direct URL /settings. There you can change language and view app info.'),
             ("How do I change the language?", 'In "Settings" choose RU or EN. The choice is remembered automatically.'),
-            ("Where can I see site statistics?", 'The "Stats" link in the footer or in settings: users, records, suggestions and server uptime.'),
+            ("Where can I see site statistics?", 'The "Stats" link in the footer or in settings.'),
             ("How do I delete my account?", 'Email the administration. We will delete the account and all related records within 7 days.'),
         ]),
         ("image", "Photos & Images", [
             ("Which photo formats are supported?", 'Any your browser can open: JPEG, PNG, WebP, GIF.'),
-            ("Why are photos compressed?", 'To keep the site fast and storage light. Compression happens automatically on upload.'),
+            ("Why are photos compressed?", 'To keep the site fast. Compression happens automatically on upload.'),
             ("A photo fails to upload — what to do?", 'Try a smaller file or a simpler image. If it keeps failing — report via bug-report.'),
-            ("How do I view a photo full-size?", 'Click the image — a viewer opens. Close with Esc or click outside the photo.'),
+            ("How do I view a photo full-size?", 'Click the image — a viewer opens. Click the image again to zoom. Close with the X in the top-right corner or Esc.'),
         ]),
         ("shield", "Security", [
             ("Is my data safe?", 'Yes, we use modern methods to protect accounts and data.'),
@@ -554,7 +466,7 @@ FAQ_DATA = {
             ("What is the privacy policy?", 'A document describing what data we collect and how we use it. Full text — at /privacy.'),
         ]),
         ("bug", "Problems & Support", [
-            ("How do I report a bug?", 'Open /bugreport and describe the issue. Your reports are listed there with status: Accepted, In Progress, Fixed, Rejected.'),
+            ("How do I report a bug?", 'Open /bugreport and describe the issue. Your reports are listed there with status.'),
             ("Login doesn\'t work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. If it still fails — email the administration.'),
             ("Why don\'t I receive emails?", 'We do not send emails — all contact via the bug-report form or footer addresses.'),
             ("Who do I contact?", 'Admin email: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. We reply within 1–2 days.'),
@@ -621,15 +533,16 @@ LOCALES = {
         "err_pass_short": "Пароль должен быть не короче 8 символов",
         "faq_title": "ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ",
         "faq_intro": "Здесь собраны ответы на частые вопросы о Solid. Если не нашли ответ — напишите администрации по контактам ниже.",
-        "nav_cabinet": "Кабинет", "nav_settings": "Настройки", "nav_sugges": "Предложки",
+        "nav_feed": "Лента", "nav_create": "Создать", "nav_profile": "Профиль",
+        "nav_sugges": "Предложки", "nav_settings": "Настройки",
+        "feed_title": "ЛЕНТА",
+        "create_page_title": "НОВЫЙ ПОСТ",
         "settings_title": "НАСТРОЙКИ",
         "settings_language": "Язык интерфейса",
         "settings_about": "О приложении",
         "settings_about_text": "Solid — простая социальная платформа для записей и предложек. Делитесь мыслями, собирайте предложки от читателей и оставайтесь на связи.",
         "settings_links": "Полезные ссылки",
-        "settings_btn": "Настройки",
         "settings_version": "Версия",
-        "settings_back": "Назад в кабинет",
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -688,15 +601,16 @@ LOCALES = {
         "err_pass_short": "Password must be at least 8 chars",
         "faq_title": "FREQUENTLY ASKED QUESTIONS",
         "faq_intro": "Here are answers to frequently asked questions about Solid. If you couldn't find an answer — contact the administration below.",
-        "nav_cabinet": "Cabinet", "nav_settings": "Settings", "nav_sugges": "Suggestions",
+        "nav_feed": "Feed", "nav_create": "Create", "nav_profile": "Profile",
+        "nav_sugges": "Suggestions", "nav_settings": "Settings",
+        "feed_title": "FEED",
+        "create_page_title": "NEW POST",
         "settings_title": "SETTINGS",
         "settings_language": "Interface language",
         "settings_about": "About",
         "settings_about_text": "Solid is a simple social platform for records and suggestions. Share your thoughts, collect suggestions from readers and stay in touch.",
         "settings_links": "Useful links",
-        "settings_btn": "Settings",
         "settings_version": "Version",
-        "settings_back": "Back to cabinet",
     }
 }
 
@@ -722,29 +636,40 @@ SVG_ICONS = {
     "bug": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='6' width='8' height='14' rx='4'/><path d='M19 7l-3 2'/><path d='M5 7l3 2'/><path d='M19 19l-3-2'/><path d='M5 19l3-2'/><path d='M20 13h-4'/><path d='M4 13h4'/><path d='M10 4l1 2'/><path d='M14 4l-1 2'/></svg>",
 }
 
-# Bottom-nav icons use currentColor so CSS can highlight the active tab
+SVG_NAV_FEED = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><polyline points='9 22 9 12 15 12 15 22'/></svg>"""
+SVG_NAV_CREATE = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/></svg>"""
 SVG_NAV_CABINET = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
 SVG_NAV_SETTINGS = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"""
 SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 16 12 14 15 10 15 8 12 2 12'/><path d='M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>"""
 
 def bottom_nav_html(lang):
     current = _current_path.get() or "/"
-    cab_active = "active" if current in ("/cabinet", "/cabinet/edit") else ""
-    set_active = "active" if current == "/settings" else ""
+    feed_active = "active" if current == "/cabinet" else ""
+    create_active = "active" if current == "/cabinet/new" else ""
+    profile_active = "active" if current == "/cabinet/profile" else ""
     sug_active = "active" if current == "/cabinet/suggestions" else ""
+    set_active = "active" if current == "/settings" else ""
     return f"""
-    <nav class="bottom-nav" aria-label="Основная навигация">
-        <a href="/cabinet" class="bottom-nav-item {cab_active}">
-            {SVG_NAV_CABINET}
-            <span>{t('nav_cabinet', lang)}</span>
+    <nav class="bottom-nav" aria-label="Навигация">
+        <a href="/cabinet" class="bottom-nav-item {feed_active}">
+            {SVG_NAV_FEED}
+            <span>{t('nav_feed', lang)}</span>
         </a>
-        <a href="/settings" class="bottom-nav-item {set_active}">
-            {SVG_NAV_SETTINGS}
-            <span>{t('nav_settings', lang)}</span>
+        <a href="/cabinet/new" class="bottom-nav-item {create_active}">
+            {SVG_NAV_CREATE}
+            <span>{t('nav_create', lang)}</span>
+        </a>
+        <a href="/cabinet/profile" class="bottom-nav-item {profile_active}">
+            {SVG_NAV_CABINET}
+            <span>{t('nav_profile', lang)}</span>
         </a>
         <a href="/cabinet/suggestions" class="bottom-nav-item {sug_active}">
             {SVG_NAV_SUGGES}
             <span>{t('nav_sugges', lang)}</span>
+        </a>
+        <a href="/settings" class="bottom-nav-item {set_active}">
+            {SVG_NAV_SETTINGS}
+            <span>{t('nav_settings', lang)}</span>
         </a>
     </nav>
     <script>document.body.classList.add('has-bottom-nav');</script>
@@ -831,8 +756,6 @@ def get_css():
             .logout-btn:hover { background: #cc0000; }
             .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
             .edit-btn:hover { background: #1a82e2; }
-            .settings-btn { background: #f39c12; color: white; margin-top: 5px; }
-            .settings-btn:hover { background: #d68910; }
             .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; position: relative; }
             .sugges-btn:hover { background: #8e44ad; }
             .badge { background: #ff4d4d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; font-weight: bold; }
@@ -848,7 +771,7 @@ def get_css():
             .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
             .post-content { padding: 15px 15px 0; margin-bottom: 10px; font-size: 18px; text-align: center; word-break: break-word; white-space: pre-wrap; }
             .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
-            .post-image { width: 100%; max-height: 500px; object-fit: cover; display: block; margin: 10px 0 0; cursor: zoom-in; }
+            .post-image { width: 100%; max-height: 500px; object-fit: cover; display: block; cursor: zoom-in; }
             .post-footer { padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #888; flex-wrap: wrap; gap: 10px; }
             .post-date { font-size: 12px; color: #555; margin-left: auto; }
             .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; }
@@ -889,7 +812,7 @@ def get_css():
             .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
             .privacy-content code { background: #eee; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 15px; }
             .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
-            #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; max-width: 90%; }
+            #toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; max-width: 90%; }
             #toast.show { opacity: 1; }
             .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; padding: 15px; }
             .modal-overlay.show { display: flex; }
@@ -901,12 +824,6 @@ def get_css():
             .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
             .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold; word-break: break-word;}
             .og-desc { margin: 0; font-size: 14px; color: #555; word-break: break-word;}
-            #img-viewer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); z-index: 20000; display: none; justify-content: center; align-items: center; cursor: zoom-out; padding: 15px; animation: fadeIn 0.2s; }
-            #img-viewer.show { display: flex; }
-            #img-viewer-img { max-width: 95vw; max-height: 95vh; object-fit: contain; border-radius: 8px; box-shadow: 0 0 40px rgba(0,0,0,0.8); }
-            .img-viewer-close { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-            .img-viewer-close:hover { background: rgba(255,255,255,0.5); }
-            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
             .stats-card { background: #a9a9a9; padding: 15px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;}
             .stats-card b { font-size: 17px; }
             .stats-value { font-weight: bold; color: #1e8449; font-size: 22px; }
@@ -925,7 +842,176 @@ def get_css():
             .settings-link:hover { color: #4da6ff; text-decoration: none; }
             .settings-link::after { content: '›'; color: #666; font-size: 20px; font-weight: normal; }
 
-            /* ===== Bottom navigation (mobile only) ===== */
+            /* ===== Image / avatar skeletons ===== */
+            .image-skeleton {
+                margin: 10px 0 0;
+                border-radius: 10px;
+                overflow: hidden;
+                background: linear-gradient(90deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
+                background-size: 200% 100%;
+                animation: shimmer 1.5s infinite linear;
+                min-height: 100px;
+                position: relative;
+            }
+            .image-skeleton.loaded { animation: none; background: transparent; min-height: 0; }
+            .image-skeleton .post-image { margin: 0; opacity: 0; transition: opacity 0.4s; }
+            .image-skeleton .post-image.loaded { opacity: 1; }
+            .avatar-skeleton {
+                display: block; width: 120px; height: 120px; margin: 0 auto 10px;
+                border-radius: 8px; overflow: hidden;
+                background: linear-gradient(90deg, #2a2a2a 0%, #3a3a3a 50%, #2a2a2a 100%);
+                background-size: 200% 100%;
+                animation: shimmer 1.5s infinite linear;
+            }
+            .avatar-skeleton.loaded { animation: none; background: transparent; }
+            .avatar-skeleton .avatar { margin: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.4s; border-radius: 0; }
+            .avatar-skeleton .avatar.loaded { opacity: 1; }
+            @keyframes shimmer {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+            }
+
+            /* ===== Button spinner ===== */
+            .btn-spinner {
+                display: inline-block;
+                width: 18px; height: 18px;
+                border: 2px solid rgba(0,0,0,0.3);
+                border-top-color: #000;
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+                vertical-align: middle;
+            }
+            @keyframes spin { to { transform: rotate(360deg); } }
+
+            /* ===== Progress bar ===== */
+            .progress-bar {
+                position: fixed; top: 0; left: 0;
+                height: 3px; width: 0;
+                background: linear-gradient(90deg, #4da6ff 0%, #9b59b6 50%, #4da6ff 100%);
+                background-size: 200% 100%;
+                animation: progress-shimmer 1.5s linear infinite;
+                z-index: 99999;
+                opacity: 0;
+                pointer-events: none;
+            }
+            .progress-bar.show { width: 80%; opacity: 1; transition: width 0.4s ease-out, opacity 0.2s; }
+            @keyframes progress-shimmer { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
+
+            /* ===== Image viewer (improved) ===== */
+            #img-viewer {
+                position: fixed; top: 0; left: 0;
+                width: 100vw; height: 100vh; height: 100dvh;
+                background: rgba(0,0,0,0.95);
+                backdrop-filter: blur(8px);
+                z-index: 20000;
+                display: none;
+                justify-content: center;
+                align-items: center;
+                padding: 0;
+            }
+            #img-viewer.show { display: flex; animation: fadeIn 0.2s; }
+            #img-viewer-img {
+                max-width: 90vw;
+                max-height: 82vh;
+                max-height: 82dvh;
+                object-fit: contain;
+                border-radius: 6px;
+                transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                cursor: zoom-in;
+                user-select: none;
+                -webkit-user-select: none;
+                touch-action: manipulation;
+                box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            }
+            #img-viewer-img.zoomed {
+                transform: scale(2.2);
+                cursor: zoom-out;
+            }
+            .img-viewer-close {
+                position: fixed;
+                top: max(14px, calc(env(safe-area-inset-top, 0px) + 10px));
+                right: max(14px, calc(env(safe-area-inset-right, 0px) + 10px));
+                background: rgba(255,255,255,0.15);
+                color: #fff;
+                border: 2px solid rgba(255,255,255,0.3);
+                width: 48px; height: 48px;
+                border-radius: 50%;
+                font-size: 26px;
+                line-height: 1;
+                cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                transition: background 0.2s, transform 0.15s;
+                z-index: 20002;
+                -webkit-tap-highlight-color: transparent;
+                backdrop-filter: blur(4px);
+                font-weight: bold;
+                padding: 0;
+            }
+            .img-viewer-close:hover { background: rgba(255,255,255,0.3); }
+            .img-viewer-close:active { transform: scale(0.92); }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+            /* ===== Dual view ===== */
+            .desktop-only { display: block; }
+            .mobile-only { display: none; }
+
+            /* ===== Feed layout ===== */
+            .mobile-feed { padding: 12px 12px 20px; }
+            .mobile-feed .feed-title {
+                color: #fff;
+                font-size: 20px;
+                margin: 0 0 12px;
+                text-align: center;
+                background: #000;
+                padding: 14px;
+                border-radius: 14px;
+                letter-spacing: 1px;
+            }
+            .feed-list { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+            .feed-list .post-item { border-radius: 12px; }
+            .feed-post-header {
+                padding: 12px 15px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid rgba(0,0,0,0.12);
+                font-size: 14px;
+            }
+            .feed-post-header a { color: #2a5db0; font-weight: bold; }
+            .feed-post-time { color: #555; font-weight: normal; font-size: 12px; }
+
+            /* ===== Create page ===== */
+            .create-page-container {
+                width: 100%;
+                max-width: 700px;
+                margin: 0 auto;
+            }
+            .create-page-title {
+                color: #fff;
+                font-size: 24px;
+                text-align: center;
+                margin: 0 0 20px;
+                letter-spacing: 1px;
+            }
+            .create-page-form {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .create-page-textarea {
+                width: 100%;
+                min-height: 300px;
+                height: 40vh;
+                padding: 14px;
+                font-size: 16px;
+                border-radius: 12px;
+                background: #a9a9a9;
+                border: none;
+                resize: vertical;
+                font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;
+            }
+
+            /* ===== Bottom navigation ===== */
             .bottom-nav { display: none; }
 
             /* ===== Mobile app-like styles ===== */
@@ -935,10 +1021,13 @@ def get_css():
                     justify-content: flex-start;
                     padding: 12px 12px 40px 12px;
                     min-height: 100vh;
+                    min-height: 100dvh;
                 }
                 body.has-bottom-nav .page-content {
-                    padding-bottom: 92px;
+                    padding-bottom: 100px;
                 }
+                .desktop-only { display: none !important; }
+                .mobile-only { display: block; }
                 .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; border-radius: 16px; }
                 .auth-wrapper { width: 100%; }
                 .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
@@ -958,7 +1047,7 @@ def get_css():
                 input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 14px; border-radius: 10px; }
                 button, .btn, .file-label { font-size: 16px; padding: 14px; border-radius: 10px; }
                 .sidebar h2 { font-size: 20px; }
-                .avatar, .avatar-upload { width: 100px; height: 100px; border-radius: 16px; }
+                .avatar, .avatar-upload, .avatar-skeleton { width: 100px; height: 100px; border-radius: 16px; }
                 .avatar-upload-icon { opacity: 1; background: rgba(0,0,0,0.35); }
                 .post-image { max-height: 400px; border-radius: 10px; }
                 .sugg-actions { flex-direction: column; }
@@ -970,26 +1059,53 @@ def get_css():
                 .posts-area { border-radius: 18px; padding: 12px; }
                 .suggestion-card { border-radius: 14px; }
 
-                /* Footer compact on mobile */
-                .footer { padding: 12px 8px; font-size: 13px; gap: 6px; }
-                .footer-links { font-size: 12px; }
-                .footer-contacts { font-size: 11px; }
-                .footer-badge { margin-top: 6px; }
-                .footer-badge img { width: 140px; height: 32px; }
+                /* Footer mobile: only on settings, as compact info */
+                .footer { display: none; }
+                body.show-footer .footer {
+                    display: flex;
+                    margin: 20px 12px 12px;
+                    padding: 18px 14px;
+                    background: #161b22;
+                    border-radius: 14px;
+                    border: 1px solid #21262d;
+                    gap: 10px;
+                    font-size: 13px;
+                    color: #c9d1d9;
+                }
+                body.show-footer .footer > div:first-child { font-size: 13px; color: #c9d1d9; }
+                body.show-footer .footer > div:first-child a { color: #4da6ff; border-bottom: none; }
+                body.show-footer .footer-links {
+                    font-size: 12px;
+                    display: flex;
+                    flex-wrap: wrap;
+                    justify-content: center;
+                    gap: 6px;
+                    color: #888;
+                }
+                body.show-footer .footer-links a {
+                    color: #4da6ff;
+                    padding: 4px 8px;
+                    border-bottom: none;
+                    background: rgba(77, 166, 255, 0.1);
+                    border-radius: 8px;
+                }
+                body.show-footer .footer-contacts { font-size: 11px; color: #888; word-break: break-all; }
+                body.show-footer .footer-contacts a { color: #4da6ff; border-bottom: none; }
+                body.show-footer .footer-badge { margin-top: 6px; }
+                body.show-footer .footer-badge img { width: 130px; height: auto; }
+                body.show-footer .footer > div:last-child { font-size: 11px; color: #666; }
 
-                /* Bottom navigation bar */
+                /* Bottom navigation */
                 .bottom-nav {
                     display: flex;
                     position: fixed;
-                    bottom: 0;
-                    left: 0;
-                    right: 0;
+                    bottom: 0; left: 0; right: 0;
                     background: #000;
-                    border-top: 1px solid #222;
+                    border-top: 1px solid #1a1a1a;
                     z-index: 5000;
                     padding-top: 6px;
                     padding-bottom: max(6px, env(safe-area-inset-bottom));
-                    box-shadow: 0 -6px 24px rgba(0,0,0,0.15);
+                    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
                 }
                 .bottom-nav-item {
                     flex: 1;
@@ -997,7 +1113,7 @@ def get_css():
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    padding: 6px 4px;
+                    padding: 6px 2px;
                     color: #777;
                     font-size: 10px;
                     gap: 3px;
@@ -1007,36 +1123,45 @@ def get_css():
                     -webkit-tap-highlight-color: transparent;
                     cursor: pointer;
                     user-select: none;
+                    position: relative;
                 }
                 .bottom-nav-item span {
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
                     max-width: 100%;
+                    font-size: 10px;
                 }
-                .bottom-nav-item svg {
-                    width: 22px;
-                    height: 22px;
-                    display: block;
-                }
-                .bottom-nav-item.active {
-                    color: #4da6ff;
-                }
+                .bottom-nav-item svg { width: 22px; height: 22px; display: block; }
+                .bottom-nav-item.active { color: #4da6ff; }
                 .bottom-nav-item.active::before {
                     content: '';
                     position: absolute;
                     top: 0;
-                    width: 24px;
-                    height: 3px;
+                    width: 24px; height: 3px;
                     border-radius: 0 0 3px 3px;
                     background: #4da6ff;
                 }
-                .bottom-nav-item { position: relative; }
 
                 /* Settings mobile tweaks */
                 .settings-card { padding: 16px; border-radius: 14px; }
                 .settings-card h3 { font-size: 13px; }
                 .settings-link { padding: 16px 4px; }
+
+                /* Create page full height on mobile */
+                .create-page-textarea {
+                    min-height: 45vh;
+                    height: 45vh;
+                    font-size: 16px;
+                }
+                .create-page-title { font-size: 20px; margin-bottom: 16px; }
+
+                /* Toast above nav */
+                #toast { bottom: 100px; }
+
+                .mobile-feed { padding: 8px 4px 8px; }
+                .mobile-feed .feed-title { font-size: 18px; padding: 12px; }
+                .feed-post-header { padding: 10px 14px; font-size: 13px; }
             }
         </style>
         """
@@ -1067,9 +1192,51 @@ def get_js(lang, token, current_user=""):
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', formatLocalDates);
         else formatLocalDates();
-        function viewImage(src) { if (!src) return; document.getElementById('img-viewer-img').src = src; document.getElementById('img-viewer').classList.add('show'); document.body.style.overflow = 'hidden'; }
-        function closeImgViewer() { document.getElementById('img-viewer').classList.remove('show'); document.body.style.overflow = ''; }
+
+        // Image viewer with zoom
+        function viewImage(src) {
+            if (!src) return;
+            const img = document.getElementById('img-viewer-img');
+            img.src = src;
+            img.classList.remove('zoomed');
+            document.getElementById('img-viewer').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeImgViewer() {
+            document.getElementById('img-viewer').classList.remove('show');
+            document.getElementById('img-viewer-img').classList.remove('zoomed');
+            document.body.style.overflow = '';
+        }
+        function toggleImgZoom(img) {
+            img.classList.toggle('zoomed');
+        }
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImgViewer(); });
+
+        // Skeleton load handler for images
+        window.skelLoad = function(el) {
+            el.classList.add('loaded');
+            if (el.parentElement) el.parentElement.classList.add('loaded');
+        };
+
+        // Progress bar
+        (function() {
+            const bar = document.getElementById('progress-bar');
+            if (!bar) return;
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest && e.target.closest('a[href]');
+                if (!link) return;
+                const href = link.getAttribute('href');
+                if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+                if (link.target === '_blank' || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                try {
+                    const u = new URL(href, window.location.origin);
+                    if (u.origin !== window.location.origin) return;
+                } catch { return; }
+                bar.classList.add('show');
+            });
+            window.addEventListener('pagehide', () => bar.classList.remove('show'));
+        })();
+
         async function compressImage(file, maxWidth=1000, quality=0.75) {
             return new Promise((resolve, reject) => {
                 if (!file.type.startsWith('image/')) return reject('Not an image');
@@ -1120,7 +1287,7 @@ def get_js(lang, token, current_user=""):
             const file = input.files[0]; const hidden = document.getElementById('avatar-data'); const preview = document.getElementById('avatar-preview');
             if (!file) { hidden.value = ""; return; }
             showToast(L.ic);
-            try { const b64 = await compressImage(file, 300, 0.8); hidden.value = b64; if (preview) { preview.src = b64; preview.style.display = 'block'; } showToast(L.ir); }
+            try { const b64 = await compressImage(file, 300, 0.8); hidden.value = b64; if (preview) { preview.src = b64; preview.style.display = 'block'; preview.parentElement.classList.add('loaded'); } showToast(L.ir); }
             catch (e) { showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; }
         }
         if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err)); }); }
@@ -1133,7 +1300,7 @@ def get_js(lang, token, current_user=""):
         }
         connectWS();
         function copyLink(btn) { const user = btn.dataset.user || ''; const rid = btn.dataset.rid || ''; if (!user) return; const url = window.location.origin + '/' + encodeURIComponent(user) + '/' + encodeURIComponent(rid); navigator.clipboard.writeText(url).then(() => showToast(L.tl)).catch(() => showToast(L.tc)); }
-        function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+        function showToast(msg) { const t = document.getElementById('toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
         function showConfirm(msg, cb) { const m = document.getElementById('modal-overlay'); document.getElementById('modal-text').textContent = msg; m.classList.add('show'); const cBtn = document.getElementById('modal-confirm'); const xBtn = document.getElementById('modal-cancel'); const nC = cBtn.cloneNode(true); const nX = xBtn.cloneNode(true); cBtn.parentNode.replaceChild(nC, cBtn); xBtn.parentNode.replaceChild(nX, xBtn); nC.onclick = () => { m.classList.remove('show'); cb(true); }; nX.onclick = () => { m.classList.remove('show'); cb(false); }; }
         let pendingUrl = "";
         async function showLinkWarning(e, el) {
@@ -1160,6 +1327,8 @@ def get_js(lang, token, current_user=""):
         function tp(i, b) { const x = document.getElementById(i); if (x.type === 'password') { x.type = 'text'; b.innerHTML = `__SVG_EYE_OFF__`; } else { x.type = 'password'; b.innerHTML = `__SVG_EYE__`; } }
         function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
         function ucRules(e) { document.getElementById('rules-count').innerText = e.value.length + ' / 1000'; }
+
+        // Existing create handler (optimistic add on cabinet page)
         async function hc(e) {
             e.preventDefault();
             const f = e.target, c = f.querySelector('textarea').value.trim();
@@ -1170,6 +1339,7 @@ def get_js(lang, token, current_user=""):
             const iso = n.toISOString();
             const img = window.postImageCache || "";
             const a = document.querySelector('#my-records-container');
+            if (!a) { try { await rpc('create_record', { content: c, client_id: i, image_data: img }); location.reload(); } catch (x) { showToast(L.tf + ' ' + x.message); } return; }
             const m = a.querySelector('.empty-state'); if (m) m.remove();
             const w = document.createElement('div'); w.className = 'post-wrapper'; w.id = 'post-' + i;
             const acts = document.createElement('div'); acts.className = 'post-actions';
@@ -1183,7 +1353,12 @@ def get_js(lang, token, current_user=""):
             const item = document.createElement('div'); item.className = 'post-item';
             const contentEl = document.createElement('div'); contentEl.className = 'post-content'; contentEl.textContent = c;
             item.appendChild(contentEl);
-            if (img) { const imgEl = document.createElement('img'); imgEl.className = 'post-image'; imgEl.src = img; imgEl.onclick = function() { viewImage(this.src); }; item.appendChild(imgEl); }
+            if (img) {
+                const wrap = document.createElement('div'); wrap.className = 'image-skeleton';
+                const imgEl = document.createElement('img'); imgEl.className = 'post-image loaded'; imgEl.src = img; imgEl.onclick = function() { viewImage(this.src); };
+                wrap.appendChild(imgEl); wrap.classList.add('loaded');
+                item.appendChild(wrap);
+            }
             const footer = document.createElement('div'); footer.className = 'post-footer';
             const dateEl = document.createElement('div'); dateEl.className = 'post-date'; dateEl.dataset.iso = iso; dateEl.textContent = d;
             footer.appendChild(dateEl); item.appendChild(footer);
@@ -1194,6 +1369,27 @@ def get_js(lang, token, current_user=""):
             f.reset(); window.postImageCache = ""; const preview = document.getElementById('post-img-preview'); if (preview) preview.style.display = 'none';
             try { await rpc('create_record', { content: c, client_id: i, image_data: img }); } catch (x) { w.remove(); showToast(L.tf + ' ' + x.message); }
         }
+
+        // Create page handler (redirects after success)
+        async function hcNew(e) {
+            e.preventDefault();
+            const f = e.target, c = f.querySelector('textarea').value.trim();
+            if (!c) return;
+            if (c.length > 5000) { showToast(L.ptl); return; }
+            const img = window.postImageCache || "";
+            const btn = f.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>';
+            try {
+                await rpc('create_record', { content: c, image_data: img });
+                showToast(L.tn);
+                setTimeout(() => { window.location.href = '/cabinet'; }, 500);
+            } catch (x) {
+                showToast(L.tf + ' ' + x.message);
+                btn.disabled = false; btn.innerHTML = originalText;
+            }
+        }
+
         function hd(i) { showConfirm(L.c, async (yes) => { if (!yes) return; const w = document.getElementById('post-' + i); w.style.opacity = '0'; setTimeout(() => w.style.display = 'none', 300); try { await rpc('delete_record', { post_id: i }); w.remove(); } catch (x) { w.style.opacity = '1'; w.style.display = 'block'; showToast(L.tf + ' ' + x.message); } }); }
         async function hp(i, b) {
             const w = document.getElementById('post-' + i), p = w.querySelector('.post-item'), s = p.classList.contains('pinned');
@@ -1227,10 +1423,14 @@ def get_js(lang, token, current_user=""):
 
 def get_overlay(lang):
     s = """
+    <div id="progress-bar" class="progress-bar"></div>
     <div id="toast"></div>
     <div id="modal-overlay" class="modal-overlay"><div class="modal-box"><p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p><div class="modal-actions"><button id="modal-cancel" class="btn" style="background:#aaa;color:black;">__CANCEL__</button><button id="modal-confirm" class="btn btn-danger">OK</button></div></div></div>
     <div id="link-modal" class="modal-overlay"><div class="modal-box" style="text-align: left;"><h3 style="margin-top:0;">__EXT_TITLE__</h3><p style="font-size:14px; color:#555; margin-bottom:10px;">__EXT_DESC__</p><div id="og-preview" class="og-box"><p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p></div><div class="modal-actions"><button onclick="closeLinkModal()" class="btn" style="background:#aaa;color:black;">__CANCEL__</button><a id="link-modal-confirm" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">__EXT_CONTINUE__</a></div></div></div>
-    <div id="img-viewer" onclick="if(event.target===this)closeImgViewer()"><button class="img-viewer-close" onclick="closeImgViewer()">&times;</button><img id="img-viewer-img" src="" alt=""></div>
+    <div id="img-viewer" onclick="if(event.target===this)closeImgViewer()">
+        <button class="img-viewer-close" onclick="event.stopPropagation();closeImgViewer()" aria-label="Close">&times;</button>
+        <img id="img-viewer-img" src="" alt="" onclick="event.stopPropagation();toggleImgZoom(this)">
+    </div>
     """
     for k, v in [("__CANCEL__", t('cancel',lang)),("__EXT_TITLE__", t('ext_title',lang)),("__EXT_DESC__", t('ext_desc',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__EXT_CONTINUE__", t('ext_continue',lang))]:
         s = s.replace(k, v)
@@ -1298,6 +1498,16 @@ def auth_html(lang, error_msg="", token=""):
         s = s.replace(k, v)
     return s
 
+def _img_html(img_src, extra_onclick=True):
+    """Wraps a post image in a skeleton container."""
+    if not img_src: return ""
+    oc = " onclick=\"viewImage(this.src)\"" if extra_onclick else ""
+    return f'<div class="image-skeleton"><img class="post-image" src="{img_src}" loading="lazy" onload="window.skelLoad(this)"{oc}></div>'
+
+def _avatar_html(avatar_src):
+    if not avatar_src: return ""
+    return f'<div class="avatar-skeleton"><img class="avatar" src="{avatar_src}" loading="lazy" onload="window.skelLoad(this)" onclick="viewImage(this.src)"></div>'
+
 def render_records(records, lang, own=False, uid=None):
     if not records or not isinstance(records, list): return f"<div class='post-item empty-state'>{t('no_posts', lang)}</div>"
     out = ""
@@ -1320,8 +1530,36 @@ def render_records(records, lang, own=False, uid=None):
             acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
         sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
-        img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
+        img_html = _img_html(img)
         out += f"<div class='post-wrapper' id='post-{rid}'>{acts}<div class='post-item {pc}'><div class='post-content'>{content}</div>{img_html}<div class='post-footer'>{sugg_html}<div class='post-date' data-iso='{iso}'>{date}</div></div></div></div>"
+    return out
+
+def render_feed_records(records, lang, viewer=None):
+    if not records or not isinstance(records, list): return f"<div class='post-item empty-state'>{t('no_posts', lang)}</div>"
+    out = ""
+    for x in records:
+        if not isinstance(x, dict): continue
+        rid = esc(x.get('id'))
+        if not rid: continue
+        content = linkify(x.get('content'))
+        date = format_date(esc(x.get('created_at')))
+        iso = esc(x.get('created_at', ''))
+        img = sanitize_url(x.get('image_data', ''))
+        poster = esc(x.get('user_nickname', ''))
+        sugg_by = esc(x.get('suggested_by', ''))
+        sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
+        img_html = _img_html(img)
+        out += f"""<div class='post-wrapper' id='post-{rid}'>
+            <div class='post-item'>
+                <div class='feed-post-header'>
+                    <a href='/{quote(poster, safe="")}'>@{poster}</a>
+                    <span class='feed-post-time' data-iso='{iso}'>{date}</span>
+                </div>
+                <div class='post-content'>{content}</div>
+                {img_html}
+                <div class='post-footer'>{sugg_html}</div>
+            </div>
+        </div>"""
     return out
 
 def merge_memory(db_records, nickname):
@@ -1339,23 +1577,25 @@ def merge_memory(db_records, nickname):
     except Exception: pass
     return f
 
-def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
+def dashboard_html(nickname, user, my_p, feed_posts, lang, token, viewer, sugg_count=0):
     rh_my = render_records(my_p, lang, own=True, uid=viewer)
+    rh_feed = render_feed_records(feed_posts, lang, viewer)
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     avatar = sanitize_url(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
+    avatar_html = _avatar_html(avatar)
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     badge = f'<span class="badge">{sugg_count}</span>' if sugg_count else ''
     safe_nick_url = quote(nickname, safe='')
-    og_title = f"Личный кабинет — {nickname}" if lang == "ru" else f"Personal cabinet — {nickname}"
-    og_desc = desc or ("Solid — личный кабинет" if lang == "ru" else "Solid — personal cabinet")
+    og_title = f"Лента — Solid" if lang == "ru" else f"Feed — Solid"
+    og_desc = desc or ("Solid — лента записей" if lang == "ru" else "Solid — records feed")
     og = og_tags(og_title, og_desc, "/cabinet", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
     <title>__CABINET__ — Solid</title>__OG__
     __CSS____JS__</head><body>
+    <div class="desktop-only">
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar">
         <h2>__CABINET__</h2>
@@ -1365,7 +1605,6 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
         <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
         <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
         <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE____BADGE__</a>
-        <a href="/settings" class="btn settings-btn">__SETTINGS_BTN__</a>
         <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">__LOGOUT__</button></form>
         <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div>
@@ -1381,9 +1620,91 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
         </form></div>
         <div class="posts-area" id="my-records-container"><h2>__MY_POSTS__</h2>__RECORDS_HTML__</div>
     </div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    </div>
+    <div class="mobile-only">
+        <div class="page-content mobile-feed">
+            <div class="feed-title">__FEED_TITLE__</div>
+            <div class="feed-list">__FEED_HTML__</div>
+        </div>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICK_URL__",safe_nick_url),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__SETTINGS_BTN__",t('settings_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICK_URL__",safe_nick_url),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__FEED_TITLE__",t('feed_title',lang)),("__FEED_HTML__",rh_feed),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+        s = s.replace(k, v)
+    return s
+
+def create_page_html(nickname, lang, token):
+    og_title = t('create_page_title', lang) + " — Solid"
+    og_desc = t('create_post_placeholder', lang)
+    og = og_tags(og_title, og_desc, "/cabinet/new", lang=lang)
+    s = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>__TITLE__ — Solid</title>__OG__
+    __CSS____JS__</head><body>
+    <div class="page-content">
+        <div class="create-page-container">
+            <h1 class="create-page-title">__TITLE__</h1>
+            <form class="create-page-form" onsubmit="hcNew(event)">
+                <textarea class="create-page-textarea" name="content" placeholder="__PLACEHOLDER__" required maxlength="5000" autofocus></textarea>
+                <img id="post-img-preview" class="img-preview" style="display:none;">
+                <div class="post-buttons-row">
+                    <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
+                    <input type="file" id="post-file-input" accept="image/*" onchange="handlePostImage(this)" style="display:none;">
+                    <button type="submit" id="create-post-btn">__CREATE_BTN__</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
+    """
+    for k, v in [("__LANG__",lang),("__TITLE__",t('create_page_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__PLACEHOLDER__",t('create_post_placeholder',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__CREATE_BTN__",t('create_post_btn',lang)),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+        s = s.replace(k, v)
+    return s
+
+def profile_page_html(nickname, user, my_p, lang, token, viewer):
+    rh = render_records(my_p, lang, own=(viewer == nickname), uid=viewer)
+    user_username = esc(user.get('username'))
+    desc = esc(user.get('description'))
+    avatar = sanitize_url(user.get('avatar_data', ''))
+    avatar_html = _avatar_html(avatar)
+    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
+    safe_nick_url = quote(nickname, safe='')
+    og_title = f"{nickname} — Solid"
+    og_desc = desc or (f"Профиль {nickname}" if lang == "ru" else f"Profile {nickname}")
+    og = og_tags(og_title, og_desc, "/cabinet/profile", image=avatar, lang=lang)
+    s = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>__PROFILE__ __NICKNAME__ — Solid</title>__OG__
+    __CSS____JS__</head><body>
+    <div class="page-content">
+    <div class="dashboard-container"><div class="sidebar">
+        <h2>__PROFILE__</h2>
+        __AVATAR__
+        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
+        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICK_URL__" target="_blank" rel="noopener noreferrer">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
+        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
+        <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
+        <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE__</a>
+        <form action="/logout" method="get" style="margin: 0; width: 100%;"><button type="submit" class="logout-btn">__LOGOUT__</button></form>
+        <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet/profile" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/profile" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    </div>
+    <div class="main-content"><div class="posts-area" style="min-height:400px"><h2>__MY_POSTS__</h2>__RECORDS_HTML__</div></div></div>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
+    """
+    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICK_URL__",safe_nick_url),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1399,7 +1720,7 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             date = format_date(esc(sg.get('created_at')))
             iso = esc(sg.get('created_at', ''))
             img = sanitize_url(sg.get('image_data', ''))
-            img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
+            img_html = _img_html(img)
             rh += f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date' data-iso='{iso}'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
     og_title = t('suggestions_title', lang) + " — " + nickname
     og = og_tags(og_title, "Solid — suggestions", "/cabinet/suggestions", lang=lang)
@@ -1415,7 +1736,11 @@ def suggestions_page_html(nickname, suggestions, lang, token):
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__BACK__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1448,9 +1773,13 @@ def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabl
             <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/__NICK_URL__/sugges" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__/sugges" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
         </div>
     </div></div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__TITLE__",t('sugges_title',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__RULES_BLOCK__",rules_block),("__MSG__",msg_html),("__FORM_BLOCK__",form_block),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__TITLE__",t('sugges_title',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__RULES_BLOCK__",rules_block),("__MSG__",msg_html),("__FORM_BLOCK__",form_block),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -1459,7 +1788,7 @@ def edit_html(nickname, user, lang, token):
     rules = esc(user.get('sugges_rules', ''))
     avatar = sanitize_url(user.get('avatar_data', ''))
     avatar_display = "block" if avatar else "none"
-    avatar_html = f'<label class="avatar-upload" for="avatar-file-input"><img id="avatar-preview" class="avatar-img" src="{avatar}" alt="avatar" style="display:{avatar_display}"><div class="avatar-upload-icon">{SVG_UPLOAD}</div></label>'
+    avatar_html = f'<label class="avatar-upload" for="avatar-file-input"><div class="avatar-skeleton"><img id="avatar-preview" class="avatar" src="{avatar}" style="display:{avatar_display};opacity:{1 if avatar else 0}" onload="window.skelLoad(this)" onerror="this.parentElement.classList.add(\'loaded\')"></div><div class="avatar-upload-icon">{SVG_UPLOAD}</div></label>'
     user_username = esc(user.get('username'))
     sugges_checked = "checked" if user_sugges_enabled(user) else ""
     photo_checked = "checked" if user_sugges_photo_enabled(user) else ""
@@ -1489,11 +1818,15 @@ def edit_html(nickname, user, lang, token):
             <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__RULES__</textarea>
             <div id="rules-count" style="color:#fff;text-align:right;font-size:14px">__RULES_LEN__ / 1000</div>
             <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
-            <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
+            <a href="/cabinet/profile" class="btn" style="background:#a9a9a9">__CANCEL__</a>
         </form>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1505,7 +1838,7 @@ def public_html(nickname, user, records, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     avatar = sanitize_url(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
+    avatar_html = _avatar_html(avatar)
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     safe_nick_url = quote(nickname, safe='')
     sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
@@ -1528,7 +1861,11 @@ def public_html(nickname, user, records, lang, token, viewer):
         <div class="lang-switch"><a href="/set_lang/ru?next=/__NICK_URL__" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area" style="min-height:500px"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1537,7 +1874,7 @@ def public_html(nickname, user, records, lang, token, viewer):
 def record_page_html(nickname, user, record, lang, token, viewer):
     rh = render_records([record], lang, own=False, uid=viewer)
     avatar = sanitize_url(user.get('avatar_data', ''))
-    avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
+    avatar_html = _avatar_html(avatar)
     safe_nick_url = quote(nickname, safe='')
     sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
     raw_content = record.get('content', '') or ''
@@ -1560,7 +1897,11 @@ def record_page_html(nickname, user, record, lang, token, viewer):
         __SUGG_BTN__
         <a href="/__NICK_URL__" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>__RECORDS_HTML__</div></div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1594,7 +1935,11 @@ def bugreport_html(username, reports, lang, token, show_nav=False):
         <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__CANCEL__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if show_nav else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1630,7 +1975,7 @@ def settings_html(nickname, user, lang, token):
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
     <title>__SETTINGS_TITLE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
+    __CSS____JS__</head><body class="show-footer">
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
         <div class="posts-area" style="padding:20px;">
@@ -1663,7 +2008,11 @@ def settings_html(nickname, user, lang, token):
             </form>
         </div>
     </div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SETTINGS_TITLE__",t('settings_title',lang)),("__SETTINGS_LANGUAGE__",t('settings_language',lang)),("__SETTINGS_ABOUT__",t('settings_about',lang)),("__SETTINGS_ABOUT_TEXT__",t('settings_about_text',lang)),("__SETTINGS_VERSION__",t('settings_version',lang)),("__SETTINGS_LINKS__",t('settings_links',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__LOGOUT__",t('logout',lang)),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1702,7 +2051,11 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
-    </div>__BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+    </div>
+    __BOTTOM_NAV__
+    __FOOTER__
+    __OVERLAY__
+    </body></html>
     """
     for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
@@ -1749,63 +2102,26 @@ def docs_html(lang: str, token: str) -> str:
                 font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;
                 background: #0d1117;
             }}
-            :root {{
-                --theme-color: #4da6ff;
-            }}
-            .sidebar {{
-                background: #0d1117;
-                border-right: 1px solid #21262d;
-            }}
-            .sidebar ul li a {{
-                color: #c9d1d9;
-            }}
+            :root {{ --theme-color: #4da6ff; }}
+            .sidebar {{ background: #0d1117; border-right: 1px solid #21262d; }}
+            .sidebar ul li a {{ color: #c9d1d9; }}
             .sidebar ul li.active > a,
-            .sidebar ul li a:hover {{
-                color: #4da6ff;
-                border-right: 2px solid #4da6ff;
-            }}
-            .sidebar-toggle {{
-                background: #4da6ff;
-            }}
-            .sidebar-nav .docs-icon,
-            .sidebar-nav svg {{
-                display: none;
-            }}
-            .markdown-section {{
-                color: #c9d1d9;
-            }}
-            .markdown-section h1,
-            .markdown-section h2,
-            .markdown-section h3 {{
-                color: #ffffff;
-            }}
+            .sidebar ul li a:hover {{ color: #4da6ff; border-right: 2px solid #4da6ff; }}
+            .sidebar-toggle {{ background: #4da6ff; }}
+            .sidebar-nav .docs-icon, .sidebar-nav svg {{ display: none; }}
+            .markdown-section {{ color: #c9d1d9; }}
+            .markdown-section h1, .markdown-section h2, .markdown-section h3 {{ color: #ffffff; }}
             .markdown-section h2 {{
-                display: flex;
-                align-items: center;
-                gap: 12px;
+                display: flex; align-items: center; gap: 12px;
                 border-bottom: 2px solid #21262d;
-                padding-bottom: 12px;
-                margin-top: 40px;
+                padding-bottom: 12px; margin-top: 40px;
             }}
-            .markdown-section h2 svg {{
-                flex-shrink: 0;
-            }}
-            .markdown-section code {{
-                background: #161b22;
-                color: #79c0ff;
-            }}
-            .markdown-section a {{
-                color: #4da6ff;
-            }}
-            .app-nav {{
-                background: #0d1117;
-            }}
-            .app-nav a {{
-                color: #c9d1d9;
-            }}
-            .app-name, .app-name-link {{
-                color: #ffffff !important;
-            }}
+            .markdown-section h2 svg {{ flex-shrink: 0; }}
+            .markdown-section code {{ background: #161b22; color: #79c0ff; }}
+            .markdown-section a {{ color: #4da6ff; }}
+            .app-nav {{ background: #0d1117; }}
+            .app-nav a {{ color: #c9d1d9; }}
+            .app-name, .app-name-link {{ color: #ffffff !important; }}
         </style>
         <script>
             window.$docsify = {{
@@ -1820,10 +2136,7 @@ def docs_html(lang: str, token: str) -> str:
                 executeScript: false,
                 noEmoji: false,
                 mergeNavbar: true,
-                search: {{
-                    placeholder: 'Поиск...',
-                    noData: 'Ничего не найдено'
-                }}
+                search: {{ placeholder: 'Поиск...', noData: 'Ничего не найдено' }}
             }};
         </script>
     </head>
@@ -1965,7 +2278,9 @@ async def cabinet(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
-    user_data, p_data, sc = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname), _fetch_suggestion_count(nickname))
+    user_data, p_data, sc, feed_data = await asyncio.gather(
+        _fetch_user(nickname), _fetch_posts(nickname), _fetch_suggestion_count(nickname), _fetch_feed(30)
+    )
     if user_data is DB_UNAVAILABLE:
         body = "<h2>Сервер временно недоступен. <a href='/cabinet'>Повторить</a></h2>" if lang == "ru" else "<h2>Server temporarily unavailable. <a href='/cabinet'>Retry</a></h2>"
         return HTMLResponse(body, status_code=503)
@@ -1973,7 +2288,34 @@ async def cabinet(r: Request, setlang: str = None):
         resp = RedirectResponse("/", 303); resp.delete_cookie("nickname"); return resp
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname, sc))
+    res = HTMLResponse(dashboard_html(nickname, user_data, po, feed_data, lang, token, nickname, sc))
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/cabinet/new", response_class=HTMLResponse)
+async def cabinet_new(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    token = get_csrf_token(r)
+    res = HTMLResponse(create_page_html(nickname, lang, token))
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/cabinet/profile", response_class=HTMLResponse)
+async def cabinet_profile(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    user_data, p_data = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname))
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
+    if not user_data: return RedirectResponse("/", 303)
+    po = merge_memory(p_data, nickname)
+    token = get_csrf_token(r)
+    res = HTMLResponse(profile_page_html(nickname, user_data, po, lang, token, nickname))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
@@ -2117,7 +2459,7 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
         update.pop("avatar_data", None); update.pop("sugges_enabled", None); update.pop("sugges_photo_enabled", None)
         try: await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
         except Exception: pass
-    return RedirectResponse("/cabinet", 303)
+    return RedirectResponse("/cabinet/profile", 303)
 
 @app.get("/bugreport", response_class=HTMLResponse)
 async def bugreport(r: Request, setlang: str = None):
