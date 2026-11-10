@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 app = FastAPI()
 
-APP_VERSION = "0.16"
+APP_VERSION = "0.17"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -62,9 +62,7 @@ CSP = (
     "img-src 'self' data: https: blob:; "
     "connect-src 'self' https: wss:; "
     "frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; "
-    "frame-ancestors 'self'; "
-    "base-uri 'self'; "
-    "form-action 'self';"
+    "frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
 )
 
 @app.middleware("http")
@@ -97,24 +95,17 @@ async def generic_handler(request: Request, exc: Exception):
     return HTMLResponse(f"<h1 style='color:red'>{msg}</h1><a href='/'>OK</a>", status_code=500)
 
 async def verify_recaptcha(token: str, ip: str = "") -> bool:
-    if not token:
-        return False
+    if not token: return False
     try:
         async with httpx.AsyncClient() as client:
             data = {"secret": RECAPTCHA_SECRET_KEY, "response": token}
-            if ip:
-                data["remoteip"] = ip
+            if ip: data["remoteip"] = ip
             r = await client.post(RECAPTCHA_VERIFY_URL, data=data, timeout=5.0)
-            result = r.json()
-            return bool(result.get("success"))
-    except Exception:
-        return False
+            return bool(r.json().get("success"))
+    except Exception: return False
 
 def esc(val): return html.escape(str(val)) if val is not None else ""
-
-def strip_html(s):
-    if not s: return ""
-    return re.sub(r'<[^>]+>', '', str(s))
+def strip_html(s): return re.sub(r'<[^>]+>', '', str(s)) if s else ""
 
 def sanitize_url(u):
     if not u: return ""
@@ -136,16 +127,13 @@ def valid_b64(s):
 
 def clean_content(s):
     if not s: return ""
-    s = str(s)
-    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', s)
+    s = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', str(s))
     return s[:POST_MAX_LEN]
 
 def _uptime_str(lang="ru"):
     delta = datetime.now(timezone.utc) - SERVER_START_DT
     sec = int(delta.total_seconds())
-    d, rem = divmod(sec, 86400)
-    h, rem = divmod(rem, 3600)
-    m, s = divmod(rem, 60)
+    d, rem = divmod(sec, 86400); h, rem = divmod(rem, 3600); m, s = divmod(rem, 60)
     parts = []
     if d: parts.append(f"{d}д" if lang == "ru" else f"{d}d")
     parts.append(f"{h:02d}:{m:02d}:{s:02d}")
@@ -165,20 +153,17 @@ def og_tags(title, description="", path="", image="", lang="ru"):
     if desc:
         parts.append(f'<meta property="og:description" content="{esc(desc)}">')
         parts.append(f'<meta name="description" content="{esc(desc)}">')
-    if safe_img:
-        parts.append(f'<meta property="og:image" content="{esc(safe_img)}">')
+    if safe_img: parts.append(f'<meta property="og:image" content="{esc(safe_img)}">')
     parts.append('<meta name="twitter:card" content="summary">')
     parts.append(f'<meta name="twitter:title" content="{esc(title)}">')
-    if desc:
-        parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
+    if desc: parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
     return "".join(parts)
 
 async def _fetch_user(nickname):
     for sel in ('username,description,sugges_rules,avatar_data,sugges_enabled,sugges_photo_enabled',
                 'username,description,sugges_rules,avatar_data,sugges_enabled',
                 'username,description,sugges_rules,avatar_data',
-                'username,description,sugges_rules',
-                'username,description'):
+                'username,description,sugges_rules', 'username,description'):
         try:
             res = await asyncio.to_thread(lambda: sb.table('users').select(sel).eq('nickname', nickname).execute())
             return res.data[0] if res.data else None
@@ -223,11 +208,8 @@ async def _stats_data():
     except Exception: pass
     return users_count, posts_count, sugg_count, last_update
 
-def user_sugges_enabled(u):
-    return bool(u) and u.get('sugges_enabled') is not False
-
-def user_sugges_photo_enabled(u):
-    return bool(u) and u.get('sugges_photo_enabled') is not False
+def user_sugges_enabled(u): return bool(u) and u.get('sugges_enabled') is not False
+def user_sugges_photo_enabled(u): return bool(u) and u.get('sugges_photo_enabled') is not False
 
 class ConnectionManager:
     def __init__(self): self.active_connections = []
@@ -248,12 +230,17 @@ async def ws_endpoint(websocket: WebSocket):
         while True: await websocket.receive_text()
     except WebSocketDisconnect: manager.disconnect(websocket)
 
+@app.get("/favicon.ico")
+async def favicon():
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#000"/><text x="32" y="44" font-size="32" font-weight="bold" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif">SL</text></svg>'''
+    return Response(content=svg, media_type="image/svg+xml", headers={"Cache-Control": "public, max-age=31536000"})
+
 @app.get("/manifest.json")
 async def manifest():
     return JSONResponse(
         {"name": "Solid Link", "short_name": "SolidLink", "start_url": "/",
          "display": "standalone", "background_color": "#f4f4f4", "theme_color": "#000000",
-         "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]},
+         "icons": [{"src": "/favicon.ico", "sizes": "192x192", "type": "image/svg+xml"}]},
         headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/sw.js")
@@ -276,10 +263,7 @@ async def get_og(url: str):
             if not t:
                 tm = re.search(r'<title>([^<]*)</title>', hc, re.I)
                 if tm: t = tm.group(1)
-            t = strip_html(t)[:200]
-            d = strip_html(gm("description"))[:300]
-            i = sanitize_url(gm("image"))
-            return {"title": t, "description": d, "image": i}
+            return {"title": strip_html(t)[:200], "description": strip_html(gm("description"))[:300], "image": sanitize_url(gm("image"))}
     except Exception: return {"title": "", "description": "", "image": ""}
 
 def hash_password(p): return bcrypt.hashpw(p.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -300,13 +284,18 @@ def set_csrf_cookie(res, t, r):
     secure = r.url.scheme == "https"
     res.set_cookie("csrf_token", t, httponly=True, samesite="lax", secure=secure, max_age=86400*365)
 
+def no_cache(res):
+    res.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    res.headers["Pragma"] = "no-cache"
+    return res
+
 @app.exception_handler(RequestValidationError)
 async def val_handler(request: Request, exc: RequestValidationError):
     lang = request.cookies.get("lang", "ru")
     em = "Заполните все обязательные поля!" if lang == "ru" else "Please fill all required fields!"
     token = get_csrf_token(request)
     res = HTMLResponse(content=auth_html(lang, em, token), status_code=422)
-    set_csrf_cookie(res, token, request)
+    set_csrf_cookie(res, token, request); no_cache(res)
     return res
 
 class RPCRequest(BaseModel):
@@ -446,12 +435,12 @@ def get_css():
     if _CSS_CACHE is None:
         _CSS_CACHE = """
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,400&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext');
+            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext');
             * { box-sizing: border-box; }
             body { font-family: 'Titillium Web', Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
             a { color: black; text-decoration: none; font-weight: bold; }
             a:hover { text-decoration: underline; }
-            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; }
+            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 30px; align-items: flex-start; max-width: 100%; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
             .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; max-width: 1200px; margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
             .footer a { color: #000; border-bottom: 2px solid #000; }
             .footer-links { font-size: 14px; color: #777; }
@@ -461,8 +450,8 @@ def get_css():
             .footer-badge { margin-top: 10px; display: flex; justify-content: center; }
             .footer-badge a { border: none; }
             .footer-badge img { display: block; border: 0; }
-            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
-            .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
+            .auth-wrapper { display: flex; gap: 15px; flex-direction: column; width: 360px; max-width: 100%; }
+            .auth-wrapper-inner { display: flex; gap: 15px; align-items: flex-end; width: 100%;}
             .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
             .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
             .input-group { position: relative; display: flex; align-items: center; width: 100%; }
@@ -474,8 +463,10 @@ def get_css():
             button:hover, .btn:hover { background-color: #8c8c8c; }
             button:disabled { opacity: 0.6; cursor: wait; }
             .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
-            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
-            .captcha-wrap { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 78px; }
+            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 5px; white-space: nowrap; }
+            .captcha-wrap { background-color: #ffffff; padding: 10px 5px; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 78px; border: 1px solid #444; }
+            .privacy-check { background-color: #8c8c8c; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 15px; font-weight: bold; text-align: center; color: #000; }
+            .privacy-check input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; }
             .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
             .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
             .sidebar { background: black; padding: 10px; width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -489,8 +480,6 @@ def get_css():
             .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; position: relative; }
             .sugges-btn:hover { background: #8e44ad; }
             .badge { background: #ff4d4d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; font-weight: bold; }
-            .stats-sidebar-btn { background: #34495e; color: white; margin-top: 5px; }
-            .stats-sidebar-btn:hover { background: #2c3e50; }
             .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
             .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
             .create-post-box textarea { height: 120px; font-size: 16px; padding: 10px; border-radius: 3px; }
@@ -532,7 +521,7 @@ def get_css():
             .status-В-работе, .status-In-Progress { background: #f1c40f; }
             .status-Исправлено, .status-Fixed { background: #2ecc71; }
             .status-Отклонено, .status-Rejected { background: #e74c3c; }
-            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 5px; }
             .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'Titillium Web', Arial, sans-serif;}
             .lang-btn:hover { background: #a9a9a9; color: black; }
             .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
@@ -563,9 +552,13 @@ def get_css():
             .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
             .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
             .contacts-box a { color: #4da6ff; }
+            @media (min-width: 769px) and (max-width: 1100px) {
+                .sidebar { width: 300px; }
+                .auth-wrapper { width: 340px; }
+            }
             @media (max-width: 768px) {
                 body { padding: 8px; }
-                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
+                .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; align-items: stretch; }
                 .auth-wrapper { width: 100%; }
                 .auth-wrapper-inner { flex-direction: column; gap: 10px; width: 100%; align-items: stretch;}
                 .label-text { font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
@@ -576,13 +569,11 @@ def get_css():
                 .error-msg { text-align: center; }
                 .login-lang-wrapper { justify-content: center; }
                 .create-post-box { padding: 10px; }
-                .post-item { padding: 0; }
                 .post-content { padding: 10px 10px 0; font-size: 16px; }
                 .post-footer { padding: 10px; flex-direction: column; align-items: flex-start; gap: 5px; }
                 .post-date { margin-left: 0; }
                 input[type="text"], input[type="password"], textarea, select { font-size: 16px; padding: 12px; }
                 button, .btn { font-size: 16px; padding: 14px; }
-                .post-content { font-size: 16px; }
                 .sidebar h2 { font-size: 20px; }
                 .avatar { width: 100px; height: 100px; }
                 .post-image { max-height: 400px; }
@@ -593,7 +584,13 @@ def get_css():
                 .stats-value { font-size: 18px;}
                 .footer-badge img { width: 160px; height: 36px; }
             }
+            @media (max-width: 380px) {
+                .captcha-wrap { transform: scale(0.88); transform-origin: center; }
+            }
         </style>
+        <link rel="icon" type="image/svg+xml" href="/favicon.ico">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         """
     return _CSS_CACHE
 
@@ -704,7 +701,7 @@ def get_js(lang, token, current_user=""):
             ws.onmessage = (e) => { const d = JSON.parse(e.data); if (d.type === 'delete_record') { const p = document.getElementById('post-' + d.post_id); if (p) p.remove(); } else if (d.type === 'new_record') { showToast(L.tn); } };
             ws.onclose = () => setTimeout(connectWS, 3000);
         }
-        connectWS();
+        if (typeof ME !== 'undefined' && ME) connectWS();
         
         function copyLink(btn) {
             const user = btn.dataset.user || '';
@@ -713,8 +710,8 @@ def get_js(lang, token, current_user=""):
             const url = window.location.origin + '/' + encodeURIComponent(user) + '/' + encodeURIComponent(rid);
             navigator.clipboard.writeText(url).then(() => showToast(L.tl)).catch(() => showToast(L.tc));
         }
-        function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-        function showConfirm(msg, cb) { const m = document.getElementById('modal-overlay'); document.getElementById('modal-text').textContent = msg; m.classList.add('show'); const cBtn = document.getElementById('modal-confirm'); const xBtn = document.getElementById('modal-cancel'); const nC = cBtn.cloneNode(true); const nX = xBtn.cloneNode(true); cBtn.parentNode.replaceChild(nC, cBtn); xBtn.parentNode.replaceChild(nX, xBtn); nC.onclick = () => { m.classList.remove('show'); cb(true); }; nX.onclick = () => { m.classList.remove('show'); cb(false); }; }
+        function showToast(msg) { const t = document.getElementById('toast'); if(!t) return; t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+        function showConfirm(msg, cb) { const m = document.getElementById('modal-overlay'); if(!m) return; document.getElementById('modal-text').textContent = msg; m.classList.add('show'); const cBtn = document.getElementById('modal-confirm'); const xBtn = document.getElementById('modal-cancel'); const nC = cBtn.cloneNode(true); const nX = xBtn.cloneNode(true); cBtn.parentNode.replaceChild(nC, cBtn); xBtn.parentNode.replaceChild(nX, xBtn); nC.onclick = () => { m.classList.remove('show'); cb(true); }; nX.onclick = () => { m.classList.remove('show'); cb(false); }; }
         
         let pendingUrl = "";
         async function showLinkWarning(e, el) {
@@ -867,7 +864,7 @@ def auth_html(lang, error_msg="", token=""):
             <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
             <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
             <div class="captcha-wrap"><div class="g-recaptcha" data-sitekey="__RECAPTCHA_SITE_KEY__"></div></div>
-            <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
+            <label class="privacy-check"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
             <button type="submit">__REG_BTN__</button>
         </form></div></div>
         <div class="auth-wrapper"><div class="auth-wrapper-inner"><div class="form-box"><form action="/login" method="post">
@@ -1242,7 +1239,7 @@ async def index(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru
             if rdb.data:
                 resp = RedirectResponse("/cabinet", 303); set_csrf_cookie(resp, token, r); return resp
         except Exception: pass
-    res = HTMLResponse(auth_html(lang, "", token)); set_csrf_cookie(res, token, r); return res
+    res = HTMLResponse(auth_html(lang, "", token)); set_csrf_cookie(res, token, r); no_cache(res); return res
 
 @app.get("/stats", response_class=HTMLResponse)
 async def stats_page(r: Request, lang: str = Cookie("ru")):
@@ -1262,13 +1259,15 @@ async def privacy(r: Request, lang: str = Cookie("ru")):
     res = HTMLResponse(privacy_html(lang, token)); set_csrf_cookie(res, token, r); return res
 
 @app.post("/register", response_class=HTMLResponse)
-async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru"), g_recaptcha_response: str = Form(None)):
+async def register(r: Request, res: Response, username: str = Form(...), nickname: str = Form(...), password: str = Form(...), re_pass: str = Form(...), privacy: str = Form(None), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+    form = await r.form()
+    g_recaptcha_response = form.get("g-recaptcha-response", "")
     token = get_csrf_token(r)
     if not check_csrf(r, csrf_token):
-        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
+        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); no_cache(resp); return resp
     if not privacy: return auth_html(lang, t('alert_privacy', lang), token)
     ip = r.client.host if r.client else ""
-    if not await verify_recaptcha(g_recaptcha_response or "", ip):
+    if not await verify_recaptcha(g_recaptcha_response, ip):
         return auth_html(lang, t('captcha_fail', lang), token)
     username = (username or "").strip()[:60]
     nickname = (nickname or "").strip()
@@ -1291,12 +1290,14 @@ async def register(r: Request, res: Response, username: str = Form(...), nicknam
     set_csrf_cookie(resp, token, r); return resp
 
 @app.post("/login", response_class=HTMLResponse)
-async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), csrf_token: str = Form(None), lang: str = Cookie("ru"), g_recaptcha_response: str = Form(None)):
+async def login(r: Request, res: Response, nickname: str = Form(...), password: str = Form(...), csrf_token: str = Form(None), lang: str = Cookie("ru")):
+    form = await r.form()
+    g_recaptcha_response = form.get("g-recaptcha-response", "")
     token = get_csrf_token(r)
     ip = r.client.host if r.client else "0.0.0.0"
     if not check_csrf(r, csrf_token):
-        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); return resp
-    if not await verify_recaptcha(g_recaptcha_response or "", ip):
+        resp = HTMLResponse(auth_html(lang, "CSRF Error", token)); set_csrf_cookie(resp, token, r); no_cache(resp); return resp
+    if not await verify_recaptcha(g_recaptcha_response, ip):
         return auth_html(lang, t('captcha_fail', lang), token)
     try:
         x = await asyncio.to_thread(lambda: sb.table('users').select('password').eq('nickname', nickname).execute())
@@ -1323,7 +1324,7 @@ async def cabinet(r: Request, nickname: str = Cookie(None), lang: str = Cookie("
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname, sc))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r); no_cache(res); return res
 
 @app.get("/cabinet/suggestions", response_class=HTMLResponse)
 async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru")):
@@ -1331,7 +1332,7 @@ async def cabinet_suggestions(r: Request, nickname: str = Cookie(None), lang: st
     s_data = await _fetch_suggestions(nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(suggestions_page_html(nickname, s_data, lang, token))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r); no_cache(res); return res
 
 @app.get("/{nickname}/sugges", response_class=HTMLResponse)
 async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
@@ -1343,7 +1344,7 @@ async def sugges_form(nickname: str, r: Request, lang: str = Cookie("ru")):
     enabled = user_sugges_enabled(user_data)
     photo_enabled = user_sugges_photo_enabled(user_data)
     res = HTMLResponse(sugges_form_html(nickname, lang, token, viewer=viewer, rules=rules, enabled=enabled, photo_enabled=photo_enabled))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r); no_cache(res); return res
 
 @app.post("/rpc")
 async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)):
@@ -1429,7 +1430,7 @@ async def edit(r: Request, nickname: str = Cookie(None), lang: str = Cookie("ru"
     if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
     res = HTMLResponse(edit_html(nickname, user_data, lang, token))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r); no_cache(res); return res
 
 @app.post("/cabinet/edit", response_class=HTMLResponse)
 async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), sugges_enabled: str = Form(None), sugges_photo_enabled: str = Form(None), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
@@ -1462,7 +1463,7 @@ async def bugreport(r: Request, nickname: str = Cookie(None), lang: str = Cookie
         except Exception: pass
     token = get_csrf_token(r)
     res = HTMLResponse(bugreport_html(u, rp, lang, token))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r); no_cache(res); return res
 
 @app.post("/bugreport", response_class=HTMLResponse)
 async def bugreport_submit(r: Request, res: Response, name: str = Form(...), content: str = Form(...), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
@@ -1502,7 +1503,7 @@ async def public_profile(nickname: str, r: Request, lang: str = Cookie("ru")):
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
     res = HTMLResponse(public_html(nickname, user_data, po, lang, token, viewer))
-    set_csrf_cookie(res, token, r); return res
+    set_csrf_cookie(res, token, r); no_cache(res); return res
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
