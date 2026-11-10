@@ -8,10 +8,12 @@ from datetime import datetime, timezone
 
 app = FastAPI()
 
-APP_VERSION = "0.12"
+APP_VERSION = "0.13"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
+SITE_URL = "https://solid.fastapicloud.dev"
+BADGE_URL = "https://destroy.spritefusion.com/?from=badge&url=https%3A%2F%2Fsolid.fastapicloud.dev"
 
 S_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 S_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
@@ -21,7 +23,6 @@ deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
 POST_MAX_LEN = 5000
 
-# --- RATE LIMITING ---
 _RATE_BUCKETS = {}
 _LOGIN_FAILS = {}
 
@@ -76,6 +77,10 @@ async def generic_handler(request: Request, exc: Exception):
 # --- UTILS ---
 def esc(val): return html.escape(str(val)) if val is not None else ""
 
+def strip_html(s):
+    if not s: return ""
+    return re.sub(r'<[^>]+>', '', str(s))
+
 def linkify(text):
     if not text: return ""
     s = html.escape(text)
@@ -97,6 +102,28 @@ def _uptime_str(lang="ru"):
     if d: parts.append(f"{d}д" if lang == "ru" else f"{d}d")
     parts.append(f"{h:02d}:{m:02d}:{s:02d}")
     return " ".join(parts)
+
+# --- OPENGRAPH TAGS ---
+def og_tags(title, description="", path="", image="", lang="ru"):
+    full_url = SITE_URL + path if path else SITE_URL
+    desc = strip_html(description)[:250] if description else ""
+    parts = [
+        f'<meta property="og:title" content="{esc(title)}">',
+        '<meta property="og:type" content="website">',
+        '<meta property="og:site_name" content="Solid Link">',
+        f'<meta property="og:url" content="{esc(full_url)}">',
+        f'<meta property="og:locale" content="{"ru_RU" if lang == "ru" else "en_US"}">',
+    ]
+    if desc:
+        parts.append(f'<meta property="og:description" content="{esc(desc)}">')
+        parts.append(f'<meta name="description" content="{esc(desc)}">')
+    if image and image.startswith("data:image/"):
+        parts.append(f'<meta property="og:image" content="{esc(image)}">')
+    parts.append('<meta name="twitter:card" content="summary">')
+    parts.append(f'<meta name="twitter:title" content="{esc(title)}">')
+    if desc:
+        parts.append(f'<meta name="twitter:description" content="{esc(desc)}">')
+    return "".join(parts)
 
 # --- DB FETCH ---
 async def _fetch_user(nickname):
@@ -127,8 +154,7 @@ async def _fetch_suggestion_count(nickname):
     try:
         res = await asyncio.to_thread(lambda: sb.table('suggestions').select('id', count='exact').eq('author_nickname', nickname).eq('status','pending').execute())
         return res.count if getattr(res, 'count', None) is not None else len(res.data or [])
-    except Exception:
-        return 0
+    except Exception: return 0
 
 async def _stats_data():
     users_count, posts_count, sugg_count, last_update = 0, 0, 0, None
@@ -176,7 +202,6 @@ async def ws_endpoint(websocket: WebSocket):
         while True: await websocket.receive_text()
     except WebSocketDisconnect: manager.disconnect(websocket)
 
-# --- PWA / API ---
 @app.get("/manifest.json")
 async def manifest():
     return JSONResponse(
@@ -375,6 +400,9 @@ def get_css():
             .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
             .footer-contacts { font-size: 13px; color: #666; font-weight: normal; }
             .footer-contacts a { color: #2a5db0; }
+            .footer-badge { margin-top: 10px; display: flex; justify-content: center; }
+            .footer-badge a { border: none; }
+            .footer-badge img { display: block; border: 0; }
             .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 340px; }
             .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
             .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
@@ -382,18 +410,7 @@ def get_css():
             .input-group { position: relative; display: flex; align-items: center; width: 100%; }
             input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; outline: none; }
             textarea { text-align: left; resize: vertical; }
-            .file-label {
-                display: block;
-                background: #a9a9a9;
-                padding: 12px;
-                text-align: center;
-                cursor: pointer;
-                font-weight: bold;
-                border-radius: 3px;
-                margin-top: 5px;
-                font-size: 16px;
-                color: black;
-            }
+            .file-label { display: block; background: #a9a9a9; padding: 12px; text-align: center; cursor: pointer; font-weight: bold; border-radius: 3px; margin-top: 5px; font-size: 16px; color: black; }
             .file-label:hover { background: #8c8c8c; }
             button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
             button:hover, .btn:hover { background-color: #8c8c8c; }
@@ -517,6 +534,7 @@ def get_css():
                 .modal-box { padding: 20px; }
                 .stats-card { font-size: 15px;}
                 .stats-value { font-size: 18px;}
+                .footer-badge img { width: 160px; height: 36px; }
             }
         </style>
         """
@@ -677,24 +695,33 @@ def get_footer(lang):
     contacts = " | ".join(f"<a href='mailto:{e}'>{e}</a>" for e in CONTACT_EMAILS)
     s = """
     <div class="footer">
-        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank">FastAPICloud</a></div>
+        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank" rel="noopener">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank" rel="noopener">FastAPICloud</a></div>
         <div class="footer-links">
             <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a> | <a href="/stats">__STATS_LINK__</a>
         </div>
         <div class="footer-contacts">__CONTACTS__</div>
+        <div class="footer-badge">
+            <a href="__BADGE_URL__" target="_blank" rel="noopener">
+                <img src="https://destroy.spritefusion.com/badge.svg" alt="Destroy this website" width="180" height="40" />
+            </a>
+        </div>
         <div style="font-size: 12px; color: #999; margin-top: 5px;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
     </div>
     """
-    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
+    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__BADGE_URL__",BADGE_URL),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
         s = s.replace(k, v)
     return s
 
 def auth_html(lang, error_msg="", token=""):
     eb = f"<div class='error-msg'>{error_msg}</div>" if error_msg else "<div class='error-msg'></div>"
+    og_title = "Solid Link — Вход / Регистрация" if lang == "ru" else "Solid Link — Login / Registration"
+    og_desc = "Solid Link — простая социальная платформа с записями и предложкой" if lang == "ru" else "Solid Link — simple social platform with records and suggestions"
+    og = og_tags(og_title, og_desc, "/", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__LOGIN__ / __REG__</title>__CSS____JS__</head><body>
+    <title>__LOGIN__ / __REG__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="container">
         <div class="auth-wrapper"><div class="label-text">__REG__</div><div class="form-box"><form action="/register" method="post">
             <input type="hidden" name="csrf_token" value="__TOKEN__">
@@ -717,7 +744,7 @@ def auth_html(lang, error_msg="", token=""):
         __ERROR__</div>
     </div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
+    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
         s = s.replace(k, v)
     return s
 
@@ -768,15 +795,19 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
     avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     badge = f'<span class="badge">{sugg_count}</span>' if sugg_count else ''
+    og_title = f"Личный кабинет — {nickname}" if lang == "ru" else f"Personal cabinet — {nickname}"
+    og_desc = desc or ("Solid Link — личный кабинет" if lang == "ru" else "Solid Link — personal cabinet")
+    og = og_tags(og_title, og_desc, "/cabinet", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__CABINET__</title>__CSS____JS__</head><body>
+    <title>__CABINET__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>__CABINET__</h2>
         __AVATAR__
         <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICKNAME__" target="_blank">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
+        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICKNAME__" target="_blank" rel="noopener">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
         <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
         <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
         <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE____BADGE__</a>
@@ -794,7 +825,7 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
         <div class="posts-area" id="my-records-container"><h2>__MY_POSTS__</h2>__RECORDS_HTML__</div>
     </div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -811,10 +842,13 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             img = esc(s.get('image_data', ''))
             img_html = f'<img class="post-image" src="{img}" alt="" onclick="viewImage(this.src)">' if img else ""
             rh += f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
+    og_title = t('suggestions_title', lang) + " — " + nickname
+    og = og_tags(og_title, "Solid Link — suggestions", "/cabinet/suggestions", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__SUGGESTIONS_TITLE__</title>__CSS____JS__</head><body>
+    <title>__SUGGESTIONS_TITLE__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
     <div class="main-content" style="max-width:800px;margin:0 auto">
         <div class="posts-area" style="min-height:300px;padding:20px;"><h2>__SUGGESTIONS_TITLE__</h2>__SUGGESTIONS_HTML__</div>
@@ -822,7 +856,7 @@ def suggestions_page_html(nickname, suggestions, lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -835,10 +869,13 @@ def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabl
         photo_block = f"<label class='file-label' for='sugg-file-input'>{t('attach_photo', lang)}</label><input type='file' id='sugg-file-input' accept='image/*' onchange='handleSuggImage(this)' style='display:none;'><img id='sugg-img-preview' class='img-preview' style='display:none;'>" if photo_enabled else ""
         form_block = f"<form data-nickname='{esc(nickname)}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:10px'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60' style='background:#a9a9a9;padding:12px;font-size:16px;'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='background:#a9a9a9;height:150px;padding:12px;font-size:16px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' style='background:#2ecc71;color:white;font-size:18px;'>{t('sugges_send',lang)}</button></form>"
     rules_block = f"<div class='rules-box'><b>{t('rules_title',lang)}</b><div class='rules-content'>{esc(rules)}</div></div>" if rules else ""
+    og_title = f"Предложить пост для {nickname}" if lang == "ru" else f"Suggest a post for {nickname}"
+    og = og_tags(og_title, "Solid Link — suggestions", f"/{nickname}/sugges", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__TITLE__ __NICKNAME__</title>__CSS____JS__</head><body>
+    <title>__TITLE__ __NICKNAME__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
         <div class="posts-area" style="padding:20px;">
             <h2>__TITLE__ __NICKNAME__</h2>
@@ -848,7 +885,7 @@ def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabl
         </div>
     </div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__TITLE__",t('sugges_title',lang)),("__NICKNAME__",esc(nickname)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__RULES_BLOCK__",rules_block),("__MSG__",msg_html),("__FORM_BLOCK__",form_block),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__TITLE__",t('sugges_title',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__RULES_BLOCK__",rules_block),("__MSG__",msg_html),("__FORM_BLOCK__",form_block),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -860,10 +897,13 @@ def edit_html(nickname, user, lang, token):
     user_username = esc(user.get('username'))
     sugges_checked = "checked" if user_sugges_enabled(user) else ""
     photo_checked = "checked" if user_sugges_photo_enabled(user) else ""
+    og_title = "Редактировать профиль — Solid Link" if lang == "ru" else "Edit Profile — Solid Link"
+    og = og_tags(og_title, desc or "", "/cabinet/edit", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__EDIT_PROFILE__</title>__CSS____JS__</head><body>
+    <title>__EDIT_PROFILE__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
         <h2 style="color:#fff;text-align:center">__EDIT_PROFILE__</h2>
         <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
@@ -888,7 +928,7 @@ def edit_html(nickname, user, lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -901,10 +941,14 @@ def public_html(nickname, user, records, lang, token, viewer):
     avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
     db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
     sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    og_title = f"{nickname} — Solid Link"
+    og_desc = desc or (f"Профиль {nickname}" if lang == "ru" else f"Profile {nickname}")
+    og = og_tags(og_title, og_desc, f"/{nickname}", image=avatar, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PROFILE__ __NICKNAME__</title>__CSS____JS__</head><body>
+    <title>__PROFILE__ __NICKNAME__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>__PROFILE__</h2>
         __AVATAR__
@@ -916,7 +960,7 @@ def public_html(nickname, user, records, lang, token, viewer):
         <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area" style="min-height:500px"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__NICKNAME__",esc(nickname)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -925,10 +969,17 @@ def record_page_html(nickname, user, record, lang, token, viewer):
     avatar = esc(user.get('avatar_data', ''))
     avatar_html = f'<img class="avatar" src="{avatar}" alt="avatar" onclick="viewImage(this.src)">' if avatar else ""
     sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{nickname}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    raw_content = record.get('content', '') or ''
+    snippet = raw_content[:150] + ('...' if len(raw_content) > 150 else '')
+    og_title = f"Запись от {nickname} — Solid Link" if lang == "ru" else f"Record by {nickname} — Solid Link"
+    og_desc = snippet or ("Solid Link" if lang == "ru" else "Solid Link")
+    img_data = esc(record.get('image_data', ''))
+    og = og_tags(og_title, og_desc, f"/{nickname}/{record.get('id')}", image=img_data, lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__RECORD_PAGE__</title>__CSS____JS__</head><body>
+    <title>__RECORD_PAGE__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar">
         <h2>__PROFILE__</h2>
         __AVATAR__
@@ -938,7 +989,7 @@ def record_page_html(nickname, user, record, lang, token, viewer):
         <a href="/__NICKNAME__" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>__RECORDS_HTML__</div></div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -946,10 +997,13 @@ def bugreport_html(username, reports, lang, token):
     rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else ""
     for x in reports:
         rh += f"<div class='post-item' style='border-left-color:transparent'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;'><b>{t('bugreport_title',lang)}</b><span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span></div><div class='post-content' style='text-align:left;'>{esc(x.get('content'))}</div><div class='post-date'>{format_date(esc(x.get('created_at')))}</div></div>"
+    og_title = "Баг-репорт — Solid Link" if lang == "ru" else "Bug Report — Solid Link"
+    og = og_tags(og_title, "Solid Link", "/bugreport", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__BUGREPORT_TITLE__</title>__CSS____JS__</head><body>
+    <title>__BUGREPORT_TITLE__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
     <div class="main-content" style="max-width:800px;margin:0 auto">
         <div class="create-post-box"><h2 style="color:#fff;text-align:center;margin:10px 0">__BUGREPORT_TITLE__</h2>
@@ -965,15 +1019,19 @@ def bugreport_html(username, reports, lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
 def privacy_html(lang, token):
+    og_title = "Политика конфиденциальности — Solid Link" if lang == "ru" else "Privacy Policy — Solid Link"
+    og_desc = "Политика конфиденциальности Solid Link" if lang == "ru" else "Solid Link Privacy Policy"
+    og = og_tags(og_title, og_desc, "/privacy", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PRIVACY_TITLE__</title>__CSS__</head><body>
+    <title>__PRIVACY_TITLE__ — Solid Link</title>__OG__
+    __CSS__</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area" style="padding:20px">
         <h2 style="color:#fff;text-align:center;margin-bottom:20px">__PRIVACY_TITLE__</h2>
         <div class="privacy-content">__PRIVACY_TEXT__</div>
@@ -981,7 +1039,7 @@ def privacy_html(lang, token):
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>__FOOTER__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__CSS__",get_css()),("__PRIVACY_TEXT__",t('privacy_text',lang)),("__BACK_HOME__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang))]:
+    for k, v in [("__LANG__",lang),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__OG__",og),("__CSS__",get_css()),("__PRIVACY_TEXT__",t('privacy_text',lang)),("__BACK_HOME__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang))]:
         s = s.replace(k, v)
     return s
 
@@ -990,10 +1048,14 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
     started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
     last_upd = format_date(last_update_iso) if last_update_iso else "—"
     contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}'>{e}</a></div>" for e in CONTACT_EMAILS)
+    og_title = "Статистика — Solid Link" if lang == "ru" else "Stats — Solid Link"
+    og_desc = f"Пользователей: {users_count}, записей: {posts_count}" if lang == "ru" else f"Users: {users_count}, records: {posts_count}"
+    og = og_tags(og_title, og_desc, "/stats", lang=lang)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__STATS_TITLE__</title>__CSS____JS__</head><body>
+    <title>__STATS_TITLE__ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px">
         <div class="posts-area" style="padding:20px;min-height:400px;">
             <h2>__STATS_TITLE__</h2>
@@ -1013,7 +1075,7 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>__FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
         s = s.replace(k, v)
     return s
 
