@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 from contextvars import ContextVar
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.18"
+APP_VERSION = "0.19"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -277,12 +277,10 @@ async def sw():
     js = """
     const CACHE_NAME = 'solid-link-v2';
     const STATIC_ASSETS = ['/manifest.json'];
-
     self.addEventListener('install', (e) => {
         self.skipWaiting();
         e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {})));
     });
-
     self.addEventListener('activate', (e) => {
         e.waitUntil(
             caches.keys()
@@ -290,9 +288,6 @@ async def sw():
                 .then(() => self.clients.claim())
         );
     });
-
-    // IMPORTANT: never cache HTML navigations — otherwise users see stale login
-    // pages when returning to "/" from /stats etc. Only cache static assets.
     self.addEventListener('fetch', (e) => {
         if (e.request.method !== 'GET') return;
         const url = new URL(e.request.url);
@@ -365,6 +360,221 @@ class RPCRequest(BaseModel):
     method: str
     params: dict = {}
 
+PRIVACY_RU = """1. Общие положения<br>
+Настоящая Политика конфиденциальности описывает, какие данные собирает Solid Link, как они используются, хранятся и защищаются. Используя Сайт, вы соглашаетесь с данной Политикой. Если вы не согласны с её условиями — пожалуйста, не используйте Сайт.<br><br>
+
+2. Какие данные мы собираем<br>
+• <b>Имя (юзернейм)</b> — отображаемое имя, указанное вами при регистрации.<br>
+• <b>Никнейм</b> — уникальный идентификатор, используемый для входа.<br>
+• <b>Пароль</b> — хранится исключительно в виде bcrypt-хеша; оригинал не сохраняется и не может быть восстановлен.<br>
+• <b>Описание профиля и аватар</b> — по вашему желанию.<br>
+• <b>Записи и предложки</b> — контент, который вы публикуете.<br>
+• <b>Технические данные</b> — cookies для сессии, CSRF-токен, предпочитаемый язык.<br><br>
+
+3. Как мы используем данные<br>
+• Аутентификация и поддержание сессии.<br>
+• Отображение профиля, записей и предложек.<br>
+• Борьба со злоупотреблениями (rate limiting, CSRF-защита).<br>
+• Мы не используем ваши данные для рекламы и не продаём их третьим лицам.<br><br>
+
+4. Хранение данных<br>
+Данные хранятся на серверах Supabase (PostgreSQL). Мы принимаем разумные меры для их защиты, однако ни один метод передачи через интернет не является абсолютно безопасным.<br><br>
+
+5. Cookies<br>
+Сайт использует следующие cookies:<br>
+• <code>nickname</code> — поддержание сессии пользователя.<br>
+• <code>csrf_token</code> — защита от CSRF-атак.<br>
+• <code>lang</code> — запоминание выбранного языка.<br>
+Вы можете удалить cookies в настройках браузера, но это разлогинит вас и сбросит настройки.<br><br>
+
+6. Ваш контент<br>
+Все записи, комментарии и предложки являются вашей интеллектуальной собственностью. Публикуя контент, вы подтверждаете, что имеете на него право. Мы не несём ответственности за контент пользователей.<br><br>
+
+7. Передача третьим лицам<br>
+Мы не передаём ваши персональные данные третьим лицам, за исключением случаев, предусмотренных законом, или когда это необходимо для работы сервиса (например, хостинг Supabase).<br><br>
+
+8. Безопасность<br>
+Пароли хешируются алгоритмом bcrypt. Используются CSRF-токены, rate limiting, CSP-заголовки, защищённые cookies (HttpOnly, SameSite=Lax, Secure на HTTPS).<br><br>
+
+9. Ваши права<br>
+• Изменить имя, описание и аватар в личном кабинете.<br>
+• Удалить свои записи.<br>
+• Отключить предложку.<br>
+• Запросить удаление аккаунта через контакты администрации.<br><br>
+
+10. Дети<br>
+Сайт не предназначен для лиц младше 13 лет. Если вы младше — не регистрируйтесь.<br><br>
+
+11. Изменения политики<br>
+Мы можем обновлять эту Политику. Актуальная версия всегда доступна по адресу /privacy. Дата последнего обновления указана в подвале сайта.<br><br>
+
+12. Контакты<br>
+По вопросам конфиденциальности: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
+
+PRIVACY_EN = """1. General provisions<br>
+This Privacy Policy describes what data Solid Link collects, how it is used, stored and protected. By using the Site you agree to this Policy. If you disagree with its terms — please do not use the Site.<br><br>
+
+2. Data we collect<br>
+• <b>Name (username)</b> — the display name you provide during registration.<br>
+• <b>Nickname</b> — a unique identifier used for login.<br>
+• <b>Password</b> — stored exclusively as a bcrypt hash; the original is never stored and cannot be recovered.<br>
+• <b>Profile description and avatar</b> — at your discretion.<br>
+• <b>Records and suggestions</b> — content you publish.<br>
+• <b>Technical data</b> — session cookies, CSRF token, preferred language.<br><br>
+
+3. How we use data<br>
+• Authentication and session maintenance.<br>
+• Displaying profile, records and suggestions.<br>
+• Abuse prevention (rate limiting, CSRF protection).<br>
+• We do not use your data for advertising and do not sell it to third parties.<br><br>
+
+4. Data storage<br>
+Data is stored on Supabase (PostgreSQL) servers. We take reasonable measures to protect it, however no method of transmission over the internet is completely secure.<br><br>
+
+5. Cookies<br>
+The Site uses the following cookies:<br>
+• <code>nickname</code> — maintains your session.<br>
+• <code>csrf_token</code> — protects against CSRF attacks.<br>
+• <code>lang</code> — remembers your chosen language.<br>
+You can delete cookies in your browser settings, but this will log you out and reset preferences.<br><br>
+
+6. Your content<br>
+All records, comments and suggestions are your intellectual property. By publishing content, you confirm you have the right to it. We are not responsible for user content.<br><br>
+
+7. Third parties<br>
+We do not share your personal data with third parties, except as required by law, or when necessary for the service to function (e.g., Supabase hosting).<br><br>
+
+8. Security<br>
+Passwords are hashed with bcrypt. We use CSRF tokens, rate limiting, CSP headers, and secure cookies (HttpOnly, SameSite=Lax, Secure on HTTPS).<br><br>
+
+9. Your rights<br>
+• Edit your name, description and avatar in your cabinet.<br>
+• Delete your records.<br>
+• Disable suggestions.<br>
+• Request account deletion via administrator contacts.<br><br>
+
+10. Children<br>
+The Site is not intended for persons under 13 years of age. If you are younger — do not register.<br><br>
+
+11. Policy changes<br>
+We may update this Policy. The current version is always available at /privacy. The date of the last update is shown in the site footer.<br><br>
+
+12. Contacts<br>
+For privacy-related questions: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru"""
+
+FAQ_DATA = {
+    "ru": [
+        ("🔐", "Регистрация и вход", [
+            ("Как зарегистрироваться?", 'На главной странице заполните форму «Регистрация»: укажите юзернейм (ваше имя), никнейм (уникальный логин), пароль не короче 8 символов и его повтор. Поставьте обе галочки — «Я не робот» и согласие с политикой. Нажмите «Зарегистрироваться!».'),
+            ("Какой никнейм можно выбрать?", 'От 3 до 30 символов: латинские буквы a–z, цифры 0–9, знаки подчёркивания <code>_</code> и дефис <code>-</code>. Никнейм уникален — если он занят, выберите другой.'),
+            ("Забыли пароль — что делать?", 'Напишите администрации по адресам из подвала сайта: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> или <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Укажите ваш никнейм.'),
+            ("Как выйти из аккаунта?", 'В личном кабинете нажмите красную кнопку «Выйти» в левой панели.'),
+            ("Что за ошибка «Too Many Requests»?", 'Сработал rate limit: слишком много попыток за минуту. Подождите 60 секунд, для логина — до 5 минут.'),
+        ]),
+        ("📝", "Записи и посты", [
+            ("Как создать запись?", 'В личном кабинете введите текст в поле «Напишите что-нибудь...» и нажмите «Создать». Запись сразу появится в разделе «Мои записи» и на вашей публичной странице.'),
+            ("Какая максимальная длина записи?", 'До 5000 символов. Символы переноса строки сохраняются.'),
+            ("Как прикрепить фото?", 'В форме создания записи нажмите «Фото» и выберите изображение. Фото автоматически сожмётся и прикрепится к записи.'),
+            ("Как закрепить запись?", 'Наведите на запись и нажмите «Закрепить» в правом верхнем углу. Закреплённая запись всегда будет наверху. Можно закрепить только одну запись одновременно.'),
+            ("Как удалить запись?", 'Наведите на запись, нажмите «Удалить», подтвердите действие. Удаление необратимо.'),
+            ("Как поделиться ссылкой на запись?", 'Наведите на запись и нажмите «Ссылка» — ссылка скопируется в буфер обмена. Она ведёт на страницу этой конкретной записи.'),
+            ("Что такое автопревью ссылок?", 'Если в записи есть URL, при клике откроется диалог с превью: заголовок, описание и картинка с того сайта. Это защита от случайных переходов.'),
+        ]),
+        ("💡", "Предложка", [
+            ("Что такое предложка?", 'Это форма обратной связи для ваших читателей: они могут предложить пост, который вы одобрите или отклоните. Найти её можно по адресу /ваш_никнейм/sugges.'),
+            ("Как предложить пост?", 'Откройте страницу пользователя и нажмите «Предложить пост». Введите ваше имя и текст, при желании прикрепите фото, нажмите «Отправить».'),
+            ("Как включить или отключить предложку?", 'В /cabinet/edit есть переключатель «Разрешить предложку». Отключённая предложка скрывает кнопку у всех посетителей.'),
+            ("Как отключить фото в предложке?", 'Там же — переключатель «Разрешить фото в предложке». Если выключить, форма предложки будет без загрузки фото.'),
+            ("Как модерировать предложки?", 'В личном кабинете нажмите «Предложки». Каждую можно «Одобрить» (превратится в вашу запись с пометкой автора) или «Отклонить» (удалить).'),
+            ("Как задать правила для предложки?", 'В /cabinet/edit в поле «Правила предложки» (до 1000 символов). Они будут показаны всем, кто открывает форму.'),
+            ("Можно ли предложить пост самому себе?", 'Нет. Свои посты создавайте напрямую в личном кабинете.'),
+        ]),
+        ("⚙️", "Профиль и настройки", [
+            ("Как изменить имя или описание?", 'В /cabinet/edit укажите новое имя и описание (до 300 символов) и сохраните изменения.'),
+            ("Как сменить аватар?", 'На странице редактирования нажмите на аватар — откроется выбор файла. Фото сожмётся до 300×300 пикселей.'),
+            ("Как сменить язык?", 'Кнопки RU / EN в подвале любой страницы или в сайдбаре. Выбор запоминается в cookie на год.'),
+            ("Где посмотреть статистику сайта?", 'Ссылка «Статистика» в подвале: количество пользователей, записей, предложек, аптайм и контакты администрации.'),
+            ("Как удалить аккаунт?", 'Напишите администрации. Мы удалим аккаунт и все связанные записи в течение 7 дней.'),
+        ]),
+        ("🖼️", "Фото и изображения", [
+            ("Какие форматы фото поддерживаются?", 'Любые, которые умеет открывать браузер: JPEG, PNG, WebP, GIF. На сервер отправляется сжатый JPEG.'),
+            ("Почему фото сжимаются?", 'Чтобы сайт работал быстро и не перегружал хранилище. Сжатие происходит в браузере до отправки: до 1000px по ширине для постов и до 300px для аватара.'),
+            ("Максимальный размер изображения?", 'После сжатия — до ~800 КБ в base64. Если оригинал огромный, сжатие произойдёт с потерей качества.'),
+            ("Как посмотреть фото в полном размере?", 'Кликните по изображению — откроется просмотрщик. Закрыть можно клавишей Esc или кликом вне фото.'),
+        ]),
+        ("🔒", "Безопасность и приватность", [
+            ("Как хранятся пароли?", 'Только в виде bcrypt-хеша. Оригинал пароля не сохраняется и не может быть восстановлен.'),
+            ("Кто видит мои данные?", 'Публично видны: имя, никнейм, описание, аватар, записи. Пароль, CSRF-токен и служебные cookies — нет.'),
+            ("Что такое CSRF-токен?", 'Скрытый токен, который защищает формы от подделки запросов. Без него действие не выполнится.'),
+            ("Что за ошибка «CSRF Error»?", 'Cookie устарел или очистился. Обновите страницу — токен выдастся заново.'),
+            ("Как защищены сессии?", 'Cookies HttpOnly, SameSite=Lax, Secure на HTTPS. Плюс заголовки CSP, X-Frame-Options, HSTS.'),
+            ("Что такое политика конфиденциальности?", 'Документ, описывающий какие данные мы собираем и как их используем. Полный текст — по ссылке в подвале или на /privacy.'),
+        ]),
+        ("🐞", "Проблемы и поддержка", [
+            ("Как сообщить о баге?", 'Откройте /bugreport, опишите проблему. Все ваши заявки видны там же со статусом: Принято, В работе, Исправлено, Отклонено.'),
+            ("Не работает вход — что проверить?", '1) Никнейм точно такой, как при регистрации. 2) Пароль не короче 8 символов. 3) Галочка «Я не робот» поставлена. 4) Нет блокировки по rate limit.'),
+            ("Почему не приходит письмо?", 'Письма мы не отправляем — вся связь через форму баг-репорта или контакты в подвале.'),
+            ("С кем связаться?", 'Email администрации: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. Отвечаем в течение 1–2 дней.'),
+            ("Что такое «аптайм» в статистике?", 'Время с момента запуска сервера. Если сервер перезапущен — счётчик начинается заново.'),
+        ]),
+    ],
+    "en": [
+        ("🔐", "Registration & Login", [
+            ("How do I register?", 'On the home page, fill in the "Registration" form: enter a username (your name), nickname (unique login), a password of at least 8 characters, and repeat it. Tick both boxes — "I am not a robot" and the privacy policy agreement. Click "Register!".'),
+            ("What nickname can I choose?", 'From 3 to 30 characters: latin letters a–z, digits 0–9, underscores <code>_</code> and hyphens <code>-</code>. Nickname is unique — pick another if taken.'),
+            ("I forgot my password — what now?", 'Email the administration at the addresses in the footer: <a href="mailto:sldshr.confirmation@gmail.com">sldshr.confirmation@gmail.com</a> or <a href="mailto:sldshr.confirm@yandex.ru">sldshr.confirm@yandex.ru</a>. Include your nickname.'),
+            ("How do I log out?", 'In your personal cabinet click the red "Logout" button in the left panel.'),
+            ("What is the "Too Many Requests" error?", 'Rate limit triggered: too many attempts in a minute. Wait 60 seconds, for login — up to 5 minutes.'),
+        ]),
+        ("📝", "Records & Posts", [
+            ("How do I create a record?", 'In your cabinet type text into the "Write something..." field and click "Create". The record appears immediately in "My records" and on your public page.'),
+            ("What is the max record length?", 'Up to 5000 characters. Line breaks are preserved.'),
+            ("How do I attach a photo?", 'In the create-record form click "Photo" and pick an image. The photo is auto-compressed and attached.'),
+            ("How do I pin a record?", 'Hover over the record and click "Pin" in the top-right corner. The pinned record stays at the top. Only one record can be pinned at a time.'),
+            ("How do I delete a record?", 'Hover over the record, click "Delete", confirm. Deletion is irreversible.'),
+            ("How do I share a link to a record?", 'Hover over the record and click "Link" — the URL is copied to clipboard. It links to that exact record page.'),
+            ("What is auto link preview?", 'If a record contains a URL, clicking it opens a dialog with a preview: title, description and image from that site. This prevents accidental clicks.'),
+        ]),
+        ("💡", "Suggestions", [
+            ("What is the suggestion box?", 'It is a feedback form for your readers: they can suggest a post that you approve or reject. Available at /your_nickname/sugges.'),
+            ("How do I suggest a post?", 'Open a user page and click "Suggest a post". Enter your name and text, optionally attach a photo, click "Send".'),
+            ("How do I enable or disable suggestions?", 'In /cabinet/edit there is a toggle "Enable suggestions". Disabled suggestions hide the button from all visitors.'),
+            ("How do I disable photos in suggestions?", 'Same place — "Allow photos in suggestions" toggle. If off, the suggestion form has no photo upload.'),
+            ("How do I moderate suggestions?", 'In your cabinet click "Suggestions". Each can be "Approve" (becomes your record with the author noted) or "Reject" (deleted).'),
+            ("How do I set rules for suggestions?", 'In /cabinet/edit under "Suggestion rules" (up to 1000 chars). They are shown to everyone who opens the form.'),
+            ("Can I suggest a post to myself?", 'No. Create your posts directly in your cabinet.'),
+        ]),
+        ("⚙️", "Profile & Settings", [
+            ("How do I change name or description?", 'In /cabinet/edit enter a new name and description (up to 300 chars) and save.'),
+            ("How do I change my avatar?", 'On the edit page click the avatar — a file picker opens. The photo is compressed to 300×300 pixels.'),
+            ("How do I change the language?", 'RU / EN buttons in the footer of any page or in the sidebar. The choice is stored in a cookie for a year.'),
+            ("Where can I see site statistics?", 'The "Stats" link in the footer: users, records, suggestions, uptime and admin contacts.'),
+            ("How do I delete my account?", 'Email the administration. We will delete the account and all related records within 7 days.'),
+        ]),
+        ("🖼️", "Photos & Images", [
+            ("Which photo formats are supported?", 'Any your browser can open: JPEG, PNG, WebP, GIF. A compressed JPEG is uploaded.'),
+            ("Why are photos compressed?", 'To keep the site fast and storage light. Compression happens in the browser before upload: up to 1000px wide for posts, 300px for avatars.'),
+            ("What is the max image size?", 'After compression — up to ~800 KB in base64. Very large originals will be compressed with quality loss.'),
+            ("How do I view a photo full-size?", 'Click the image — a viewer opens. Close with Esc or click outside the photo.'),
+        ]),
+        ("🔒", "Security & Privacy", [
+            ("How are passwords stored?", 'Only as a bcrypt hash. The original is never stored and cannot be recovered.'),
+            ("Who sees my data?", 'Publicly visible: name, nickname, description, avatar, records. Password, CSRF token and service cookies — no.'),
+            ("What is a CSRF token?", 'A hidden token protecting forms from request forgery. Without it, the action will not run.'),
+            ("What is the "CSRF Error"?", 'The cookie expired or was cleared. Refresh the page — a new token is issued.'),
+            ("How are sessions protected?", 'HttpOnly cookies, SameSite=Lax, Secure on HTTPS. Plus CSP, X-Frame-Options, HSTS headers.'),
+            ("What is the privacy policy?", 'A document describing what data we collect and how we use it. Full text — at /privacy.'),
+        ]),
+        ("🐞", "Problems & Support", [
+            ("How do I report a bug?", 'Open /bugreport and describe the issue. Your reports are listed there with status: Accepted, In Progress, Fixed, Rejected.'),
+            ("Login doesn't work — what to check?", '1) Nickname exactly as at registration. 2) Password at least 8 chars. 3) "I am not a robot" ticked. 4) No rate limit block.'),
+            ("Why don't I receive emails?", 'We do not send emails — all contact via the bug-report form or footer addresses.'),
+            ("Who do I contact?", 'Admin email: sldshr.confirmation@gmail.com, sldshr.confirm@yandex.ru. We reply within 1–2 days.'),
+            ("What is "uptime" in stats?", 'Time since server start. If the server restarts, the counter starts over.'),
+        ]),
+    ]
+}
+
 LOCALES = {
     "ru": {
         "reg": "Регистрация", "login": "Вход", "username": "юзернейм", "nickname": "никнейм",
@@ -384,7 +594,7 @@ LOCALES = {
         "username_label": "Имя", "nickname_label": "Никнейм", "bugreport_title": "Баг-репорт",
         "bugreport_name": "Ваше имя", "bugreport_desc": "Описание проблемы", "bugreport_send": "Отправить",
         "bugreport_my": "Мои заявки", "privacy_title": "Политика конфиденциальности",
-        "privacy_text": "1. Сбор информации. Мы собираем только ваш юзернейм, никнейм и хеш пароля.<br><br>2. Использование данных. Данные используются для аутентификации.<br><br>3. Контент. Ваши записи хранятся на серверах Supabase.<br><br>4. Cookies. Сайт использует cookies для сессии и языка.<br><br>5. Ваши права. Вы можете изменить профиль или удалить записи.",
+        "privacy_text": PRIVACY_RU,
         "privacy_agree": "Я согласен с", "privacy_link": "Политикой конфиденциальности",
         "alert_privacy": "Примите политику!", "cabinet": "ЛИЧНЫЙ КАБИНЕТ",
         "record_page": "Запись", "copy_link": "Ссылка",
@@ -412,7 +622,7 @@ LOCALES = {
         "toast_copy_fail": "Не удалось скопировать", "toast_approved": "Одобрено!",
         "toast_rejected": "Отклонено!", "toast_approved_removed": "Одобрено и удалено!",
         "toast_rejected_removed": "Отклонено и удалено!", "toast_failed": "Ошибка:", "toast_csrf": "Ошибка CSRF",
-        "stats_link": "Статистика",
+        "stats_link": "Статистика", "faq_link": "FAQ",
         "stats_title": "СТАТИСТИКА", "stats_users": "Пользователей", "stats_posts": "Записей",
         "stats_sugges": "Предложек", "stats_started": "Сервер запущен", "stats_last_update": "Последнее обновление",
         "stats_uptime": "Аптайм", "stats_contacts": "Связь с администрацией",
@@ -420,7 +630,9 @@ LOCALES = {
         "post_too_long": "Пост слишком длинный (макс 5000 символов)",
         "err_nick_format": "Никнейм: 3-30 символов, только a-z, 0-9, _, -",
         "err_user_format": "Имя: 1-60 символов, только буквы/цифры/пробел/_-",
-        "err_pass_short": "Пароль должен быть не короче 8 символов"
+        "err_pass_short": "Пароль должен быть не короче 8 символов",
+        "faq_title": "ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ",
+        "faq_intro": "Здесь собраны ответы на частые вопросы о Solid Link. Если не нашли ответ — напишите администрации по контактам ниже."
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -440,7 +652,7 @@ LOCALES = {
         "username_label": "Name", "nickname_label": "Nickname", "bugreport_title": "Bug Report",
         "bugreport_name": "Your Name", "bugreport_desc": "Issue Description", "bugreport_send": "Send",
         "bugreport_my": "My Reports", "privacy_title": "Privacy Policy",
-        "privacy_text": "1. Data Collection. We collect only your username, nickname, and hashed password.<br><br>2. Data Usage. Data is used for authentication.<br><br>3. Content. Your records are stored on Supabase.<br><br>4. Cookies. The site uses cookies for session and language.<br><br>5. Your Rights. You can edit your profile or delete records.",
+        "privacy_text": PRIVACY_EN,
         "privacy_agree": "I agree to the", "privacy_link": "Privacy Policy",
         "alert_privacy": "Accept the Privacy Policy!", "cabinet": "PERSONAL CABINET",
         "record_page": "Record", "copy_link": "Link",
@@ -468,7 +680,7 @@ LOCALES = {
         "toast_copy_fail": "Failed to copy", "toast_approved": "Approved!",
         "toast_rejected": "Rejected!", "toast_approved_removed": "Approved & removed!",
         "toast_rejected_removed": "Rejected & removed!", "toast_failed": "Error:", "toast_csrf": "CSRF error",
-        "stats_link": "Stats",
+        "stats_link": "Stats", "faq_link": "FAQ",
         "stats_title": "STATISTICS", "stats_users": "Users", "stats_posts": "Records",
         "stats_sugges": "Suggestions", "stats_started": "Server started", "stats_last_update": "Last update",
         "stats_uptime": "Uptime", "stats_contacts": "Contact administration",
@@ -476,7 +688,9 @@ LOCALES = {
         "post_too_long": "Post too long (max 5000 chars)",
         "err_nick_format": "Nickname: 3-30 chars, only a-z, 0-9, _, -",
         "err_user_format": "Name: 1-60 chars, letters/digits/space/_-",
-        "err_pass_short": "Password must be at least 8 chars"
+        "err_pass_short": "Password must be at least 8 chars",
+        "faq_title": "FREQUENTLY ASKED QUESTIONS",
+        "faq_intro": "Here are answers to frequently asked questions about Solid Link. If you couldn't find an answer — contact the administration below."
     }
 }
 
@@ -627,6 +841,7 @@ def get_css():
             .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
             .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
             .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
+            .privacy-content code { background: #eee; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 15px; }
             .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
             #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 5px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; max-width: 90%; }
             #toast.show { opacity: 1; }
@@ -652,6 +867,14 @@ def get_css():
             .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
             .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
             .contacts-box a { color: #4da6ff; }
+            .faq-intro { background: #222; padding: 20px; border-radius: 8px; margin-bottom: 25px; color: #ddd; font-size: 16px; line-height: 1.6; border: 1px solid #333; }
+            .faq-section { background: #1a1a1a; padding: 25px; border-radius: 8px; margin-bottom: 20px; border-left: 6px solid #4da6ff; }
+            .faq-section h3 { color: #fff; margin: 0 0 18px 0; font-size: 24px; border-bottom: 2px solid #333; padding-bottom: 12px; }
+            .faq-item { background: #2a2a2a; padding: 15px 18px; border-radius: 5px; margin-bottom: 10px; border-left: 3px solid #9b59b6; }
+            .faq-q { font-weight: bold; font-size: 17px; margin-bottom: 8px; color: #4da6ff; }
+            .faq-a { font-size: 15px; color: #ddd; line-height: 1.6; }
+            .faq-a a { color: #4da6ff; text-decoration: underline; }
+            .faq-a code { background: #444; padding: 2px 6px; border-radius: 3px; font-family: monospace; color: #ff9; font-size: 14px; }
             @media (max-width: 768px) {
                 .page-content { padding: 8px; }
                 .container { flex-direction: column; padding: 15px; gap: 20px; border-width: 5px; width: 100%; }
@@ -682,6 +905,10 @@ def get_css():
                 .stats-card { font-size: 15px;}
                 .stats-value { font-size: 18px;}
                 .footer-badge img { width: 160px; height: 36px; }
+                .faq-section { padding: 18px; }
+                .faq-section h3 { font-size: 20px; }
+                .faq-q { font-size: 15px; }
+                .faq-a { font-size: 14px; }
             }
         </style>
         """
@@ -890,7 +1117,7 @@ def get_footer(lang):
     <div class="footer">
         <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank" rel="noopener noreferrer">Solid Link</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank" rel="noopener noreferrer">FastAPICloud</a></div>
         <div class="footer-links">
-            <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a> | <a href="/stats">__STATS_LINK__</a>
+            <a href="/docs">__FAQ_LINK__</a> | <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a> | <a href="/stats">__STATS_LINK__</a>
         </div>
         <div class="footer-contacts">__CONTACTS__</div>
         <div class="footer-badge">
@@ -901,7 +1128,7 @@ def get_footer(lang):
         <div style="font-size: 12px; color: #999; margin-top: 5px;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
     </div>
     """
-    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__BADGE_URL__",badge_url),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
+    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__BADGE_URL__",badge_url),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
         s = s.replace(k, v)
     return s
 
@@ -1266,6 +1493,38 @@ def privacy_html(lang, token):
         s = s.replace(k, v)
     return s
 
+def faq_html(lang, token):
+    sections = FAQ_DATA.get(lang, FAQ_DATA["ru"])
+    body = ""
+    for icon, title, items in sections:
+        items_html = ""
+        for q, a in items:
+            items_html += f"<div class='faq-item'><div class='faq-q'>{q}</div><div class='faq-a'>{a}</div></div>"
+        body += f"<div class='faq-section'><h3>{icon} {title}</h3>{items_html}</div>"
+    og_title = "FAQ — Solid Link"
+    og_desc = "Часто задаваемые вопросы о Solid Link" if lang == "ru" else "Frequently asked questions about Solid Link"
+    og = og_tags(og_title, og_desc, "/docs", lang=lang)
+    s = """
+    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>FAQ — Solid Link</title>__OG__
+    __CSS____JS__</head><body>
+    <div class="page-content">
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:900px">
+        <div class="posts-area" style="padding:20px;min-height:400px;">
+            <h2>📖 __FAQ_TITLE__</h2>
+            <div class="faq-intro">__FAQ_INTRO__</div>
+            __BODY__
+            <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
+            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/docs" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/docs" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+        </div>
+    </div></div>
+    </div>__FOOTER____OVERLAY__</body></html>
+    """
+    for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__FAQ_TITLE__",t('faq_title',lang)),("__FAQ_INTRO__",t('faq_intro',lang)),("__BODY__",body),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+        s = s.replace(k, v)
+    return s
+
 def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_iso, viewer=""):
     uptime = _uptime_str(lang)
     started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
@@ -1321,8 +1580,6 @@ async def set_lang(lang: str, r: Request, next: str = "/"):
 async def index(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
-    # Trust cookie; /cabinet will verify against DB. Avoids getting "kicked out"
-    # on transient DB hiccups at "/", and lets the redirect work instantly.
     if r.cookies.get("nickname"):
         resp = RedirectResponse("/cabinet", 303)
         set_csrf_cookie(resp, token, r)
@@ -1351,6 +1608,15 @@ async def privacy(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     token = get_csrf_token(r)
     res = HTMLResponse(privacy_html(lang, token)); set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/docs", response_class=HTMLResponse)
+async def docs_page(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    token = get_csrf_token(r)
+    res = HTMLResponse(faq_html(lang, token))
+    set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
 
@@ -1410,11 +1676,9 @@ async def cabinet(r: Request, setlang: str = None):
     if not nickname: return RedirectResponse("/", 303)
     user_data, p_data, sc = await asyncio.gather(_fetch_user(nickname), _fetch_posts(nickname), _fetch_suggestion_count(nickname))
     if user_data is DB_UNAVAILABLE:
-        # Transient DB failure — keep the user logged in, show retry page.
         body = "<h2>Сервер временно недоступен. <a href='/cabinet'>Повторить</a></h2>" if lang == "ru" else "<h2>Server temporarily unavailable. <a href='/cabinet'>Retry</a></h2>"
         return HTMLResponse(body, status_code=503)
     if not user_data:
-        # User genuinely gone — clear cookie.
         resp = RedirectResponse("/", 303); resp.delete_cookie("nickname"); return resp
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
