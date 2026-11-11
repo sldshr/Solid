@@ -21,7 +21,7 @@ TRANSLATIONS = {
     "en": {
         "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login",
         "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish",
-        "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
+        "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload, or paste from clipboard",
         "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
         "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
@@ -34,12 +34,13 @@ TRANSLATIONS = {
         "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?",
         "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply",
         "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
-        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "profile_updated": "Profile updated successfully!"
+        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "profile_updated": "Profile updated successfully!",
+        "link_only": "Link Only (Hidden)"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
         "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать",
-        "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
+        "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки, или вставьте из буфера",
         "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
         "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
@@ -52,7 +53,8 @@ TRANSLATIONS = {
         "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?",
         "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить",
         "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
-        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "profile_updated": "Профиль успешно обновлен!"
+        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "profile_updated": "Профиль успешно обновлен!",
+        "link_only": "По ссылке (Скрыт)"
     }
 }
 
@@ -85,6 +87,7 @@ SVG_LANG = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke
 SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>"""
 SVG_CAMERA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>"""
 SVG_CHECK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
+SVG_LOCK = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>"""
 
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
@@ -150,11 +153,11 @@ input,textarea,.selectable{user-select:text;}
 body{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}
 a{color:var(--accent-color);text-decoration:none;}
 
-/* Сетка без ебучих фреймов */
+/* Сетка */
 .app-layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}
 .app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}
 
-/* Верхняя панель */
+/* Верхняя панель (ФИКСИРОВАННАЯ, НЕЗАВИСИМАЯ ОТ САЙДБАРА) */
 .topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}
 .topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;}
 .logo{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}
@@ -250,6 +253,23 @@ form .action-btn{height:100%;width:100%;}
 .feed-card-author{font-size:14px;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-top:auto;}
 .feed-card-remove-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);border:none;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;}
 .feed-card-remove-btn:hover{background:var(--danger-color);}
+
+/* Бейдж для скрытых постов (по ссылке) */
+.post-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.75);
+    color: var(--accent-color);
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border: 1px solid var(--accent-color);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
 
 /* Создание поста */
 .create-layout{display:flex;gap:30px;width:100%;}
@@ -438,6 +458,35 @@ function updateInputAndRender(){
         });
     }
 }
+
+// ВСТАВКА ИЗ БУФЕРА (Ctrl+V / Долгое нажатие на мобилке)
+document.addEventListener('paste', function(e) {
+    // Работает только если мы на странице создания поста
+    if (!document.getElementById('file-input')) return; 
+
+    var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    var hasImage = false;
+
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            hasImage = true;
+            var blob = items[i].getAsFile();
+            var file = new File([blob], "pasted_image_" + Date.now() + ".png", { type: blob.type });
+            
+            if (filesList.length < 3) {
+                filesList.push(file);
+            } else {
+                showToast(window.TRANSLATIONS.max_files);
+                break;
+            }
+        }
+    }
+
+    if (hasImage) {
+        e.preventDefault(); // Предотвращаем стандартную вставку (чтобы не ломалось)
+        updateInputAndRender();
+    }
+});
 
 function setVisibility(val){
     document.getElementById('vis-input').value=val;
@@ -947,12 +996,26 @@ async def view_profile(request: Request, username: str):
     profile_user = users_db.get(username)
     if not profile_user: raise HTTPException(404, "User not found")
     ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
-    if current_user and current_user['username'] == username: user_posts = [p for p in posts_db if p['author'] == username]
-    else: user_posts = [p for p in posts_db if p['author'] == username and p.get('visibility') == 'feed']
+    
+    # Показываем ВСЕ посты, если это сам пользователь, иначе только те, что в ленте
+    if current_user and current_user['username'] == username: 
+        user_posts = [p for p in posts_db if p['author'] == username]
+    else: 
+        user_posts = [p for p in posts_db if p['author'] == username and p.get('visibility') == 'feed']
+        
     posts_html = ""
     for post in user_posts:
         img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-        posts_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div></div></a>"""
+        
+        # Добавляем бейдж, если пост скрыт (по ссылке)
+        badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
+        
+        posts_html += f"""<a href="/{post['id']}" class="feed-card">
+            {badge}
+            <div class="feed-card-img-container">{img_html}</div>
+            <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div></div>
+        </a>"""
+        
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
     
     edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if current_user and current_user['username'] == username else ''
