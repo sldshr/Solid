@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.29"
+APP_VERSION = "0.30"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -41,8 +41,8 @@ async def load_cache():
 deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
 POST_MAX_LEN = 5000
-# Теперь разрешаем кириллицу, пробелы, дефисы и подчеркивания
 VALID_NICK_RE = re.compile(r'^[a-zA-Z0-9_\-]{3,30}$')
+# Поддержка кириллицы для имен
 VALID_USER_RE = re.compile(r'^[\w\s\-]{1,60}$', re.UNICODE)
 
 class _DBUnavailable:
@@ -85,8 +85,8 @@ def _set_lang_cookie(res: Response, r: Request, lang: str):
 CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
-    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://fonts.cdnfonts.com; "
+    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://fonts.cdnfonts.com; "
     "img-src 'self' data: https: blob:; "
     "connect-src 'self' https: wss:; "
     "frame-ancestors 'self'; "
@@ -714,23 +714,34 @@ def get_css():
     if _CSS_CACHE is None:
         _CSS_CACHE = """
         <style>
+            @import url('https://fonts.cdnfonts.com/css/herokid');
+            @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap');
+
             @font-face {
                 font-family: 'RuFont';
                 src: url('/static/ru_font.ttf') format('truetype');
                 font-weight: 300 700;
                 font-display: swap;
             }
-            @import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap');
+
             * { box-sizing: border-box; }
             html, body { margin: 0; padding: 0; }
             body {
-                font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;
+                font-family: 'Source Sans 3', 'RuFont', Arial, sans-serif;
                 background-color: #f4f4f4;
                 display: flex;
                 flex-direction: column;
                 min-height: 100vh;
                 min-height: 100dvh;
+                color: #222;
             }
+
+            /* Herokid for headings and bold UI */
+            h1, h2, h3, h4, h5, h6, .label-text, .btn, button, .file-label, .post-author {
+                font-family: 'Herokid', 'Impact', 'Arial Black', sans-serif;
+                letter-spacing: 0.5px;
+            }
+
             .page-content {
                 min-height: 100vh;
                 min-height: 100dvh;
@@ -741,223 +752,229 @@ def get_css():
                 padding: 20px;
                 width: 100%;
             }
-            a { color: black; text-decoration: none; font-weight: bold; }
-            a:hover { text-decoration: underline; }
-            .container { background: white; padding: 30px; border: 10px solid #e0e0e0; display: flex; gap: 40px; align-items: flex-start; max-width: 100%; }
-            .footer { text-align: center; font-size: 16px; font-weight: bold; color: #555; width: 100%; padding: 20px; display: flex; flex-direction: column; gap: 5px; }
-            .footer a { color: #000; border-bottom: 2px solid #000; }
-            .footer-links { font-size: 14px; color: #777; }
-            .footer-links a { color: #555; border-bottom: 1px solid #555; font-weight: normal; }
-            .footer-contacts { font-size: 13px; color: #666; font-weight: normal; }
-            .footer-contacts a { color: #2a5db0; }
-            .footer-badge { margin-top: 10px; display: flex; justify-content: center; }
-            .footer-badge a { border: none; }
-            .footer-badge img { display: block; border: 0; }
+            a { color: #0056b3; text-decoration: none; font-weight: 600; transition: color 0.2s; }
+            a:hover { text-decoration: underline; color: #003d82; }
+
+            /* Auth forms */
+            .container { background: #ffffff; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); display: flex; gap: 40px; align-items: flex-start; max-width: 100%; }
             .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 100%; max-width: 340px; }
-            .auth-wrapper-inner { display: flex; gap: 20px; align-items: flex-end; width: 100%;}
-            .form-box { background-color: black; padding: 5px; display: flex; flex-direction: column; gap: 5px; border: 2px solid #ccc; width: 100%;}
-            .form-box form { display: flex; flex-direction: column; gap: 5px; margin: 0; width: 100%;}
+            .label-text { font-size: 32px; color: #111; margin-bottom: 10px; white-space: nowrap; }
+            .form-box { background-color: #f9f9f9; padding: 20px; display: flex; flex-direction: column; gap: 12px; border-radius: 12px; border: 1px solid #eaeaea; width: 100%;}
+            .form-box form { display: flex; flex-direction: column; gap: 12px; margin: 0; width: 100%;}
             .input-group { position: relative; display: flex; align-items: center; width: 100%; }
-            input[type="text"], input[type="password"], textarea, select { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; outline: none; }
+            
+            input[type="text"], input[type="password"], textarea, select { 
+                background-color: #f0f2f5; border: 2px solid transparent; padding: 14px; border-radius: 10px;
+                font-size: 18px; font-family: 'Source Sans 3', sans-serif; width: 100%; 
+                text-align: left; outline: none; transition: border 0.2s, background 0.2s; color: #333;
+            }
+            input[type="text"]:focus, input[type="password"]:focus, textarea:focus { border-color: #4da6ff; background-color: #fff; }
             textarea { text-align: left; resize: vertical; }
-            .file-label { display: flex; align-items: center; justify-content: center; gap: 8px; background: #a9a9a9; padding: 12px; cursor: pointer; font-weight: bold; font-size: 18px; color: black; user-select: none; }
-            .file-label:hover { background: #8c8c8c; }
-            button, .btn { background-color: #a9a9a9; border: none; padding: 12px; font-size: 20px; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; width: 100%; text-align: center; cursor: pointer; color: black; font-weight: bold; display: inline-block; border: 1px solid transparent; }
-            button:hover, .btn:hover { background-color: #8c8c8c; }
+
+            .eye-btn { position: absolute; right: 10px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; opacity: 0.6; }
+            .eye-btn:hover { opacity: 1; }
+            
+            .file-label { display: flex; align-items: center; justify-content: center; gap: 8px; background: #e9ecef; padding: 14px; border-radius: 10px; cursor: pointer; font-size: 16px; color: #333; user-select: none; transition: background 0.2s; border: 1px solid #ddd; }
+            .file-label:hover { background: #dee2e6; }
+            
+            button, .btn { 
+                background-color: #111; border: none; padding: 14px; border-radius: 10px; font-size: 18px; 
+                width: 100%; text-align: center; cursor: pointer; color: #fff; display: inline-block; 
+                transition: background 0.2s, transform 0.1s;
+            }
+            button:hover, .btn:hover { background-color: #333; }
+            button:active, .btn:active { transform: scale(0.98); }
             button:disabled { opacity: 0.6; cursor: wait; }
-            .eye-btn { position: absolute; right: 5px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; }
-            .label-text { font-size: 32px; font-weight: normal; margin-bottom: 10px; white-space: nowrap; }
-            .captcha-container { background-color: #a9a9a9; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; cursor: pointer; font-size: 16px; font-weight: bold; text-align: center;}
-            .captcha-container input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; flex-shrink: 0;}
-            .privacy-link { color: #0000ff; text-decoration: underline; margin-left: 5px;}
-            .dashboard-container { display: flex; gap: 20px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
-            .sidebar { background: black; padding: 10px; width: 100%; max-width: 350px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
-            .sidebar h2 { color: white; text-align: center; font-size: 24px; margin: 10px 0; }
-            .info-card { background: #a9a9a9; padding: 15px; font-size: 18px; text-align: center; word-wrap: break-word; white-space: pre-wrap; }
-            .avatar { width: 120px; height: 120px; border-radius: 8px; object-fit: cover; display: block; margin: 0 auto 10px auto; border: 3px solid #a9a9a9; background: #333; cursor: zoom-in; }
-            .avatar-upload {
-                position: relative; width: 120px; height: 120px; margin: 0 auto 12px auto;
-                border-radius: 8px; overflow: hidden; cursor: pointer; background: #333;
-                border: 3px solid #a9a9a9; display: block;
-            }
+
+            .captcha-container { background-color: #f0f2f5; padding: 12px; border-radius: 10px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: 100%; cursor: pointer; font-size: 16px; border: 1px solid #eaeaea; }
+            .captcha-container input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; flex-shrink: 0; border-radius: 4px; }
+            .privacy-link { color: #0056b3; text-decoration: underline; margin-left: 5px; }
+
+            /* Dashboard */
+            .dashboard-container { display: flex; gap: 24px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; padding: 20px; }
+            .sidebar { background: #fff; padding: 24px; border-radius: 20px; width: 100%; max-width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eaeaea; }
+            .sidebar h2 { color: #111; text-align: center; font-size: 28px; margin: 0 0 10px 0; }
+            .info-card { background: #f8f9fa; padding: 15px; border-radius: 10px; font-size: 16px; text-align: left; word-wrap: break-word; color: #333; border: 1px solid #eaeaea; }
+            .info-card b { color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+            
+            .avatar { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 15px auto; border: 4px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); background: #eee; cursor: zoom-in; }
+            .avatar-upload { position: relative; width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 50%; overflow: hidden; cursor: pointer; background: #eee; border: 4px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: block; }
             .avatar-upload .avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-            .avatar-upload-icon {
-                position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-                background: rgba(0,0,0,0.55); opacity: 0; transition: opacity 0.2s;
-                pointer-events: none;
-            }
+            .avatar-upload-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.2s; pointer-events: none; }
             .avatar-upload:hover .avatar-upload-icon { opacity: 1; }
-            .logout-btn { margin-top: 10px; background: #ff4d4d; }
-            .logout-btn:hover { background: #cc0000; }
-            .edit-btn { background: #4da6ff; margin-top: 5px; color: white;}
+
+            .logout-btn { background: #e63946; margin-top: 10px; }
+            .logout-btn:hover { background: #d62828; }
+            .edit-btn { background: #4da6ff; color: #fff; }
             .edit-btn:hover { background: #1a82e2; }
-            .sugges-btn { background: #9b59b6; color: white; margin-top: 5px; position: relative; }
+            .sugges-btn { background: #9b59b6; color: #fff; position: relative; }
             .sugges-btn:hover { background: #8e44ad; }
-            .badge { background: #ff4d4d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; font-weight: bold; }
-            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; width: 100%; }
-            .create-post-box { background: black; padding: 10px; display: flex; flex-direction: column; gap: 10px; border-radius: 5px; }
-            .create-post-box form { display: flex; flex-direction: column; gap: 8px; }
-            .create-post-box textarea { height: 120px; font-size: 16px; padding: 10px; border-radius: 3px; }
-            .post-buttons-row { display: flex; gap: 8px; align-items: stretch; }
-            .post-buttons-row > .file-label,
-            .post-buttons-row > button { flex: 1; margin: 0; min-width: 0; }
-            .img-preview { max-width: 100%; max-height: 200px; border-radius: 5px; display: block; margin: 0 auto; cursor: zoom-in;}
-            .post-item { background: #a9a9a9; padding: 0; overflow: hidden; border-left: 5px solid transparent; display: flex; flex-direction: column; border-radius: 3px; }
-            .post-item.pinned { border-left: 5px solid #ff4d4d; background: #d9d9d9; }
-            .post-content { padding: 15px 15px 0; margin-bottom: 10px; font-size: 18px; text-align: center; word-break: break-word; white-space: pre-wrap; }
-            .post-content a.ext-link { color: #0000ff; text-decoration: underline; word-break: break-all; }
-            .post-image { width: 100%; max-height: 500px; object-fit: cover; display: block; cursor: zoom-in; }
-            .post-footer { padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #888; flex-wrap: wrap; gap: 10px; }
-            .post-date { font-size: 12px; color: #555; margin-left: auto; }
-            .post-suggested { font-size: 13px; color: #1e8449; font-weight: bold; }
-            .posts-area { background: black; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 10px; min-height: 300px;}
-            .posts-area h2 { color: white; font-size: 24px; margin: 0 0 10px 0; text-align: center;}
+            .badge { background: #e63946; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 6px; font-family: 'Source Sans 3', sans-serif; vertical-align: middle; }
+
+            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 24px; width: 100%; }
+
+            /* Create Post */
+            .create-post-box { background: #fff; padding: 20px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eaeaea; }
+            .create-post-box form { display: flex; flex-direction: column; gap: 12px; }
+            .create-post-box textarea { height: 100px; font-size: 18px; padding: 15px; border-radius: 12px; border: 1px solid #ddd; background: #f8f9fa; }
+            .post-buttons-row { display: flex; gap: 12px; align-items: stretch; }
+            .post-buttons-row > .file-label, .post-buttons-row > button { flex: 1; margin: 0; min-width: 0; }
+
+            /* Posts area */
+            .posts-area { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+            .posts-area h2 { color: #111; font-size: 26px; margin: 0 0 10px 0; text-align: left; }
+            
             .post-wrapper { position: relative; transition: opacity 0.3s ease; }
-            .post-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; z-index: 10; }
-            .post-wrapper:hover .post-actions { opacity: 1; }
-            .action-btn { background: black; color: white; border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; border-radius: 3px; width: auto; font-weight: normal; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;}
-            .action-btn:hover { background: #ff4d4d; }
-            .action-btn.pin-btn:hover { background: #4da6ff; }
-            .action-btn.link-btn:hover { background: #f1c40f; color: black; }
-            .suggestion-card { background: #a9a9a9; padding: 15px; border-radius: 5px; border-left: 5px solid #9b59b6; margin-bottom: 10px; }
-            .sugg-author { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #888; flex-wrap: wrap;}
-            .sugg-name { font-weight: bold; color: #333; font-size: 14px; }
-            .sugg-date { font-size: 12px; color: #666; }
-            .sugg-content { font-size: 16px; margin-bottom: 10px; text-align: center; white-space: pre-wrap; word-break: break-word;}
-            .sugg-actions { display: flex; gap: 10px; }
-            .sugg-approve { background: #2ecc71; color: white; padding: 8px; }
-            .sugg-approve:hover { background: #27ae60; }
-            .sugg-reject { background: #e74c3c; color: white; padding: 8px; }
-            .sugg-reject:hover { background: #c0392b; }
-            .rules-box { background: #fff9e6; border-left: 5px solid #9b59b6; padding: 15px; border-radius: 5px; margin-bottom: 15px; color: #000; }
-            .rules-box b { display: block; margin-bottom: 8px; font-size: 15px; }
-            .rules-content { font-size: 14px; white-space: pre-wrap; line-height: 1.4; }
-            .toggle-row { background: #a9a9a9; padding: 12px; border-radius: 3px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; font-weight: bold; cursor: pointer; }
-            .toggle-row input[type="checkbox"] { width: 24px; height: 24px; cursor: pointer; }
-            .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 14px; font-weight: bold; color: white; margin-left: 10px;}
-            .status-Принято, .status-Accepted { background: #4da6ff; }
-            .status-В-работе, .status-In-Progress { background: #f1c40f; }
-            .status-Исправлено, .status-Fixed { background: #2ecc71; }
-            .status-Отклонено, .status-Rejected { background: #e74c3c; }
-            .lang-switch { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-            .lang-btn { background: transparent; border: 2px solid #a9a9a9; color: #a9a9a9; padding: 8px 15px; width: auto; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;}
-            .lang-btn:hover { background: #a9a9a9; color: black; }
-            .lang-btn.active { background: #4da6ff; border-color: #4da6ff; color: white; }
-            .login-lang-wrapper { display: flex; justify-content: flex-end; width: 100%; margin-top: 5px; }
-            .privacy-content { background: white; color: black; padding: 20px; font-size: 18px; line-height: 1.5; text-align: left; word-wrap: break-word; border-radius: 3px;}
-            .privacy-content code { background: #eee; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 15px; }
-            .error-msg { color: #ff4d4d; font-weight: bold; font-size: 18px; text-align: right; width: 100%; margin-top: 10px; min-height: 20px; }
-            #toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: bold; pointer-events: none; text-align: center; max-width: 90%; }
-            #toast.show { opacity: 1; }
-            .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; justify-content: center; align-items: center; padding: 15px; }
-            .modal-overlay.show { display: flex; }
-            .modal-box { background: white; padding: 30px; border-radius: 5px; max-width: 400px; width: 100%; text-align: center; border: 5px solid #000; }
-            .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-            .btn-danger { background: #ff4d4d; color: white; }
-            .btn-danger:hover { background: #cc0000; }
-            .og-box { margin: 15px 0; padding: 10px; background: #f9f9f9; border-radius: 5px; border: 1px solid #ddd; text-align: left; overflow: hidden;}
-            .og-img { max-width: 100%; max-height: 200px; border-radius: 5px; margin-bottom: 10px; object-fit: cover; }
-            .og-title { margin: 0 0 5px 0; font-size: 16px; color: #000; font-weight: bold; word-break: break-word;}
-            .og-desc { margin: 0; font-size: 14px; color: #555; word-break: break-word;}
-            .stats-card { background: #a9a9a9; padding: 15px; border-radius: 5px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;}
-            .stats-card b { font-size: 17px; }
-            .stats-value { font-weight: bold; color: #1e8449; font-size: 22px; }
-            .contacts-box { background: #222; color: white; padding: 18px; border-radius: 5px; margin-top: 20px; line-height: 1.8;}
-            .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
-            .contacts-box a { color: #4da6ff; }
+            .post-item { 
+                background: #ffffff; padding: 24px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); 
+                border: 1px solid #eaeaea; display: flex; flex-direction: column; position: relative; overflow: hidden;
+            }
+            .post-item.pinned { border: 2px solid #4da6ff; background: #f0f8ff; }
+            
+            .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+            .post-author { color: #111; font-size: 18px; text-decoration: none; }
+            .post-author:hover { color: #0056b3; text-decoration: none; }
+            .post-date { font-size: 13px; color: #888; font-family: 'Source Sans 3', sans-serif; font-weight: normal; }
+            .post-suggested { font-size: 14px; color: #1e8449; font-weight: bold; margin-bottom: 10px; background: #e8f5e9; padding: 6px 12px; border-radius: 8px; display: inline-block; }
 
-            .settings-card { background: #161b22; border-radius: 12px; padding: 18px; margin-bottom: 12px; border: 1px solid #21262d; }
-            .settings-card h3 { color: #4da6ff; margin: 0 0 14px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: bold; }
-            .settings-card .lang-switch { justify-content: flex-start; margin: 0; }
-            .settings-about-text { color: #c9d1d9; font-size: 15px; line-height: 1.55; margin: 0 0 12px 0; }
-            .settings-version { color: #666; font-size: 13px; margin: 0; }
-            .settings-link { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px; border-bottom: 1px solid #21262d; color: #c9d1d9; font-size: 15px; font-weight: bold; }
+            .post-content { font-size: 17px; line-height: 1.6; text-align: left; word-break: break-word; white-space: pre-wrap; color: #333; margin-bottom: 15px; }
+            .post-content a.ext-link { color: #0056b3; text-decoration: underline; word-break: break-all; }
+            
+            .img-preview { max-width: 100%; max-height: 200px; border-radius: 12px; display: block; margin: 10px 0; cursor: zoom-in;}
+            .post-image { width: 100%; max-height: 600px; object-fit: cover; display: block; cursor: zoom-in; border-radius: 12px; margin-bottom: 15px;}
+            
+            .post-footer { display: flex; justify-content: flex-end; align-items: center; padding-top: 15px; border-top: 1px solid #f0f0f0; gap: 10px; flex-wrap: wrap; }
+            
+            .post-actions { display: flex; gap: 8px; transition: opacity 0.2s; }
+            .action-btn { 
+                background: #f0f2f5; color: #555; border: 1px solid #e0e0e0; padding: 8px 16px; 
+                font-size: 14px; cursor: pointer; border-radius: 8px; width: auto; 
+                font-family: 'Source Sans 3', sans-serif; font-weight: 600;
+            }
+            .action-btn:hover { background: #e4e6e9; color: #111; }
+            .action-btn.pin-btn:hover { background: #d0e8ff; color: #0056b3; border-color: #a0cfff; }
+            .action-btn.link-btn:hover { background: #fff3cd; color: #856404; border-color: #ffeeba; }
+            .action-btn.del-btn:hover { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+
+            /* Settings & others */
+            .settings-card { background: #fff; border-radius: 20px; padding: 24px; margin-bottom: 16px; border: 1px solid #eaeaea; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+            .settings-card h3 { color: #111; margin: 0 0 16px 0; font-size: 22px; }
+            .settings-about-text { color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0; }
+            .settings-version { color: #888; font-size: 14px; margin: 0; }
+            .settings-link { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f0f0f0; color: #333; font-size: 16px; font-weight: 600; }
             .settings-link:last-child { border-bottom: none; }
-            .settings-link:hover { color: #4da6ff; text-decoration: none; }
-            .settings-link::after { content: '›'; color: #666; font-size: 20px; font-weight: normal; }
+            .settings-link:hover { color: #0056b3; text-decoration: none; }
+            .settings-link::after { content: '›'; color: #aaa; font-size: 22px; font-weight: normal; }
 
-            .image-skeleton { margin: 10px 0 0; border-radius: 10px; overflow: hidden; background: linear-gradient(90deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; min-height: 100px; position: relative; }
+            /* Skeletons */
+            .image-skeleton { margin: 10px 0; border-radius: 12px; overflow: hidden; background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; min-height: 150px; position: relative; }
             .image-skeleton.loaded { animation: none; background: transparent; min-height: 0; }
             .image-skeleton .post-image { margin: 0; opacity: 0; transition: opacity 0.4s; }
             .image-skeleton .post-image.loaded { opacity: 1; }
-            .avatar-skeleton { display: block; width: 120px; height: 120px; margin: 0 auto 10px; border-radius: 8px; overflow: hidden; background: linear-gradient(90deg, #2a2a2a 0%, #3a3a3a 50%, #2a2a2a 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; }
+            .avatar-skeleton { display: block; width: 120px; height: 120px; margin: 0 auto 15px; border-radius: 50%; overflow: hidden; background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; }
             .avatar-skeleton.loaded { animation: none; background: transparent; }
-            .avatar-skeleton .avatar { margin: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.4s; border-radius: 0; }
+            .avatar-skeleton .avatar { margin: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.4s; border-radius: 0; border: none; box-shadow: none; }
             .avatar-skeleton .avatar.loaded { opacity: 1; }
             @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-            .btn-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
+            .btn-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
             @keyframes spin { to { transform: rotate(360deg); } }
 
+            /* Progress bar */
             .progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: linear-gradient(90deg, #4da6ff 0%, #9b59b6 50%, #4da6ff 100%); background-size: 200% 100%; animation: progress-shimmer 1.5s linear infinite; z-index: 99999; opacity: 0; pointer-events: none; }
             .progress-bar.show { width: 80%; opacity: 1; transition: width 0.4s ease-out, opacity 0.2s; }
             @keyframes progress-shimmer { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
 
+            /* Modal / Image Viewer */
+            #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 14px 28px; border-radius: 12px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: 600; pointer-events: none; text-align: center; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+            #toast.show { opacity: 1; }
+            .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 10000; justify-content: center; align-items: center; padding: 20px; }
+            .modal-overlay.show { display: flex; }
+            .modal-box { background: white; padding: 30px; border-radius: 20px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+            .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+            .btn-danger { background: #e63946; }
+            .btn-danger:hover { background: #d62828; }
+            .og-box { margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 12px; border: 1px solid #eaeaea; text-align: left; overflow: hidden;}
+            .og-img { max-width: 100%; max-height: 200px; border-radius: 8px; margin-bottom: 10px; object-fit: cover; }
+            .og-title { margin: 0 0 5px 0; font-size: 16px; color: #111; font-weight: bold; word-break: break-word;}
+            .og-desc { margin: 0; font-size: 14px; color: #555; word-break: break-word;}
+
             #img-viewer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 20000; display: none; justify-content: center; align-items: center; padding: 0; }
             #img-viewer.show { display: flex; animation: fadeIn 0.2s; }
-            #img-viewer-img { max-width: 90vw; max-height: 82vh; max-height: 82dvh; object-fit: contain; border-radius: 6px; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); cursor: zoom-in; user-select: none; -webkit-user-select: none; touch-action: manipulation; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+            #img-viewer-img { max-width: 90vw; max-height: 82vh; max-height: 82dvh; object-fit: contain; border-radius: 8px; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); cursor: zoom-in; user-select: none; -webkit-user-select: none; touch-action: manipulation; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
             #img-viewer-img.zoomed { transform: scale(2.2); cursor: zoom-out; }
-            .img-viewer-close { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #fff; border: 2px solid #fff; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20005; padding: 0; line-height: 1; box-sizing: border-box; }
+            .img-viewer-close { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #fff; border: 2px solid #fff; width: 48px; height: 48px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20005; padding: 0; line-height: 1; box-sizing: border-box; transition: background 0.2s; }
             .img-viewer-close:hover { background: rgba(255,255,255,0.2); }
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-            .create-page-container { width: 100%; max-width: 700px; margin: 0 auto; }
-            .create-page-title { color: #333; font-size: 24px; text-align: center; margin: 0 0 20px; letter-spacing: 1px; }
-            .create-page-form { display: flex; flex-direction: column; gap: 10px; }
-            .create-page-textarea { width: 100%; min-height: 300px; height: 40vh; padding: 14px; font-size: 16px; border-radius: 12px; background: #a9a9a9; border: none; resize: vertical; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; }
+            /* Create page */
+            .create-page-container { width: 100%; max-width: 700px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+            .create-page-title { color: #111; font-size: 32px; text-align: center; margin: 0 0 20px; }
+            .create-page-form { display: flex; flex-direction: column; gap: 15px; }
+            .create-page-textarea { width: 100%; min-height: 300px; height: 40vh; padding: 20px; font-size: 18px; border-radius: 12px; background: #f8f9fa; border: 2px solid transparent; resize: vertical; font-family: 'Source Sans 3', sans-serif; transition: border 0.2s; }
+            .create-page-textarea:focus { border-color: #4da6ff; background: #fff; }
+
+            /* Footer */
+            .footer { text-align: center; font-size: 15px; color: #777; width: 100%; padding: 30px 20px; display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
+            .footer a { color: #333; border-bottom: 1px solid transparent; font-weight: 600; }
+            .footer a:hover { border-bottom-color: #333; text-decoration: none; }
+            .footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; }
+            .footer-contacts { font-size: 14px; color: #888; }
+            .footer-badge img { display: block; border: 0; margin: 0 auto; }
 
             .bottom-nav { display: none; }
 
+            /* Mobile Styles */
             @media (max-width: 768px) {
-                body { background-color: #000 !important; color: #fff; overflow-x: hidden; }
+                body { background-color: #000 !important; color: #fff; }
                 .page-content { justify-content: flex-start; padding: 0; min-height: 100vh; min-height: 100dvh; }
                 body.has-bottom-nav .page-content { padding-bottom: 70px; }
                 
-                .container { flex-direction: column; padding: 15px; border: none; background: #000; gap: 15px; width: 100%; }
-                .auth-wrapper { width: 100%; max-width: 100%; background: transparent; padding: 10px; box-shadow: none; }
-                .label-text { color: #fff; font-size: 24px; text-align: center; margin: 10px 0 0 0; order: -1; }
-                .form-box { border: 1px solid #333; background: #111; }
-                .captcha-container { background: #222; color: #fff; border: 1px solid #333; }
-                input[type="text"], input[type="password"], textarea, select { background: #222; color: #fff; border: 1px solid #333; border-radius: 0; font-size: 16px; padding: 14px; }
-                button, .btn, .file-label { background: #333; color: #fff; border: 1px solid #444; border-radius: 0; font-size: 16px; padding: 14px; }
+                .container { flex-direction: column; padding: 15px; border: none; background: #000; gap: 20px; width: 100%; box-shadow: none; border-radius: 0; }
+                .auth-wrapper { width: 100%; max-width: 100%; background: transparent; padding: 0; box-shadow: none; }
+                .label-text { color: #fff; font-size: 32px; text-align: center; margin: 10px 0 15px 0; order: -1; }
+                .form-box { border: 1px solid #222; background: #111; border-radius: 16px; padding: 15px; }
+                .captcha-container { background: #222; color: #ddd; border: 1px solid #333; border-radius: 12px; }
+                input[type="text"], input[type="password"], textarea, select { background: #222; color: #fff; border: 1px solid #333; border-radius: 12px; font-size: 16px; padding: 16px; }
+                input[type="text"]:focus, input[type="password"]:focus, textarea:focus { border-color: #4da6ff; background: #1a1a1a; }
+                button, .btn, .file-label { background: #333; color: #fff; border: 1px solid #444; border-radius: 12px; font-size: 16px; padding: 16px; }
                 button:hover, .btn:hover { background: #444; }
                 
-                .dashboard-container { flex-direction: column; gap: 0; width: 100%; max-width: 100%; }
-                .sidebar { width: 100%; max-width: 100%; padding: 15px; border-radius: 0; background: #000; border-bottom: 1px solid #222; gap: 8px; margin-bottom: 0; }
-                .sidebar h2 { color: #fff; font-size: 20px; margin: 5px 0 10px; }
-                .info-card { background: #111; color: #fff; border: 1px solid #222; padding: 12px; font-size: 15px; border-radius: 0; }
-                .info-card a { color: #4da6ff !important; text-decoration: none; }
+                .dashboard-container { flex-direction: column; gap: 0; width: 100%; max-width: 100%; padding: 15px; }
+                .sidebar { width: 100%; max-width: 100%; padding: 20px; border-radius: 20px; background: #111; border: 1px solid #222; gap: 12px; margin-bottom: 20px; box-shadow: none; }
+                .sidebar h2 { color: #fff; font-size: 26px; margin: 0 0 10px; }
+                .info-card { background: #1a1a1a; color: #eee; border: 1px solid #222; padding: 15px; font-size: 15px; border-radius: 12px; }
+                .info-card a { color: #4da6ff !important; }
                 .info-card b { color: #888; }
-                .main-content { width: 100%; gap: 0; background: #000; }
+                .main-content { width: 100%; gap: 15px; }
                 
-                .posts-area { background: #000; padding: 0; border-radius: 0; min-height: 100vh; }
-                .posts-area h2 { color: #fff; background: #111; padding: 15px; margin: 0; border-bottom: 1px solid #222; }
-                .post-item { background: #111; color: #fff; border-bottom: 1px solid #222; border-radius: 0; margin-bottom: 0; border-left: none; }
-                .post-content { padding: 15px; color: #eee; font-size: 16px; text-align: center !important; }
-                .post-footer { padding: 10px 15px; border-top: 1px solid #222; flex-direction: row; align-items: center; justify-content: space-between; }
+                .post-item { background: #111; color: #fff; border: 1px solid #222; border-radius: 16px; padding: 16px; box-shadow: none; }
+                .post-item.pinned { border-color: #4da6ff; background: #0d1b2a; }
+                .post-header { margin-bottom: 12px; }
+                .post-author { color: #fff; font-size: 18px; }
                 .post-date { color: #888; }
-                .post-suggested { color: #4da6ff; }
-                
-                .post-wrapper { background: #111; border-bottom: 1px solid #222; }
-                .post-actions { position: relative; opacity: 1; background: #1a1a1a; padding: 8px 15px; display: flex; justify-content: flex-end; gap: 10px; top: 0; right: 0; margin-top: 0; border-bottom: 1px solid #222; }
-                .action-btn { background: #333; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; font-size: 12px; }
-                .action-btn:hover { background: #555; }
+                .post-content { color: #ddd; font-size: 16px; line-height: 1.5; text-align: left !important; margin-bottom: 12px; }
+                .post-footer { border-top: 1px solid #222; padding-top: 12px; }
+                .post-actions { display: flex; width: 100%; justify-content: space-between; gap: 8px; opacity: 1; position: static; background: transparent; padding: 0; }
+                .action-btn { background: #222; color: #ccc; border: 1px solid #333; padding: 8px 14px; border-radius: 8px; font-size: 13px; flex: 1; text-align: center; }
+                .action-btn:hover, .action-btn:active { background: #333; color: #fff; }
                 
                 .create-post-box { display: none !important; }
                 .lang-switch { display: none !important; }
                 .settings-card .lang-switch { display: flex !important; }
 
-                .sugg-actions { flex-direction: column; gap: 8px; }
-                .modal-box { background: #111; color: #fff; border: 1px solid #333; border-radius: 0; }
+                .modal-box { background: #111; color: #fff; border: 1px solid #333; border-radius: 16px; }
                 .modal-box p, .modal-box h3 { color: #fff; }
                 .og-box { background: #222; border-color: #333; color: #fff; }
                 .og-title { color: #fff; }
                 .og-desc { color: #aaa; }
                 
-                .settings-card { background: #111; border: 1px solid #222; border-radius: 0; margin-bottom: 1px; }
+                .settings-card { background: #111; border: 1px solid #222; border-radius: 16px; margin-bottom: 12px; padding: 20px; box-shadow: none; }
+                .settings-card h3 { color: #fff; }
                 .settings-about-text { color: #aaa; }
-                .settings-link { color: #fff; border-bottom: 1px solid #222; }
+                .settings-link { color: #eee; border-bottom: 1px solid #222; }
                 .settings-link:hover { color: #4da6ff; }
+                .settings-link::after { color: #555; }
                 
                 .footer { display: none; }
                 body.show-footer .footer {
@@ -973,21 +990,21 @@ def get_css():
                 }
                 body.show-footer .footer a { color: #4da6ff; border: none; }
                 body.show-footer .footer-links { flex-wrap: wrap; justify-content: center; gap: 6px; }
-                body.show-footer .footer-links a { background: #111; padding: 6px 10px; border-radius: 4px; }
+                body.show-footer .footer-links a { background: #111; padding: 8px 12px; border-radius: 8px; }
                 
-                .avatar, .avatar-upload, .avatar-skeleton { width: 80px; height: 80px; border-radius: 4px; }
-                .post-image { max-height: 400px; border-radius: 0; }
+                .avatar, .avatar-upload, .avatar-skeleton { width: 100px; height: 100px; }
+                .post-image { max-height: 400px; border-radius: 12px; }
                 
-                .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: #000; border-top: 1px solid #222; z-index: 5000; height: 60px; padding-bottom: env(safe-area-inset-bottom); }
+                .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); border-top: 1px solid #222; z-index: 5000; height: 65px; padding-bottom: env(safe-area-inset-bottom); }
                 .bottom-nav-item { flex: 1; display: flex; align-items: center; justify-content: center; color: #666; transition: color 0.15s; position: relative; }
-                .bottom-nav-item svg { width: 28px; height: 28px; }
+                .bottom-nav-item svg { width: 26px; height: 26px; }
                 .bottom-nav-item.active { color: #4da6ff; pointer-events: none; }
-                .bottom-nav-item.active::before { content: ''; position: absolute; top: 0; width: 24px; height: 3px; background: #4da6ff; }
+                .bottom-nav-item.active::before { content: ''; position: absolute; top: 0; width: 30px; height: 3px; background: #4da6ff; border-radius: 0 0 3px 3px; }
                 
-                #toast { bottom: 75px; background: #333; border: 1px solid #555; }
-                .create-page-container { padding: 15px; }
-                .create-page-title { color: #fff; font-size: 22px; }
-                .create-page-textarea { background: #222; color: #fff; border-radius: 0; }
+                #toast { bottom: 85px; background: #333; border: 1px solid #555; border-radius: 12px; }
+                .create-page-container { padding: 20px; background: #111; border-radius: 20px; border: 1px solid #222; }
+                .create-page-title { color: #fff; font-size: 28px; }
+                .create-page-textarea { background: #222; color: #fff; border: 1px solid #333; border-radius: 12px; }
             }
         </style>
         """
@@ -1064,7 +1081,7 @@ def get_js(lang, token, current_user=""):
             e.preventDefault();
             deferredPrompt = e;
             const installBtn = document.getElementById('pwa-install-btn');
-            if (installBtn) installBtn.style.display = 'flex';
+            if (installBtn) installBtn.style.display = 'block';
         });
         function installPWA() {
             if (deferredPrompt) {
@@ -1236,10 +1253,13 @@ def get_js(lang, token, current_user=""):
             linkBtn.addEventListener('click', function() { copyLink(this); });
             const pinBtn = document.createElement('button'); pinBtn.className = 'action-btn pin-btn'; pinBtn.textContent = L.p;
             pinBtn.addEventListener('click', function() { hp(i, this); });
-            const delBtn = document.createElement('button'); delBtn.className = 'action-btn'; delBtn.textContent = L.d;
+            const delBtn = document.createElement('button'); delBtn.className = 'action-btn del-btn'; delBtn.textContent = L.d;
             delBtn.addEventListener('click', function() { hd(i); });
             acts.append(linkBtn, pinBtn, delBtn);
             const item = document.createElement('div'); item.className = 'post-item';
+            const header = document.createElement('div'); header.className = 'post-header';
+            header.innerHTML = `<a href="/${ME}" class="post-author">@${ME}</a><span class="post-date" data-iso="${iso}">${d}</span>`;
+            item.appendChild(header);
             const contentEl = document.createElement('div'); contentEl.className = 'post-content'; contentEl.textContent = c;
             item.appendChild(contentEl);
             if (img) {
@@ -1249,9 +1269,8 @@ def get_js(lang, token, current_user=""):
                 item.appendChild(wrap);
             }
             const footer = document.createElement('div'); footer.className = 'post-footer';
-            const dateEl = document.createElement('div'); dateEl.className = 'post-date'; dateEl.dataset.iso = iso; dateEl.textContent = d;
-            footer.appendChild(dateEl); item.appendChild(footer);
-            w.appendChild(acts); w.appendChild(item);
+            footer.appendChild(acts); item.appendChild(footer);
+            w.appendChild(item);
             let inserted = false; const wrappers = a.querySelectorAll('.post-wrapper');
             for (let ww of wrappers) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
             if (!inserted) a.appendChild(w);
@@ -1371,7 +1390,7 @@ def auth_html(lang, error_msg="", token=""):
                 <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
                 <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
                 <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-                <label class="captcha-container" style="background:#8c8c8c;margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
+                <label class="captcha-container" style="margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
                 <button type="submit">__REG_BTN__</button>
             </form></div>
         </div>
@@ -1404,7 +1423,7 @@ def _avatar_html(avatar_src):
     return f'<div class="avatar-skeleton"><img class="avatar" src="{avatar_src}" loading="lazy" onload="window.skelLoad(this)" onclick="viewImage(this.src)"></div>'
 
 def render_records(records, lang, own=False, uid=None):
-    if not records or not isinstance(records, list): return f"<div class='post-item empty-state'>{t('no_posts', lang)}</div>"
+    if not records or not isinstance(records, list): return f"<div class='post-item empty-state' style='text-align:center; padding:30px; color:#888;'>{t('no_posts', lang)}</div>"
     out = ""
     for x in records:
         if not isinstance(x, dict): continue
@@ -1423,12 +1442,27 @@ def render_records(records, lang, own=False, uid=None):
         acts += f"<button class='action-btn link-btn' data-user='{safe_nick}' data-rid='{rid}' onclick='copyLink(this)'>{t('copy_link', lang)}</button>"
         if own:
             acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
-            acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn'>{t('delete', lang)}</button>"
+            acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn del-btn'>{t('delete', lang)}</button>"
         acts += "</div>"
         
         sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
         img_html = _img_html(img)
-        out += f"<div class='post-wrapper' id='post-{rid}'>{acts}<div class='post-item {pc}'><div class='post-content'>{content}</div>{img_html}<div class='post-footer'>{sugg_html}<div class='post-date' data-iso='{iso}'>{date}</div></div></div></div>"
+        
+        out += f"""
+        <div class='post-wrapper' id='post-{rid}'>
+            <div class='post-item {pc}'>
+                <div class='post-header'>
+                    <a href='/{safe_nick}' class='post-author'>@{safe_nick}</a>
+                    <span class='post-date' data-iso='{iso}'>{date}</span>
+                </div>
+                {sugg_html}
+                <div class='post-content'>{content}</div>
+                {img_html}
+                <div class='post-footer'>
+                    {acts}
+                </div>
+            </div>
+        </div>"""
     return out
 
 def merge_memory(db_records, nickname):
@@ -1452,7 +1486,7 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
     desc = esc(user.get('description'))
     avatar = sanitize_url(user.get('avatar_data', ''))
     avatar_html = _avatar_html(avatar)
-    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
+    db = f"<div class='info-card'><b>{t('description', lang)}</b>{desc}</div>" if desc else ""
     badge = f'<span class="badge">{sugg_count}</span>' if sugg_count else ''
     safe_nick_url = quote(nickname, safe='')
     og_title = f"Личный кабинет — {nickname}" if lang == "ru" else f"Personal cabinet — {nickname}"
@@ -1467,9 +1501,9 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
     <div class="dashboard-container"><div class="sidebar">
         <h2>__CABINET__</h2>
         __AVATAR__
-        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICK_URL__" target="_blank" rel="noopener noreferrer">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
-        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
+        <div class="info-card"><b>__USERNAME_LABEL__</b>__USERNAME__</div>
+        <div class="info-card"><b>__NICKNAME_LABEL__</b><a href="/__NICK_URL__" target="_blank" rel="noopener noreferrer">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
+        <div class="info-card"><b>__TOTAL_POSTS__</b>__POST_COUNT__</div>
         <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
         <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE____BADGE__</a>
         <button type="button" onclick="confirmLogout()" class="logout-btn">__LOGOUT__</button>
@@ -1480,7 +1514,7 @@ def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
             <textarea name="content" placeholder="__CREATE_POST_PLACEHOLDER__" required maxlength="5000"></textarea>
             <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
                 <img id="post-img-preview" class="img-preview">
-                <button type="button" onclick="removePostImage()" style="position:absolute; top:5px; right:5px; background:red; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; line-height:1;">&times;</button>
+                <button type="button" onclick="removePostImage()" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; line-height:1; backdrop-filter:blur(4px);">&times;</button>
             </div>
             <div class="post-buttons-row">
                 <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
@@ -1514,7 +1548,7 @@ def create_page_html(nickname, lang, token):
                 <textarea class="create-page-textarea" name="content" placeholder="__PLACEHOLDER__" required maxlength="5000" autofocus></textarea>
                 <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
                     <img id="post-img-preview" class="img-preview">
-                    <button type="button" onclick="removePostImage()" style="position:absolute; top:5px; right:5px; background:red; color:white; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:16px; line-height:1;">&times;</button>
+                    <button type="button" onclick="removePostImage()" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; line-height:1; backdrop-filter:blur(4px);">&times;</button>
                 </div>
                 <div class="post-buttons-row">
                     <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
@@ -1532,7 +1566,7 @@ def create_page_html(nickname, lang, token):
 
 def suggestions_page_html(nickname, suggestions, lang, token):
     if not suggestions:
-        rh = f"<div class='post-item'>{t('sugges_empty', lang)}</div>"
+        rh = f"<div class='post-item' style='text-align:center; padding:30px; color:#888;'>{t('sugges_empty', lang)}</div>"
     else:
         rh = ""
         for sg in suggestions:
@@ -1543,7 +1577,19 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             iso = esc(sg.get('created_at', ''))
             img = sanitize_url(sg.get('image_data', ''))
             img_html = _img_html(img)
-            rh += f"<div class='suggestion-card' id='sugg-{sid}'><div class='sugg-author'><span class='sugg-name'>{sugg_by}</span><span class='sugg-date' data-iso='{iso}'>{date}</span></div><div class='sugg-content'>{content}</div>{img_html}<div class='sugg-actions' style='margin-top:10px;'><button class='btn sugg-approve' onclick=\"approveSugg('{sid}')\">{t('sugges_approve',lang)}</button><button class='btn sugg-reject' onclick=\"rejectSugg('{sid}')\">{t('sugges_reject',lang)}</button></div></div>"
+            rh += f"""
+            <div class='suggestion-card' id='sugg-{sid}'>
+                <div class='post-header'>
+                    <span class='post-author'>{sugg_by}</span>
+                    <span class='post-date' data-iso='{iso}'>{date}</span>
+                </div>
+                <div class='post-content'>{content}</div>
+                {img_html}
+                <div class='post-footer' style='margin-top:15px;'>
+                    <button class='btn sugg-approve' onclick="approveSugg('{sid}')">{t('sugges_approve',lang)}</button>
+                    <button class='btn sugg-reject' onclick="rejectSugg('{sid}')">{t('sugges_reject',lang)}</button>
+                </div>
+            </div>"""
     og_title = t('suggestions_title', lang) + " — " + nickname
     og = og_tags(og_title, "Solid — suggestions", "/cabinet/suggestions", lang=lang)
     s = """
@@ -1554,8 +1600,8 @@ def suggestions_page_html(nickname, suggestions, lang, token):
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
     <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="posts-area" style="min-height:300px;padding:20px;"><h2>__SUGGESTIONS_TITLE__</h2>__SUGGESTIONS_HTML__</div>
-        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__BACK__</a>
+        <div class="posts-area"><h2>__SUGGESTIONS_TITLE__</h2>__SUGGESTIONS_HTML__</div>
+        <a href="/cabinet" class="btn" style="background:#333; margin-top:15px">__BACK__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
     </div>
@@ -1566,15 +1612,15 @@ def suggestions_page_html(nickname, suggestions, lang, token):
     return s
 
 def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabled=True, photo_enabled=True):
-    msg_html = f"<div class='error-msg' style='color:#ff4d4d;'>{esc(error)}</div>" if error else ""
+    msg_html = f"<div class='error-msg' style='color:#e63946; font-size:16px; text-align:center; margin-bottom:10px;'>{esc(error)}</div>" if error else ""
     is_own = (viewer == nickname)
-    if is_own: form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_own', lang)}</div>"
-    elif not enabled: form_block = f"<div class='error-msg' style='color:#ff4d4d;'>{t('sugges_disabled', lang)}</div>"
+    if is_own: form_block = f"<div class='error-msg' style='color:#e63946; font-size:16px; text-align:center;'>{t('sugges_own', lang)}</div>"
+    elif not enabled: form_block = f"<div class='error-msg' style='color:#e63946; font-size:16px; text-align:center;'>{t('sugges_disabled', lang)}</div>"
     else:
         safe_nick_attr = esc(nickname)
         photo_block = f"<label class='file-label' for='sugg-file-input'>{SVG_CAMERA} {t('attach_photo', lang)}</label><input type='file' id='sugg-file-input' accept='image/*' onchange='handleSuggImage(this)' style='display:none;'><img id='sugg-img-preview' class='img-preview' style='display:none;'>" if photo_enabled else ""
-        form_block = f"<form data-nickname='{safe_nick_attr}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:10px'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60' style='background:#a9a9a9;padding:12px;font-size:16px;'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='background:#a9a9a9;height:150px;padding:12px;font-size:16px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' style='background:#2ecc71;color:white;font-size:18px;'>{t('sugges_send',lang)}</button></form>"
-    rules_block = f"<div class='rules-box'><b>{t('rules_title',lang)}</b><div class='rules-content'>{esc(rules)}</div></div>" if rules else ""
+        form_block = f"<form data-nickname='{safe_nick_attr}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:15px; margin-top:20px;'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='height:150px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' style='background:#2ecc71;'>{t('sugges_send',lang)}</button></form>"
+    rules_block = f"<div class='info-card' style='background:#fff9e6; border-color:#ffeeba; color:#856404; margin-bottom:20px;'><b>{t('rules_title',lang)}</b>{esc(rules)}</div>" if rules else ""
     og_title = f"Предложить пост для {nickname}" if lang == "ru" else f"Suggest a post for {nickname}"
     og = og_tags(og_title, "Solid — suggestions", f"/{quote(nickname, safe='')}/sugges", lang=lang)
     safe_nick_url = quote(nickname, safe='')
@@ -1585,10 +1631,10 @@ def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabl
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
-        <div class="posts-area" style="padding:20px;">
-            <h2>__TITLE__ __NICKNAME__</h2>
+        <div class="create-post-box" style="border-radius:20px;">
+            <h2 style="text-align:center; margin-bottom:20px;">__TITLE__ __NICKNAME__</h2>
             __RULES_BLOCK____MSG____FORM_BLOCK__
-            <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
+            <a href="/cabinet" class="btn" style="background:#333;margin-top:15px;">__BACK__</a>
             <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/__NICK_URL__/sugges" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__/sugges" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
         </div>
     </div></div>
@@ -1631,29 +1677,31 @@ def edit_html(nickname, user, lang, token, error=""):
     <title>__EDIT_PROFILE__ — Solid</title>__OG__
     __CSS____JS__</head><body>
     <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
-        <h2 style="color:#fff;text-align:center">__EDIT_PROFILE__</h2>
-        __ERR_BLOCK__
-        <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
-            <input type="hidden" name="csrf_token" value="__TOKEN__">
-            <input type="hidden" name="avatar_data" id="avatar-data" value="">
-            __AVATAR_HTML__
-            <input type="file" id="avatar-file-input" accept="image/*" onchange="handleAvatarChange(this)" style="display:none;">
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__USERNAME_LABEL__</div>
-            <input type="text" name="username" value="__USERNAME__" required maxlength="60">
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__DESCRIPTION__</div>
-            <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__DESC__</textarea>
-            <div id="char-count" style="color:#fff;text-align:right;font-size:14px">__DESC_LEN__ / 300</div>
-            <label class="toggle-row"><span>__SUGGES_ENABLE_LABEL__</span><input type="checkbox" name="sugges_enabled" __SUGGES_CHECKED__></label>
-            <label class="toggle-row"><span>__SUGGES_PHOTO_ENABLE_LABEL__</span><input type="checkbox" name="sugges_photo_enabled" __PHOTO_CHECKED__></label>
-            <div style="color:#fff;font-size:18px;margin-bottom:-5px">__RULES_LABEL__</div>
-            <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="background:#a9a9a9;height:120px;padding:12px;font-size:16px">__RULES__</textarea>
-            <div id="rules-count" style="color:#fff;text-align:right;font-size:14px">__RULES_LEN__ / 1000</div>
-            <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
-            <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
-        </form>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div></div>
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
+        <div class="create-post-box" style="padding:30px; border-radius:20px;">
+            <h2 style="text-align:center; margin-bottom:20px;">__EDIT_PROFILE__</h2>
+            __ERR_BLOCK__
+            <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:15px">
+                <input type="hidden" name="csrf_token" value="__TOKEN__">
+                <input type="hidden" name="avatar_data" id="avatar-data" value="">
+                <div style="display:flex; justify-content:center;">__AVATAR_HTML__</div>
+                <input type="file" id="avatar-file-input" accept="image/*" onchange="handleAvatarChange(this)" style="display:none;">
+                <div style="color:#666;font-size:15px;font-weight:bold;">__USERNAME_LABEL__</div>
+                <input type="text" name="username" value="__USERNAME__" required maxlength="60">
+                <div style="color:#666;font-size:15px;font-weight:bold;">__DESCRIPTION__</div>
+                <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="height:100px;">__DESC__</textarea>
+                <div id="char-count" style="color:#888;text-align:right;font-size:13px; margin-top:-10px;">__DESC_LEN__ / 300</div>
+                <label class="captcha-container" style="justify-content:space-between; cursor:pointer;"><span>__SUGGES_ENABLE_LABEL__</span><input type="checkbox" name="sugges_enabled" __SUGGES_CHECKED__></label>
+                <label class="captcha-container" style="justify-content:space-between; cursor:pointer;"><span>__SUGGES_PHOTO_ENABLE_LABEL__</span><input type="checkbox" name="sugges_photo_enabled" __PHOTO_CHECKED__></label>
+                <div style="color:#666;font-size:15px;font-weight:bold;">__RULES_LABEL__</div>
+                <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="height:100px;">__RULES__</textarea>
+                <div id="rules-count" style="color:#888;text-align:right;font-size:13px; margin-top:-10px;">__RULES_LEN__ / 1000</div>
+                <button type="submit" style="background:#4da6ff; margin-top:10px;">__SAVE_CHANGES__</button>
+                <a href="/cabinet" class="btn" style="background:#333;">__CANCEL__</a>
+            </form>
+            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+        </div>
+    </div></div>
     </div>
     __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
@@ -1668,9 +1716,9 @@ def public_html(nickname, user, records, lang, token, viewer):
     desc = esc(user.get('description'))
     avatar = sanitize_url(user.get('avatar_data', ''))
     avatar_html = _avatar_html(avatar)
-    db = f"<div class='info-card'><b>{t('description', lang)}:</b><br>{desc}</div>" if desc else ""
+    db = f"<div class='info-card'><b>{t('description', lang)}</b>{desc}</div>" if desc else ""
     safe_nick_url = quote(nickname, safe='')
-    sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;margin-top:10px;'>{t('suggestions_btn', lang)}</a>"
     og_title = f"{nickname} — Solid"
     og_desc = desc or (f"Профиль {nickname}" if lang == "ru" else f"Profile {nickname}")
     og = og_tags(og_title, og_desc, f"/{safe_nick_url}", image=avatar, lang=lang)
@@ -1683,13 +1731,13 @@ def public_html(nickname, user, records, lang, token, viewer):
     <div class="dashboard-container"><div class="sidebar">
         <h2>__PROFILE__</h2>
         __AVATAR__
-        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br>__NICKNAME__</div>__DB__
-        <div class="info-card"><b>__TOTAL_POSTS__:</b><br>__POST_COUNT__</div>
+        <div class="info-card"><b>__USERNAME_LABEL__</b>__USERNAME__</div>
+        <div class="info-card"><b>__NICKNAME_LABEL__</b>__NICKNAME__</div>__DB__
+        <div class="info-card"><b>__TOTAL_POSTS__</b>__POST_COUNT__</div>
         __SUGG_BTN__
         <div class="lang-switch"><a href="/set_lang/ru?next=/__NICK_URL__" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-        <a href="/" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
-    </div><div class="main-content"><div class="posts-area" style="min-height:500px"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>
+        <a href="/cabinet" class="btn" style="margin-top:20px; background:#333;">__BACK_HOME__</a>
+    </div><div class="main-content"><div class="posts-area"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>
     </div>
     __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
@@ -1702,7 +1750,7 @@ def record_page_html(nickname, user, record, lang, token, viewer):
     avatar = sanitize_url(user.get('avatar_data', ''))
     avatar_html = _avatar_html(avatar)
     safe_nick_url = quote(nickname, safe='')
-    sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;color:white;margin-top:5px;'>{t('suggestions_btn', lang)}</a>"
+    sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;margin-top:10px;'>{t('suggestions_btn', lang)}</a>"
     raw_content = record.get('content', '') or ''
     snippet = strip_html(raw_content)[:150] + ('...' if len(raw_content) > 150 else '')
     og_title = f"Запись от {nickname} — Solid" if lang == "ru" else f"Record by {nickname} — Solid"
@@ -1718,10 +1766,10 @@ def record_page_html(nickname, user, record, lang, token, viewer):
     <div class="dashboard-container"><div class="sidebar">
         <h2>__PROFILE__</h2>
         __AVATAR__
-        <div class="info-card"><b>__NICKNAME_LABEL__:</b><br><a href="/__NICK_URL__">__NICKNAME__</a></div>
-        <div class="info-card"><b>__USERNAME_LABEL__:</b><br>__USERNAME__</div>
+        <div class="info-card"><b>__NICKNAME_LABEL__</b><a href="/__NICK_URL__">__NICKNAME__</a></div>
+        <div class="info-card"><b>__USERNAME_LABEL__</b>__USERNAME__</div>
         __SUGG_BTN__
-        <a href="/__NICK_URL__" class="btn" style="margin-top:auto;background:#a9a9a9">__BACK_HOME__</a>
+        <a href="/__NICK_URL__" class="btn" style="margin-top:20px; background:#333;">__BACK_HOME__</a>
     </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>__RECORDS_HTML__</div></div></div>
     </div>
     __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
@@ -1731,11 +1779,21 @@ def record_page_html(nickname, user, record, lang, token, viewer):
     return s
 
 def bugreport_html(username, reports, lang, token, show_nav=False):
-    rh = "<div class='post-item'>Заявок пока нет...</div>" if not reports else ""
+    rh = "<div class='post-item' style='text-align:center; padding:30px; color:#888;'>Заявок пока нет...</div>" if not reports else ""
     for x in reports:
         date_str = format_date(esc(x.get('created_at')))
         iso_str = esc(x.get('created_at', ''))
-        rh += f"<div class='post-item' style='border-left-color:transparent'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;'><b>{t('bugreport_title',lang)}</b><span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span></div><div class='post-content' style='text-align:left;'>{esc(x.get('content'))}</div><div class='post-date' data-iso='{iso_str}'>{date_str}</div></div>"
+        rh += f"""
+        <div class='post-item' style='margin-bottom:15px;'>
+            <div class='post-header'>
+                <span class='post-author'>{t('bugreport_title',lang)}</span>
+                <span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span>
+            </div>
+            <div class='post-content'>{esc(x.get('content'))}</div>
+            <div class='post-footer' style='justify-content:flex-start;'>
+                <span class='post-date' data-iso='{iso_str}'>{date_str}</span>
+            </div>
+        </div>"""
     og_title = "Баг-репорт — Solid" if lang == "ru" else "Bug Report — Solid"
     og = og_tags(og_title, "Solid", "/bugreport", lang=lang)
     s = """
@@ -1746,16 +1804,16 @@ def bugreport_html(username, reports, lang, token, show_nav=False):
     <div class="page-content">
     <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
     <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="create-post-box"><h2 style="color:#fff;text-align:center;margin:10px 0">__BUGREPORT_TITLE__</h2>
-            <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:5px">
+        <div class="create-post-box"><h2 style="text-align:center;margin-bottom:20px;">__BUGREPORT_TITLE__</h2>
+            <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:15px">
                 <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="text" name="name" value="__USERNAME__" placeholder="__BUGREPORT_NAME__" required maxlength="60" style="background:#a9a9a9;padding:12px;margin-bottom:5px">
-                <textarea name="content" placeholder="__BUGREPORT_DESC__" required maxlength="5000" style="background:#a9a9a9;height:150px;padding:12px;margin-bottom:5px"></textarea>
-                <button type="submit" style="background:#f1c40f;color:#000">__BUGREPORT_SEND__</button>
+                <input type="text" name="name" value="__USERNAME__" placeholder="__BUGREPORT_NAME__" required maxlength="60">
+                <textarea name="content" placeholder="__BUGREPORT_DESC__" required maxlength="5000" style="height:150px;"></textarea>
+                <button type="submit" style="background:#f1c40f; color:#111;">__BUGREPORT_SEND__</button>
             </form>
         </div>
-        <div class="posts-area"><h2>__BUGREPORT_MY__</h2>__REPORTS_HTML__</div>
-        <a href="/cabinet" class="btn" style="background:#a9a9a9;margin-top:10px">__CANCEL__</a>
+        <div class="posts-area" style="margin-top:20px;"><h2>__BUGREPORT_MY__</h2>__REPORTS_HTML__</div>
+        <a href="/cabinet" class="btn" style="background:#333;margin-top:15px">__CANCEL__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
     </div>
@@ -1775,10 +1833,10 @@ def privacy_html(lang, token):
     <title>__PRIVACY_TITLE__ — Solid</title>__OG__
     __CSS__</head><body>
     <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="posts-area" style="padding:20px">
-        <h2 style="color:#fff;text-align:center;margin-bottom:20px">__PRIVACY_TITLE__</h2>
-        <div class="privacy-content">__PRIVACY_TEXT__</div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:20px">__BACK_HOME__</a>
+    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="create-post-box" style="padding:30px; border-radius:20px;">
+        <h2 style="text-align:center;margin-bottom:20px">__PRIVACY_TITLE__</h2>
+        <div class="post-content" style="text-align:left; font-size:16px; line-height:1.7;">__PRIVACY_TEXT__</div>
+        <a href="/" class="btn" style="background:#333;margin-top:20px">__BACK_HOME__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>
     </div>__FOOTER__</body></html>
@@ -1798,12 +1856,12 @@ def settings_html(nickname, user, lang, token):
     __CSS____JS__</head><body class="show-footer">
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
-        <div class="posts-area" style="padding:20px;">
-            <h2 style="color:#fff;text-align:center;margin-bottom:20px">__SETTINGS_TITLE__</h2>
+        <div class="posts-area" style="padding:0;">
+            <h2 style="color:#111;text-align:center;margin-bottom:20px">__SETTINGS_TITLE__</h2>
 
             <div class="settings-card">
                 <h3>__SETTINGS_LANGUAGE__</h3>
-                <div class="lang-switch">
+                <div class="lang-switch" style="justify-content:flex-start;">
                     <a href="/set_lang/ru?next=/settings" class="btn lang-btn __RU_ACTIVE__">RU</a>
                     <a href="/set_lang/en?next=/settings" class="btn lang-btn __EN_ACTIVE__">EN</a>
                 </div>
@@ -1813,7 +1871,7 @@ def settings_html(nickname, user, lang, token):
                 <h3>__SETTINGS_ABOUT__</h3>
                 <p class="settings-about-text">__SETTINGS_ABOUT_TEXT__</p>
                 <p class="settings-version">__SETTINGS_VERSION__: v__APP_VERSION__ (__SERVER_START_DATE__)</p>
-                <button type="button" onclick="installPWA()" id="pwa-install-btn" style="display:none; background:#4da6ff; color:#fff; border-radius:8px; padding:10px; margin-top:10px;">__PWA_INSTALL__</button>
+                <button type="button" onclick="installPWA()" id="pwa-install-btn" style="display:none; background:#4da6ff; color:#fff; border-radius:10px; padding:14px; margin-top:15px;">__PWA_INSTALL__</button>
             </div>
 
             <div class="settings-card">
@@ -1850,21 +1908,21 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
     __CSS____JS__</head><body>
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px">
-        <div class="posts-area" style="padding:20px;min-height:400px;">
-            <h2>__STATS_TITLE__</h2>
-            <div class="stats-card"><b>__STATS_USERS__</b><span class="stats-value">__USERS_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_POSTS__</b><span class="stats-value">__POSTS_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_SUGGES__</b><span class="stats-value">__SUGG_COUNT__</span></div>
-            <div class="stats-card"><b>__STATS_STARTED__</b><span style="font-size:15px;">__STARTED__</span></div>
-            <div class="stats-card"><b>__STATS_LAST_UPDATE__</b><span style="font-size:15px;" data-iso="__LAST_UPDATE_ISO__">__LAST_UPDATE__</span></div>
-            <div class="stats-card"><b>__STATS_UPTIME__</b><span class="stats-value" style="color:#2a5db0;">__UPTIME__</span></div>
-            <div class="contacts-box">
-                <b>__STATS_CONTACTS__</b>
-                <div>__STATS_CONTACTS_DESC__</div>
+        <div class="create-post-box" style="padding:30px; border-radius:20px;">
+            <h2 style="text-align:center; margin-bottom:20px;">__STATS_TITLE__</h2>
+            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_USERS__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__USERS_COUNT__</span></div>
+            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_POSTS__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__POSTS_COUNT__</span></div>
+            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_SUGGES__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__SUGG_COUNT__</span></div>
+            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_STARTED__</b><span style="font-size:14px;">__STARTED__</span></div>
+            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_LAST_UPDATE__</b><span style="font-size:14px;" data-iso="__LAST_UPDATE_ISO__">__LAST_UPDATE__</span></div>
+            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_UPTIME__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__UPTIME__</span></div>
+            <div class="info-card" style="background:#222; color:#fff; border-color:#222;">
+                <b style="color:#aaa;">__STATS_CONTACTS__</b>
+                <div style="margin-bottom:10px;">__STATS_CONTACTS_DESC__</div>
                 __CONTACTS_HTML__
             </div>
         </div>
-        <a href="/" class="btn" style="background:#a9a9a9;margin-top:15px;">__BACK__</a>
+        <a href="/" class="btn" style="background:#333;margin-top:15px;">__BACK__</a>
         <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div>
     </div>
@@ -1903,6 +1961,9 @@ def docs_html(lang: str, token: str) -> str:
         {og}
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/themes/dark.css">
         <style>
+            @import url('https://fonts.cdnfonts.com/css/herokid');
+            @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap');
+            
             @font-face {{
                 font-family: 'RuFont';
                 src: url('/static/ru_font.ttf') format('truetype');
@@ -1910,8 +1971,12 @@ def docs_html(lang: str, token: str) -> str:
                 font-display: swap;
             }}
             body {{
-                font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;
+                font-family: 'Source Sans 3', 'RuFont', Arial, sans-serif;
                 background: #0d1117;
+            }}
+            h1, h2, h3, .app-name {{
+                font-family: 'Herokid', 'Impact', sans-serif !important;
+                letter-spacing: 0.5px;
             }}
             :root {{ --theme-color: #4da6ff; }}
             .sidebar {{ background: #0d1117; border-right: 1px solid #21262d; }}
