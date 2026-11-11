@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, Depends, HTTPException, status, File, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from passlib.context import CryptContext
 import uuid
 import base64
@@ -15,7 +15,6 @@ users_db = {}
 sessions = {} 
 posts_db = [] 
 
-# Дефолтный пользователь
 admin_pwd = pwd_context.hash("admin")
 users_db["admin"] = {
     "username": "admin",
@@ -118,13 +117,43 @@ async def image_to_base64(file: UploadFile):
     return f"data:{file.content_type};base64,{base64.b64encode(contents).decode('utf-8')}"
 
 # ==========================================
+# PWA И СТАТИКА
+# ==========================================
+@app.get("/manifest.json")
+async def get_manifest():
+    return JSONResponse({
+        "name": "sol-id",
+        "short_name": "sol-id",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0a0a0a",
+        "theme_color": "#3b82f6",
+        "icons": [{"src": SVG_FAVICON, "sizes": "192x192", "type": "image/svg+xml"}]
+    })
+
+@app.get("/sw.js")
+async def get_sw():
+    sw_code = """
+    self.addEventListener('install', (e) => {
+        self.skipWaiting();
+    });
+    self.addEventListener('fetch', (e) => {
+        // Cache-first strategy for static assets could go here
+        e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    });
+    """
+    return Response(content=sw_code, media_type="application/javascript")
+
+# ==========================================
 # CSS И JS
 # ==========================================
 CSS_STYLES = """
 <link rel="icon" type="image/svg+xml" href=\"""" + SVG_FAVICON + """\">
+<link rel="manifest" href="/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <style>
     :root {
         --bg-color: #0a0a0a; --card-bg: #151515; --text-main: #f8fafc; --text-muted: #94a3b8;
@@ -140,7 +169,7 @@ CSS_STYLES = """
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Manrope', sans-serif; user-select: none; }
     input, textarea, .selectable { user-select: text; }
     
-    body { background-color: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; min-height: 100vh; font-size: 16px; }
+    body { background-color: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; min-height: 100vh; font-size: 16px; overflow: hidden; }
     a { color: var(--accent-color); text-decoration: none; }
     
     /* Layout */
@@ -203,7 +232,7 @@ CSS_STYLES = """
     .app-layout.sidebar-collapsed .sidebar svg { margin: 0; }
     
     /* Main Content */
-    .main-content { grid-column: 2; grid-row: 2; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; }
+    .main-content { grid-column: 2; grid-row: 2; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; height: 100%; }
     
     /* Auth Forms */
     .auth-container { display: flex; justify-content: center; align-items: center; flex: 1; }
@@ -222,18 +251,25 @@ CSS_STYLES = """
     .profile-details h1 { font-size: 32px; margin-bottom: 5px; font-weight: 700; }
     .profile-details p { color: var(--text-muted); font-size: 16px; }
     
-    /* Post View */
-    .post-view { display: flex; gap: 25px; background: var(--card-bg); border-radius: 16px; padding: 25px; border: 1px solid var(--border-color); margin-bottom: 20px; }
-    .post-media { flex: 2; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: zoom-in; min-height: 300px; }
-    .post-media img { max-width: 100%; max-height: 80vh; object-fit: contain; }
-    .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; }
+    /* Post View - SCROLLABLE COMMENTS */
+    .post-view { 
+        display: flex; gap: 25px; background: var(--card-bg); border-radius: 16px; padding: 25px; border: 1px solid var(--border-color); 
+        height: calc(100vh - 150px); /* Fixed height to force inner scroll */
+        overflow: hidden;
+    }
+    .post-media { flex: 2; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: zoom-in; height: 100%; }
+    .post-media img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    
+    .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; height: 100%; }
+    
+    .post-top-info { flex-shrink: 0; }
     .post-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
     .post-author img { width: 48px; height: 48px; border-radius: 50% !important; }
     .post-title { font-size: 26px; font-weight: 700; margin-bottom: 15px; }
-    .post-desc { color: #ccc; font-size: 16px; margin-bottom: 25px; white-space: pre-wrap; line-height: 1.5; }
+    .post-desc { color: #ccc; font-size: 16px; margin-bottom: 25px; white-space: pre-wrap; line-height: 1.5; max-height: 200px; overflow-y: auto; }
     
     /* Actions Row */
-    .actions-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
+    .actions-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; flex-shrink: 0; }
     .vote-controls { display: flex; align-items: center; gap: 12px; background: var(--bg-color); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); }
     .vote-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: color 0.2s; }
     .vote-btn:hover { background: #333; }
@@ -243,13 +279,33 @@ CSS_STYLES = """
     
     .action-btn { background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; text-decoration: none; transition: background 0.2s; }
     .action-btn:hover { background: #333; color: #fff; }
+
+    /* Comments Area Scrolling */
+    .comments-section { 
+        flex: 1; 
+        overflow-y: auto; 
+        min-height: 0; /* Crucial for flexbox scroll */
+        border-top: 1px solid var(--border-color); 
+        padding-top: 20px; 
+    }
     
-    /* Feed Grid */
+    /* Feed Grid - FIXED IMAGE RATIO */
     .feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
     .feed-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.2s; position: relative; }
     .feed-card:hover { transform: translateY(-3px); border-color: #333; }
-    .feed-card-img-container { width: 100%; height: 200px; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    
+    /* Static Image Area */
+    .feed-card-img-container { 
+        width: 100%; 
+        aspect-ratio: 16 / 9; /* Fixed aspect ratio */
+        background: #000; 
+        overflow: hidden; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+    }
     .feed-card-img-container img { width: 100%; height: 100%; object-fit: cover; }
+    
     .feed-card-info { padding: 15px; flex: 1; display: flex; flex-direction: column; }
     .feed-card-title { font-weight: 700; font-size: 18px; margin-bottom: 10px; line-height: 1.3; }
     .feed-card-author { font-size: 14px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin-top: auto; }
@@ -281,7 +337,7 @@ CSS_STYLES = """
     .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 12px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 12px); }
     .bottom-nav a { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); width: 60px; text-decoration: none; }
     .bottom-nav a.active { color: var(--accent-color); pointer-events: none; }
-    .bottom-nav a svg { width: 32px; height: 32px; } /* Increased size */
+    .bottom-nav a svg { width: 32px; height: 32px; }
     
     /* Mobile Profile Menu */
     .mobile-profile-menu { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card-bg); z-index: 1000; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; transform: translateY(100%); transition: transform 0.3s ease-in-out; flex-direction: column; gap: 15px; padding-bottom: env(safe-area-inset-bottom, 20px); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
@@ -322,13 +378,13 @@ CSS_STYLES = """
         .mobile-search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
 
         /* Reordering Post View on Mobile */
-        .post-view { flex-direction: column; padding: 15px; gap: 15px; }
+        .post-view { flex-direction: column; padding: 15px; gap: 15px; height: auto; max-height: none; }
         .post-details { display: contents; } /* Flattens children into .post-view */
         
         .post-author { order: 1; margin-bottom: 0; }
         .post-media { order: 2; width: 100%; max-height: 50vh; min-height: 200px; }
         .post-title { order: 3; margin-bottom: 0; }
-        .post-desc { order: 4; margin-bottom: 0; }
+        .post-desc { order: 4; margin-bottom: 0; max-height: none; }
         .actions-row { order: 5; margin-bottom: 0; }
         .comments-section { order: 6; width: 100%; border-top: 1px solid var(--border-color); padding-top: 15px; }
 
@@ -341,10 +397,24 @@ CSS_STYLES = """
     }
 </style>
 <script>
-    // Sidebar Toggle
+    // --- SIDEBAR STATE PERSISTENCE ---
     function toggleSidebar() {
-        document.querySelector('.app-layout').classList.toggle('sidebar-collapsed');
+        const layout = document.querySelector('.app-layout');
+        layout.classList.toggle('sidebar-collapsed');
+        const isCollapsed = layout.classList.contains('sidebar-collapsed');
+        localStorage.setItem('sidebar_collapsed', isCollapsed);
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if(localStorage.getItem('sidebar_collapsed') === 'true') {
+            document.querySelector('.app-layout').classList.add('sidebar-collapsed');
+        }
+        
+        // Register PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed'));
+        }
+    });
 
     // Dropdown Menu Desktop
     function toggleDropdown() {
@@ -421,9 +491,7 @@ CSS_STYLES = """
     let filesList = [];
     
     function handleFiles(input) {
-        // Prevent double triggering if it's not the file input
         if (!input.files) return;
-
         const newFiles = Array.from(input.files);
         for (let file of newFiles) {
             if (filesList.length < 3) {
@@ -433,15 +501,13 @@ CSS_STYLES = """
                 break;
             }
         }
-        
-        // Reset the input so the same file can be selected again if removed
         input.value = ''; 
         updateInputAndRender();
     }
 
     function removeFile(index, event) {
         if(event) {
-            event.stopPropagation(); // Prevent clicking the dropzone
+            event.stopPropagation(); 
             event.preventDefault();
         }
         filesList.splice(index, 1);
@@ -470,7 +536,7 @@ CSS_STYLES = """
                 reader.onload = function(e) {
                     let div = document.createElement('div');
                     div.className = 'file-preview';
-                    div.onclick = (e) => e.stopPropagation(); // Don't trigger file dialog
+                    div.onclick = (e) => e.stopPropagation();
                     div.innerHTML = `
                         <img src="${e.target.result}">
                         <div style="flex:1; overflow:hidden;">
@@ -712,11 +778,12 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
         <title>sol-id</title>
         {CSS_STYLES}
     </head>
-    <body>
+    <body hx-boost="true">
         <div class="app-layout">
             <div class="topbar">
                 <div class="topbar-left">
-                    <div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>
+                    <!-- HIDE HAMBURGER IF NOT LOGGED IN -->
+                    {f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}
                     <a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a>
                 </div>
                 
@@ -963,11 +1030,9 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     user = users_db.get(username)
     
     if user:
-        # User exists, check password
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login"))
     else:
-        # User does not exist, create if display_name is provided
         if not display_name.strip():
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login"))
         
@@ -1031,7 +1096,6 @@ async def create_post_page(request: Request):
                 <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div>
             </div>
             <div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div>
-            <!-- Hidden file input -->
             <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()">
         </div>
 
@@ -1232,7 +1296,7 @@ async def view_post(request: Request, post_id: str):
     ''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
-        media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:70vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
+        media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
         if len(post['images']) > 1:
             media_html += f"""
             <div style="position:absolute; bottom:20px; left:0; width:100%; display:flex; justify-content:center; gap:15px;">
@@ -1299,31 +1363,33 @@ async def view_post(request: Request, post_id: str):
             {media_html}
         </div>
         <div class="post-details">
-            <div class="post-author">
-                <a href="/@{post['author']}"><img src="{ava}"></a>
-                <div>
-                    <a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{author['display_name'] if author else post['author']}</a>
-                    <div style="font-size:14px; color:var(--text-muted);">@{post['author']}</div>
+            <div class="post-top-info">
+                <div class="post-author">
+                    <a href="/@{post['author']}"><img src="{ava}"></a>
+                    <div>
+                        <a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{author['display_name'] if author else post['author']}</a>
+                        <div style="font-size:14px; color:var(--text-muted);">@{post['author']}</div>
+                    </div>
+                </div>
+                <div class="post-title selectable">{post['title']}</div>
+                <div class="post-desc selectable">{post['content']}</div>
+                
+                <div class="actions-row">
+                    <div class="vote-controls">
+                        <button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button>
+                        <span class="vote-count" id="vote-count">{score}</span>
+                        <button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button>
+                    </div>
+                    
+                    <button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{'color:var(--accent-color); border-color:var(--accent-color);' if is_saved else ''}" title="{t('save_post', lang)}">{save_icon}</button>
+                    
+                    <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
+                    
+                    {delete_btn}
                 </div>
             </div>
-            <div class="post-title selectable">{post['title']}</div>
-            <div class="post-desc selectable">{post['content']}</div>
             
-            <div class="actions-row">
-                <div class="vote-controls">
-                    <button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button>
-                    <span class="vote-count" id="vote-count">{score}</span>
-                    <button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button>
-                </div>
-                
-                <button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{'color:var(--accent-color); border-color:var(--accent-color);' if is_saved else ''}" title="{t('save_post', lang)}">{save_icon}</button>
-                
-                <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
-                
-                {delete_btn}
-            </div>
-            
-            <div class="comments-section" style="flex:1; border-top:1px solid var(--border-color); padding-top:20px; overflow-y:auto;">
+            <div class="comments-section">
                 <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>
                 {comments_input_html}
                 <div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
