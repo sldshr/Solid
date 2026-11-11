@@ -201,11 +201,11 @@ a{color:var(--accent-color);text-decoration:none;}
 .app-layout.sidebar-collapsed .sidebar a span{display:none;}
 
 /* Основной контент */
-.main-content{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);}
+.main-content{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}
 .auth-container{display:flex;justify-content:center;align-items:center;flex:1;}
 .auth-form{background-color:var(--card-bg);padding:40px;border-radius:16px;width:100%;max-width:450px;border:1px solid var(--border-color);}
 .auth-form h2{text-align:center;margin-bottom:25px;font-weight:700;font-size:24px;}
-.input-group{margin-bottom:15px;position:relative;}
+.input-group{margin-bottom:15px;position:relative;width:100%;}
 .input-group input,.input-group select,.input-group textarea{width:100%;padding:14px 16px;background-color:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;color:white;font-size:16px;outline:none;}
 .input-group input:focus,.input-group select:focus,.input-group textarea:focus{border-color:var(--accent-color);}
 .input-group textarea{resize:none;max-height:250px;overflow-y:auto;}
@@ -213,13 +213,13 @@ a{color:var(--accent-color);text-decoration:none;}
 .error{color:var(--danger-color);text-align:center;margin-bottom:15px;font-size:15px;}
 
 /* Профиль */
-.profile-header{margin-bottom:30px;display:flex;align-items:center;gap:25px;position:relative;}
+.profile-header{margin-bottom:30px;display:flex;align-items:center;gap:25px;position:relative;width:100%;}
 .profile-avatar{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;}
 .profile-details h1{font-size:32px;margin-bottom:5px;font-weight:700;line-height:1.2;}
 .profile-details p{color:var(--text-muted);font-size:16px;}
 
 /* Пост */
-.post-view{display:flex;gap:25px;overflow:hidden;background:transparent;align-items:flex-start;}
+.post-view{display:flex;gap:25px;overflow:hidden;background:transparent;align-items:flex-start;width:100%;}
 .post-media{flex:2;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:300px;}
 .post-media img{max-width:100%;max-height:75vh;object-fit:contain;}
 .post-details{flex:1;min-width:320px;display:flex;flex-direction:column;padding:0;}
@@ -245,8 +245,8 @@ form .action-btn{height:100%;width:100%;}
 .comments-section{flex:1;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}
 
 /* Лента */
-.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;}
-.feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;transition:border-color .2s;}
+.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;width:100%;}
+.feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;transition:border-color .2s;width:100%;}
 .feed-card:hover{border-color:#444;}
 .feed-card-img-container{width:100%;height:240px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
 .feed-card-img-container img{width:100%;height:100%;object-fit:cover;}
@@ -261,11 +261,11 @@ form .action-btn{height:100%;width:100%;}
 
 /* Создание поста */
 .create-layout{display:flex;gap:30px;width:100%;}
-.dropzone{flex:2;border:2px dashed var(--border-color);border-radius:16px;padding:50px;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;cursor:pointer;}
+.dropzone{flex:2;border:2px dashed var(--border-color);border-radius:16px;padding:50px;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;cursor:pointer;width:100%;}
 .dropzone.dragover{border-color:var(--accent-color);background:rgba(59,130,246,.05);}
 .file-preview{display:flex;align-items:center;gap:15px;background:var(--bg-color);padding:10px;border-radius:8px;border:1px solid var(--border-color);margin-top:15px;width:100%;text-align:left;cursor:default;}
 .file-preview img{width:50px;height:50px;object-fit:cover;border-radius:6px;}
-.create-sidebar{flex:1;background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);display:flex;flex-direction:column;gap:15px;}
+.create-sidebar{flex:1;background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);display:flex;flex-direction:column;gap:15px;width:100%;}
 .switch{position:relative;display:inline-block;width:50px;height:28px;}
 .switch input{opacity:0;width:0;height:0;}
 .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:var(--border-color);transition:.4s;border-radius:34px;}
@@ -305,7 +305,7 @@ input:checked+.slider:before{transform:translateX(22px);}
 .avatar-edit-container img{width:100%;height:100%;object-fit:cover;}
 .avatar-edit-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;opacity:0;transition:opacity .2s;}
 .avatar-edit-container:hover .avatar-edit-overlay{opacity:1;}
-.tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border-color);padding-bottom:10px;}
+.tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border-color);padding-bottom:10px;width:100%;}
 .tab-btn{background:none;border:none;color:var(--text-muted);font-size:16px;font-weight:500;cursor:pointer;padding:10px 15px;border-radius:8px;}
 .tab-btn.active{color:var(--accent-color);background:var(--card-bg);}
 
@@ -313,6 +313,7 @@ input:checked+.slider:before{transform:translateX(22px);}
 .desktop-only{display:flex!important;}
 
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}}
+
 @media(max-width:900px){
     .app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}
     .sidebar{display:none;}
@@ -328,38 +329,43 @@ input:checked+.slider:before{transform:translateX(22px);}
     .desktop-only{display:none!important;}
     
     /* Основной контент на мобилке */
-    .main-content{grid-column:1;padding:10px;padding-bottom:80px;}
+    .main-content{grid-column:1;padding:0;padding-bottom:80px;width:100%;max-width:100%;overflow-x:hidden;}
     .bottom-nav{display:flex;}
     
-    /* Полноэкранные карточки постов (от края до края) */
-    .feed-grid { grid-template-columns: 1fr; gap: 15px; }
-    .feed-card { border-radius: 0; border-left: none; border-right: none; border-top: none; border-bottom: 1px solid var(--border-color); background: transparent; }
-    .feed-card-img-container { height: auto; aspect-ratio: 4/3; }
-    .feed-card-info { padding: 15px 10px; }
+    /* Карточки постов от края до края (и в ленте, и в профиле) */
+    .feed-grid{display:flex;flex-direction:column;gap:15px;width:100%;margin:0;padding:0;}
+    .feed-card{border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;width:100%;}
+    .feed-card-img-container{height:auto;aspect-ratio:4/3;width:100%;}
+    .feed-card-info{padding:15px;width:100%;}
     
-    .post-view { display: flex; flex-direction: column; height: auto; overflow: visible; gap: 15px; }
-    .post-media { flex: none; width: 100%; height: auto; max-height: 60vh; min-height: 250px; border-radius: 12px; margin-bottom: 0; }
-    .post-media img { width: 100%; max-height: 60vh; object-fit: contain; }
-    .post-details { flex: none; width: 100%; min-width: 0; display: flex; flex-direction: column; }
-    .actions-row { margin-top: 15px; margin-bottom: 15px; padding: 0; }
-    .comments-section { flex: none; width: 100%; padding: 20px 0; border-top: 1px solid var(--border-color); overflow: visible; }
-    .toast { top: 20px; left: 50%; right: auto; transform: translateX(-50%); }
-    .toast.show { transform: translateX(-50%) translateY(10px); }
+    /* Настройки (фикс сжатия) */
+    .editor-card{width:100%!important;max-width:100%!important;padding:15px!important;margin:0!important;border-radius:0;border-left:none;border-right:none;}
+    .tabs{padding:15px;margin-bottom:0;border-bottom:none;}
+    .input-group{width:100%!important;}
+    .btn-primary{width:100%!important;}
     
-    /* Фикс UI создания поста и настроек (по скриншотам) */
-    .create-layout { flex-direction: column; width: 100%; gap: 15px; }
-    .dropzone { width: 100%; max-width: 100%; padding: 30px 15px; min-height: 250px; }
-    .create-sidebar { width: 100%; max-width: 100%; padding: 20px; }
+    /* Создание поста (фикс сжатия) */
+    .create-layout{flex-direction:column;width:100%!important;gap:15px;padding:15px;}
+    .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:250px!important;}
+    .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
     
-    .editor-card { width: 100%; padding: 20px; }
-    .input-group { width: 100%; }
-    .btn-primary { width: 100%; }
+    /* Просмотр поста */
+    .post-view{display:flex;flex-direction:column;height:auto;overflow:visible;gap:15px;width:100%;padding:15px;}
+    .post-media{flex:none;width:100%;height:auto;max-height:60vh;min-height:250px;border-radius:12px;margin-bottom:0;}
+    .post-media img{width:100%;max-height:60vh;object-fit:contain;}
+    .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;}
+    .actions-row{margin-top:15px;margin-bottom:15px;padding:0;}
+    .comments-section{flex:none;width:100%;padding:20px 0;border-top:1px solid var(--border-color);overflow:visible;}
+    .toast{top:20px;left:50%;right:auto;transform:translateX(-50%);}
+    .toast.show{transform:translateX(-50%) translateY(10px);}
     
-    /* Фикс кнопки редактирования профиля на телефоне */
-    .profile-header { flex-direction: column; text-align: center; gap: 15px; margin-bottom: 20px; }
-    .profile-avatar { width: 100px; height: 100px; }
-    .profile-details h1 { font-size: 24px; }
-    .profile-header > div:last-child { position: absolute; top: 0; right: 0; margin: 0!important; }
+    /* Профиль */
+    .profile-header{flex-direction:column;text-align:center;gap:15px;margin-bottom:20px;padding:30px 15px 0 15px;width:100%;}
+    .profile-avatar{width:100px;height:100px;margin:0 auto;}
+    .profile-details h1{font-size:24px;}
+    .profile-header > div:last-child{position:absolute;top:15px;right:15px;margin:0!important;}
+    .profile-tabs{padding:0 15px;}
+    .auth-form{width:calc(100% - 30px);padding:20px;margin:15px;}
 }
 </style>
 """
@@ -494,37 +500,30 @@ function updateInputAndRender(){
     }
 }
 
-// ВСТАВКА ИЗ БУФЕРА (Исправлено от дублирования)
+// ИСПРАВЛЕННАЯ ВСТАВКА ИЗ БУФЕРА (берет только ПЕРВУЮ картинку)
 document.addEventListener('paste', async function(e) {
     if (!document.getElementById('file-input')) return; 
 
     var items = (e.clipboardData || e.originalEvent.clipboardData).items;
-    var filesToPaste = [];
+    var imageFile = null;
     
-    // Строго фильтруем только реальные файлы-картинки
-    for (var index in items) {
-        var item = items[index];
-        if (item.kind === 'file' && item.type.includes('image/')) {
-            var blob = item.getAsFile();
-            if (blob) {
-                filesToPaste.push(new File([blob], "pasted_" + Date.now() + ".png", { type: blob.type }));
-            }
+    for (var index = 0; index < items.length; index++) {
+        if (items[index].kind === 'file' && items[index].type.includes('image/')) {
+            imageFile = items[index].getAsFile();
+            break; // Берем только первую картинку!
         }
     }
 
-    // Добавляем только по одному (или сколько поместится), чтобы избежать спама
-    if (filesToPaste.length > 0) {
+    if (imageFile) {
         e.preventDefault();
-        for (var i = 0; i < filesToPaste.length; i++) {
-            if (filesList.length < 3) {
-                var compressed = await compressImage(filesToPaste[i]);
-                filesList.push(compressed);
-            } else {
-                showToast(window.TRANSLATIONS.max_files);
-                break;
-            }
+        if (filesList.length < 3) {
+            var file = new File([imageFile], "pasted_" + Date.now() + ".png", { type: imageFile.type });
+            var compressed = await compressImage(file);
+            filesList.push(compressed);
+            updateInputAndRender();
+        } else {
+            showToast(window.TRANSLATIONS.max_files);
         }
-        updateInputAndRender();
     }
 });
 
@@ -778,7 +777,7 @@ async def search_posts(request: Request, q: str = ""):
     q_lower = q.lower().strip()
     results = [p for p in posts_db if p.get('visibility') == 'feed' and (q_lower in p['title'].lower() or q_lower in p['content'].lower() or q_lower in p['author'].lower())] if q_lower else []
     if not results:
-        content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div>'
+        content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div></div>'
     else:
         cards = ""
         for post in results:
@@ -787,7 +786,7 @@ async def search_posts(request: Request, q: str = ""):
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             date_str = post.get('created_at', '')
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a>"""
-        content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div>'
+        content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div></div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
 
 @app.get("/", response_class=HTMLResponse)
@@ -826,7 +825,7 @@ async def saved_posts(request: Request):
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             date_str = post.get('created_at', '')
             cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a></div>"""
-        content = f'<h2 style="margin-bottom:25px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
+        content = f'<h2 style="margin-bottom:25px; padding:15px 15px 0 15px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "saved", t('saved', lang)))
 
 @app.get("/login", response_class=HTMLResponse)
@@ -873,7 +872,7 @@ async def settings_page(request: Request):
 
     content = f"""
     <div style="max-width: 800px; margin: 0 auto; width: 100%;">
-        <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">{t('settings', lang)}</h2>
+        <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px; padding: 15px 15px 0 15px;">{t('settings', lang)}</h2>
         <div class="tabs">
             <button class="tab-btn active" data-tab="profile" onclick="switchTab('profile')">{t('profile', lang)}</button>
             <button class="tab-btn" data-tab="language" onclick="switchTab('language')">{t('language', lang)}</button>
@@ -898,7 +897,7 @@ async def settings_page(request: Request):
                 </form>
             </div>
         </div>
-        <div id="tab-language" class="tab-content" style="display:none;">
+        <div id="tab-language" class="tab-content" style="display:none; padding: 0 15px;">
             <div style="background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color);">
                 <div style="display:flex; gap:10px;">
                     <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
@@ -939,7 +938,7 @@ async def create_post_page(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
-    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
+    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "write", t('new_post', lang)))
 
 @app.post("/write")
@@ -1073,7 +1072,7 @@ async def view_profile(request: Request, username: str):
     
     edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if current_user and current_user['username'] == username else ''
     
-    content = f"""<div class="profile-header"><img src="{ava}" class="profile-avatar"><div class="profile-details"><h1>{html.escape(profile_user['display_name'])}</h1><p>@{html.escape(username)}</p><p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p></div>{edit_btn}</div><div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;"><a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a></div><div class="feed-grid">{posts_html}</div>"""
+    content = f"""<div class="profile-header"><img src="{ava}" class="profile-avatar"><div class="profile-details"><h1>{html.escape(profile_user['display_name'])}</h1><p>@{html.escape(username)}</p><p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p></div>{edit_btn}</div><div class="profile-tabs" style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;"><a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a></div><div class="feed-grid">{posts_html}</div>"""
     return HTMLResponse(content=render_layout(content, current_user, request, "profile", f"@{username}"))
 
 @app.get("/{post_id}", response_class=HTMLResponse)
