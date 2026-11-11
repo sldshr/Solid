@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.28"
+APP_VERSION = "0.29"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -41,8 +41,9 @@ async def load_cache():
 deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
 POST_MAX_LEN = 5000
+# Теперь разрешаем кириллицу, пробелы, дефисы и подчеркивания
 VALID_NICK_RE = re.compile(r'^[a-zA-Z0-9_\-]{3,30}$')
-VALID_USER_RE = re.compile(r'^[a-zA-Z0-9_\- ]{1,60}$')
+VALID_USER_RE = re.compile(r'^[\w\s\-]{1,60}$', re.UNICODE)
 
 class _DBUnavailable:
     pass
@@ -313,10 +314,7 @@ async def manifest():
 async def sw():
     js = """
     const CACHE_NAME = 'solid-v3';
-    const STATIC_ASSETS = [
-        '/manifest.json',
-        '/static/ru_font.ttf'
-    ];
+    const STATIC_ASSETS = ['/manifest.json', '/static/ru_font.ttf'];
     self.addEventListener('install', (e) => {
         self.skipWaiting();
         e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {})));
@@ -356,8 +354,7 @@ async def sw():
         }
     });
     """
-    return Response(content=js, media_type="application/javascript",
-                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return Response(content=js, media_type="application/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/api/og")
 async def get_og(url: str):
@@ -2330,7 +2327,8 @@ async def bugreport(r: Request, setlang: str = None):
 
 @app.post("/bugreport", response_class=HTMLResponse)
 async def bugreport_submit(r: Request, res: Response, name: str = Form(...), content: str = Form(...), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
-    if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
+    if not check_csrf(r, csrf_token): 
+        return RedirectResponse("/bugreport", 303)
     d = {"name": name[:60], "content": clean_content(content)[:5000], "status": "Принято" if lang == "ru" else "Accepted"}
     if nickname: d["user_nickname"] = nickname
     await asyncio.to_thread(lambda: sb.table('bug_reports').insert(d).execute())
