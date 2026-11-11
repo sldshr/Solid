@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, Depends, HTTPException, status, File, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from passlib.context import CryptContext
 import uuid
 import base64
@@ -15,7 +15,7 @@ users_db = {}
 sessions = {} 
 posts_db = [] 
 
-# Дефолтный пользователь для теста
+# Дефолтный пользователь
 admin_pwd = pwd_context.hash("admin")
 users_db["admin"] = {
     "username": "admin",
@@ -26,7 +26,7 @@ users_db["admin"] = {
 }
 
 # ==========================================
-# ЛОКАЛИЗАЦИЯ (i18n) - ИСПРАВЛЕНЫ ВСЕ КЛЮЧИ
+# ЛОКАЛИЗАЦИЯ (i18n)
 # ==========================================
 TRANSLATIONS = {
     "en": {
@@ -35,7 +35,7 @@ TRANSLATIONS = {
         "search_placeholder": "Search...", "title": "Title", "description": "Description",
         "publish": "Publish", "visibility": "Who can see", "in_feed": "In Feed",
         "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
-        "upload_limit": "JPEG, PNG, GIF up to 5 images", "back": "Back to feed",
+        "upload_limit": "JPEG, PNG up to 3 images", "back": "Back to feed",
         "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile",
         "display_name": "Display Name", "avatar": "Avatar", "save": "Save",
@@ -44,7 +44,7 @@ TRANSLATIONS = {
         "no_posts": "No posts yet", "posts": "posts", "search_results": "Search results",
         "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
         "wrong_pass": "Wrong password", "need_name": "Display name is required for registration",
-        "choose_files": "Choose files"
+        "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
@@ -52,7 +52,7 @@ TRANSLATIONS = {
         "search_placeholder": "Поиск...", "title": "Название", "description": "Описание",
         "publish": "Опубликовать", "visibility": "Кто увидит", "in_feed": "Все, в ленте",
         "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
-        "upload_limit": "JPEG, PNG, GIF до 5 штук", "back": "Назад в ленту",
+        "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад в ленту",
         "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль",
         "display_name": "Отображаемое имя", "avatar": "Аватарка", "save": "Сохранить",
@@ -61,19 +61,19 @@ TRANSLATIONS = {
         "no_posts": "Пока нет постов", "posts": "постов", "search_results": "Результаты поиска",
         "nothing_found": "Ничего не найдено", "no_saved": "У вас пока нет избранных постов",
         "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя",
-        "choose_files": "Выбрать файлы"
+        "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены"
     }
 }
 
 def get_lang(request: Request):
-    lang = request.cookies.get("lang", "en")
-    return lang if lang in TRANSLATIONS else "en"
+    lang = request.cookies.get("lang", "ru") # Default to Russian as requested
+    return lang if lang in TRANSLATIONS else "ru"
 
 def t(key, lang):
     return TRANSLATIONS[lang].get(key, key)
 
 # ==========================================
-# SVG ИКОНКИ (Синяя тема)
+# SVG ИКОНКИ
 # ==========================================
 SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#3b82f6"/></svg>"""
 SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%233b82f6%22/></svg>"
@@ -134,7 +134,6 @@ CSS_STYLES = """
     
     /* Topbar */
     .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; gap: 20px; }
-    
     .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; }
     .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
     
@@ -146,7 +145,7 @@ CSS_STYLES = """
     
     .topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 15px; width: 260px; flex-shrink: 0; }
     
-    .btn-primary { background-color: var(--accent-color); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; }
+    .btn-primary { background-color: var(--accent-color); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; transition: opacity 0.2s; }
     .btn-primary:hover { opacity: 0.9; }
     
     /* User Dropdown */
@@ -190,8 +189,8 @@ CSS_STYLES = """
     .profile-details p { color: var(--text-muted); font-size: 16px; }
     
     /* Post View */
-    .post-view { display: flex; gap: 25px; background: var(--card-bg); border-radius: 16px; padding: 25px; border: 1px solid var(--border-color); margin-bottom: 20px; min-height: 70vh; }
-    .post-media { flex: 2; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: zoom-in; }
+    .post-view { display: flex; gap: 25px; background: var(--card-bg); border-radius: 16px; padding: 25px; border: 1px solid var(--border-color); margin-bottom: 20px; }
+    .post-media { flex: 2; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: zoom-in; min-height: 300px; }
     .post-media img { max-width: 100%; max-height: 80vh; object-fit: contain; }
     .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; }
     .post-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
@@ -202,23 +201,24 @@ CSS_STYLES = """
     /* Actions Row */
     .actions-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
     .vote-controls { display: flex; align-items: center; gap: 12px; background: var(--bg-color); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color); }
-    .vote-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; }
-    .vote-btn:hover { background: #333; color: #fff; }
-    .vote-btn.up:hover { color: var(--accent-color); }
-    .vote-btn.down:hover { color: var(--danger-color); }
-    .vote-count { font-weight: 700; font-size: 18px; }
+    .vote-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: color 0.2s; }
+    .vote-btn:hover { background: #333; }
+    .vote-btn.active-up { color: var(--accent-color); }
+    .vote-btn.active-down { color: var(--danger-color); }
+    .vote-count { font-weight: 700; font-size: 18px; min-width: 20px; text-align: center; }
     
-    .action-btn { background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; text-decoration: none; }
+    .action-btn { background: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; text-decoration: none; transition: background 0.2s; }
     .action-btn:hover { background: #333; color: #fff; }
     
     /* Feed Grid */
     .feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
     .feed-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.2s; }
-    .feed-card:hover { transform: translateY(-3px); }
-    .feed-card img { width: 100%; height: 200px; object-fit: cover; }
-    .feed-card-info { padding: 15px; }
-    .feed-card-title { font-weight: 700; font-size: 18px; margin-bottom: 10px; }
-    .feed-card-author { font-size: 14px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+    .feed-card:hover { transform: translateY(-3px); border-color: #333; }
+    .feed-card-img-container { width: 100%; height: 200px; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .feed-card-img-container img { width: 100%; height: 100%; object-fit: cover; }
+    .feed-card-info { padding: 15px; flex: 1; display: flex; flex-direction: column; }
+    .feed-card-title { font-weight: 700; font-size: 18px; margin-bottom: 10px; line-height: 1.3; }
+    .feed-card-author { font-size: 14px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin-top: auto; }
     
     /* Create Post */
     .create-layout { display: flex; gap: 30px; max-width: 1100px; margin: 0 auto; width: 100%; }
@@ -228,54 +228,84 @@ CSS_STYLES = """
     .file-preview img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; }
     .create-sidebar { flex: 1; background: var(--card-bg); padding: 30px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
 
+    /* Toggle Switch */
+    .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); transition: .4s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--accent-color); }
+    input:checked + .slider:before { transform: translateX(22px); }
+
     /* Panorama Overlay */
     .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
     .overlay img { max-width: 95%; max-height: 95%; object-fit: contain; }
     .close-overlay { position: absolute; top: 20px; right: 30px; font-size: 40px; color: #fff; cursor: pointer; background: none; border: none; }
 
-    /* Mobile Search Overlay */
-    .mobile-search-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); z-index: 1000; padding: 20px; flex-direction: column; }
-    .mobile-search-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-
     /* Mobile Nav */
-    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 12px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 12px); }
-    .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--text-muted); gap: 6px; }
+    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 10px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 10px); }
+    .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--text-muted); gap: 4px; width: 60px; text-decoration: none; }
     .bottom-nav a.active { color: var(--accent-color); }
-    .bottom-nav .plus-btn { background: var(--accent-color); color: #fff; padding: 12px; border-radius: 50%; transform: translateY(-10px); box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); display: flex; align-items: center; justify-content: center; }
+    .bottom-nav .plus-btn { background: var(--accent-color); color: #fff; padding: 10px; border-radius: 12px; display: flex; align-items: center; justify-content: center; height: 44px; width: 44px; margin-top: 4px; }
+
+    /* Mobile Profile Menu */
+    .mobile-profile-menu { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card-bg); z-index: 1000; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; transform: translateY(100%); transition: transform 0.3s ease-in-out; flex-direction: column; gap: 15px; padding-bottom: env(safe-area-inset-bottom, 20px); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
+    .mobile-profile-menu.open { transform: translateY(0); display: flex; }
+    .mobile-profile-header { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); }
+    .mobile-profile-header img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
+    .mobile-profile-menu .dropdown-item { padding: 12px 10px; border-radius: 8px; }
+    .mobile-menu-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+        .app-layout { grid-template-columns: 220px 1fr; }
+        .main-content { padding: 20px; }
+        .feed-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+    }
 
     @media (max-width: 900px) {
-        .app-layout { grid-template-columns: 1fr; grid-template-rows: 70px 1fr; }
+        .app-layout { grid-template-columns: 1fr; grid-template-rows: 60px 1fr; }
         .sidebar { display: none; }
-        .main-content { grid-column: 1; padding: 15px; padding-bottom: 100px; }
+        .main-content { grid-column: 1; padding: 15px; padding-bottom: 80px; }
         .bottom-nav { display: flex; }
         
         /* Topbar adjustments */
-        .topbar { padding: 0 15px; gap: 10px; }
+        .topbar { padding: 0 15px; gap: 10px; height: 60px; }
         .topbar-left { width: auto; }
         .logo span { display: none; }
-        .topbar-center { display: none; }
+        .topbar-center { display: none; } 
         .topbar-right { width: auto; }
         
-        .mobile-search-btn { display: flex !important; }
-        .desktop-only { display: none !important; }
-        
-        .post-view { flex-direction: column; padding: 15px; }
+        /* Mobile Search in topbar */
+        .mobile-search-form { flex: 1; display: flex; margin: 0 10px; }
+        .mobile-search-form input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+
+        .post-view { flex-direction: column; padding: 15px; gap: 15px; }
+        .post-media { min-height: 250px; max-height: 50vh; }
         .create-layout { flex-direction: column; }
+        .dropzone { padding: 30px; min-height: 250px; }
+        
         .profile-header { flex-direction: column; text-align: center; gap: 15px; }
-        .profile-header .btn-primary { width: 100%; }
-    }
-    
-    @media (min-width: 901px) {
-        .mobile-search-btn { display: none !important; }
-        .mobile-only { display: none !important; }
+        .profile-info { flex-direction: column; align-items: center; }
+        .profile-header .btn-primary { width: 100%; margin-top: 10px; }
+        .profile-avatar { width: 100px; height: 100px; }
     }
 </style>
 <script>
-    // Dropdown Menu
+    // Dropdown Menu Desktop
     function toggleDropdown() {
-        var dropdown = document.getElementById("user-dropdown");
-        dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+        if(window.innerWidth <= 900) {
+            document.getElementById('mobileProfileMenu').classList.add('open');
+            document.getElementById('mobileMenuOverlay').style.display = 'block';
+        } else {
+            var dropdown = document.getElementById("user-dropdown");
+            dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+        }
     }
+    function closeMobileMenu() {
+        document.getElementById('mobileProfileMenu').classList.remove('open');
+        document.getElementById('mobileMenuOverlay').style.display = 'none';
+    }
+
     window.onclick = function(event) {
         if (!event.target.closest('.user-menu-container')) {
             var dropdowns = document.getElementsByClassName("dropdown-menu");
@@ -301,20 +331,42 @@ CSS_STYLES = """
         }
     }
 
-    // Multiple File Upload Logic
+    // Multiple File Upload Logic (FIXED)
+    let selectedFiles = new DataTransfer();
+
     function handleFiles(input) {
-        const previewContainer = document.getElementById('file-list');
-        previewContainer.innerHTML = ''; 
-        if (input.files.length > 5) {
-            alert('Maximum 5 files allowed! / Максимум 5 файлов!');
-            input.value = '';
-            document.getElementById('dropzone-text').style.display = 'block';
-            return;
+        const newFiles = Array.from(input.files);
+        for (let file of newFiles) {
+            if (selectedFiles.items.length < 3) {
+                selectedFiles.items.add(file);
+            } else {
+                alert('Максимум 3 файла! / Maximum 3 files!');
+                break;
+            }
         }
-        if (input.files.length > 0) {
+        input.files = selectedFiles.files;
+        renderFileList();
+    }
+
+    function removeFile(index) {
+        const dt = new DataTransfer();
+        const files = Array.from(selectedFiles.files);
+        files.splice(index, 1);
+        files.forEach(f => dt.items.add(f));
+        selectedFiles = dt;
+        document.getElementById('file-input').files = selectedFiles.files;
+        renderFileList();
+    }
+
+    function renderFileList() {
+        const previewContainer = document.getElementById('file-list');
+        previewContainer.innerHTML = '';
+        const files = Array.from(selectedFiles.files);
+        if (files.length === 0) {
+            document.getElementById('dropzone-text').style.display = 'block';
+        } else {
             document.getElementById('dropzone-text').style.display = 'none';
-            for (let i = 0; i < input.files.length; i++) {
-                let file = input.files[i];
+            files.forEach((file, index) => {
                 let reader = new FileReader();
                 reader.onload = function(e) {
                     let div = document.createElement('div');
@@ -325,28 +377,13 @@ CSS_STYLES = """
                             <div style="font-size:14px; color:#fff; font-weight:500; text-overflow:ellipsis; white-space:nowrap; overflow:hidden;">${file.name}</div>
                             <div style="font-size:12px; color:var(--text-muted);">${(file.size/1024).toFixed(1)} KB</div>
                         </div>
-                        <span style="cursor:pointer; color:var(--text-muted); font-size:24px; padding:0 10px;" onclick="this.parentElement.remove()">×</span>
+                        <span style="cursor:pointer; color:var(--text-muted); font-size:24px; padding:0 10px;" onclick="removeFile(${index})">×</span>
                     `;
                     previewContainer.appendChild(div);
                 }
                 reader.readAsDataURL(file);
-            }
+            });
         }
-    }
-
-    // Drag & Drop visual
-    const dropzone = document.getElementById('dropzone');
-    if(dropzone) {
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropzone.addEventListener(eventName, preventDefaults, false);
-        });
-        function preventDefaults (e) { e.preventDefault(); e.stopPropagation(); }
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
-        });
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
-        });
     }
 
     // Visibility Toggle
@@ -368,7 +405,7 @@ CSS_STYLES = """
     // Copy Link
     function copyLink() {
         navigator.clipboard.writeText(window.location.href);
-        alert('Link copied! / Ссылка скопирована!');
+        alert('Ссылка скопирована! / Link copied!');
     }
 
     // Panorama Viewer
@@ -380,21 +417,77 @@ CSS_STYLES = """
         document.getElementById('panorama').style.display = 'none';
     }
 
-    // Mobile Search
-    function openMobileSearch() {
-        document.getElementById('mobileSearch').style.display = 'flex';
-        document.getElementById('mobileSearchInput').focus();
+    // AJAX Functions (Real-time)
+    async function vote(postId, action) {
+        const res = await fetch(`/api/vote/${postId}/${action}`, { method: 'POST' });
+        const data = await res.json();
+        if(data.error) return alert(data.error);
+        
+        document.getElementById('vote-count').innerText = data.score;
+        const upBtn = document.getElementById('btn-up');
+        const downBtn = document.getElementById('btn-down');
+        
+        upBtn.className = 'vote-btn ' + (data.user_vote === 1 ? 'active-up' : '');
+        downBtn.className = 'vote-btn ' + (data.user_vote === -1 ? 'active-down' : '');
     }
-    function closeMobileSearch() {
-        document.getElementById('mobileSearch').style.display = 'none';
+
+    async function toggleSave(postId) {
+        const res = await fetch(`/api/save/${postId}`, { method: 'POST' });
+        const data = await res.json();
+        if(data.error) return alert(data.error);
+        
+        const btn = document.getElementById('btn-save');
+        if(data.saved) {
+            btn.innerHTML = `""" + SVG_SAVED + """`;
+            btn.style.color = 'var(--accent-color)';
+            btn.style.borderColor = 'var(--accent-color)';
+        } else {
+            btn.innerHTML = `""" + SVG_SAVE + """`;
+            btn.style.color = '';
+            btn.style.borderColor = '';
+        }
+    }
+
+    async function submitComment(e, postId) {
+        e.preventDefault();
+        const input = document.getElementById('comment-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        const formData = new FormData(); 
+        formData.append('text', text);
+        
+        const res = await fetch(`/api/comment/${postId}`, { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        if (data.error) return alert(data.error);
+        if (data.comment) {
+            input.value = '';
+            document.getElementById('no-comments-msg').style.display = 'none';
+            
+            const list = document.getElementById('comments-list');
+            const ava = data.comment.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.comment.author}`;
+            
+            const div = document.createElement('div');
+            div.style.cssText = 'display:flex; gap:10px; margin-bottom:15px;';
+            div.innerHTML = `
+                <img src="${ava}" style="width:32px; height:32px; border-radius:50%;">
+                <div>
+                    <div style="font-weight:700; font-size:14px;">${data.comment.display_name} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@${data.comment.author}</span></div>
+                    <div style="font-size:14px; margin-top:2px;">${data.comment.text}</div>
+                </div>
+            `;
+            list.appendChild(div);
+            document.getElementById('comment-count').innerText = data.total_comments;
+        }
     }
 </script>
 """
 
 # ==========================================
-# LAYOUT (ИСПРАВЛЕНА ШАПКА)
+# LAYOUT
 # ==========================================
-def render_layout(content_html, user, request: Request, active_page="feed", prev_id=None, next_id=None, is_post_view=False):
+def render_layout(content_html, user, request: Request, active_page="feed"):
     lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
     current_lang_str = "RU" if lang == "ru" else "EN"
@@ -402,15 +495,15 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
 
-    # Right side controls
+    # Topbar Right (Desktop / Mobile)
     if user:
         nav_right = f"""
-        <a href="/write" class="btn-primary desktop-only">{SVG_PLUS} <span>{t('new_post', lang)}</span></a>
+        <a href="/write" class="btn-primary" style="padding: 8px 16px; display: flex; gap:6px;"><span class="desktop-only">{SVG_PLUS} {t('new_post', lang)}</span><span class="mobile-only">{SVG_PLUS}</span></a>
         <div class="user-menu-container">
             <div class="user-menu-btn" onclick="toggleDropdown()">
                 <img src="{avatar_url}" class="user-avatar-small">
-                <span style="font-weight:500; font-size:15px;" class="desktop-only">{user['display_name']}</span>
             </div>
+            <!-- Desktop Dropdown -->
             <div id="user-dropdown" class="dropdown-menu">
                 <div class="dropdown-header">
                     <img src="{avatar_url}">
@@ -427,8 +520,8 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
         """
     else:
         nav_right = f"""
-        <a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} {current_lang_str}</a>
-        <a href="/login" class="btn-primary">{SVG_USER} <span class="desktop-only">{t('login_register', lang)}</span></a>
+        <a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} <span class="desktop-only">{current_lang_str}</span></a>
+        <a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login_register', lang)}</span></a>
         """
 
     sidebar_html = ""
@@ -441,18 +534,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
         </div>
         """
 
-    keyboard_js = ""
-    if is_post_view:
-        keyboard_js = f"""
-        <script>
-            document.addEventListener('keydown', function(e) {{
-                if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') return;
-                if (e.key === 'ArrowUp' && '{prev_id}') {{ e.preventDefault(); window.location.href = '/post/{prev_id}'; }} 
-                else if (e.key === 'ArrowDown' && '{next_id}') {{ e.preventDefault(); window.location.href = '/post/{next_id}'; }}
-            }});
-        </script>
-        """
-
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
@@ -463,28 +544,12 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
         {CSS_STYLES}
     </head>
     <body>
-        <!-- Mobile Search Overlay -->
-        <div id="mobileSearch" class="mobile-search-overlay">
-            <div class="mobile-search-header">
-                <button class="action-btn" onclick="closeMobileSearch()" style="border:none; background:none; padding:0;">{SVG_BACK}</button>
-                <form action="/search" method="get" style="flex:1; display:flex; gap:10px;">
-                    <input type="text" name="q" id="mobileSearchInput" placeholder="{t('search_placeholder', lang)}" style="flex:1; background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:#fff; outline:none; font-size:16px;">
-                    <button type="submit" class="btn-primary" style="padding:10px;">{SVG_SEARCH}</button>
-                </form>
-            </div>
-        </div>
-
         <div class="app-layout">
             <div class="topbar">
-                <!-- Left: Logo & Mobile Search -->
                 <div class="topbar-left">
                     <a href="/" class="logo">{SVG_LOGO} <span>sol.id</span></a>
-                    <button class="action-btn mobile-search-btn" onclick="openMobileSearch()" style="border:none; background:none; color:var(--text-main); padding:0;">
-                        {SVG_SEARCH}
-                    </button>
                 </div>
                 
-                <!-- Center: Desktop Search -->
                 <div class="topbar-center">
                     <form action="/search" method="get" class="search-container">
                         <span class="search-icon">{SVG_SEARCH}</span>
@@ -492,7 +557,11 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
                     </form>
                 </div>
                 
-                <!-- Right: Controls -->
+                <!-- Mobile Search Input (Replaces Icon) -->
+                <form action="/search" method="get" class="mobile-search-form mobile-only">
+                    <input type="text" name="q" placeholder="{t('search_placeholder', lang)}" value="{request.query_params.get('q', '')}">
+                </form>
+                
                 <div class="topbar-right">
                     {nav_right}
                 </div>
@@ -505,6 +574,23 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
             </div>
         </div>
         
+        <!-- Mobile Profile Menu -->
+        {f'''
+        <div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div>
+        <div id="mobileProfileMenu" class="mobile-profile-menu">
+            <div class="mobile-profile-header">
+                <img src="{avatar_url}">
+                <div>
+                    <div style="font-weight:700; font-size:16px;">{user['display_name']}</div>
+                    <div style="color:var(--text-muted); font-size:14px;">@{user['username']}</div>
+                </div>
+            </div>
+            <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
+            <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
+            <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
+        </div>
+        ''' if user else ''}
+        
         <!-- Panorama Modal -->
         <div id="panorama" class="overlay" onclick="closePanorama()">
             <button class="close-overlay">&times;</button>
@@ -516,7 +602,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
             <a href="/write" class="plus-btn">{SVG_PLUS}</a>
             <a href="/@{user['username'] if user else 'login'}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} {t('profile', lang)}</a>
         </div>
-        {keyboard_js}
     </body>
     </html>
     """
@@ -539,27 +624,23 @@ async def read_feed(request: Request):
     feed_posts = [p for p in posts_db if p.get('visibility') == 'feed']
     
     if not feed_posts:
-        content = f"""
-        <div style="text-align:center; padding: 80px 20px; color: var(--text-muted);">
-            <h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t('no_posts', lang)}</h3>
-        </div>
-        """
+        content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
     else:
         cards = ""
         for post in feed_posts:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="height:200px; background:#222; display:flex; align-items:center; justify-content:center;">{SVG_IMAGE}</div>'
-            score = post['upvotes'] - post['downvotes']
+            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            score = len(post['votes']['up']) - len(post['votes']['down'])
             
             cards += f"""
             <a href="/post/{post['id']}" class="feed-card">
-                {img_html}
+                <div class="feed-card-img-container">{img_html}</div>
                 <div class="feed-card-info">
                     <div class="feed-card-title">{post['title']}</div>
                     <div class="feed-card-author">
                         <img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}
-                        <span style="margin-left:auto;">{SVG_UP} {score}</span>
+                        <span style="margin-left:auto; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span>
                     </div>
                 </div>
             </a>
@@ -574,9 +655,8 @@ async def search_posts(request: Request, q: str = ""):
     lang = get_lang(request)
     q_lower = q.lower().strip()
     
-    if not q_lower:
-        results = []
-    else:
+    results = []
+    if q_lower:
         results = [
             p for p in posts_db 
             if p.get('visibility') == 'feed' and (
@@ -587,28 +667,23 @@ async def search_posts(request: Request, q: str = ""):
         ]
     
     if not results:
-        content = f"""
-        <h2 style="margin-bottom:30px; font-size:24px;">{t('search_results', lang)}: "{q}"</h2>
-        <div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">
-            {t('nothing_found', lang)}
-        </div>
-        """
+        content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{q}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div>'
     else:
         cards = ""
         for post in results:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="height:200px; background:#222; display:flex; align-items:center; justify-content:center;">{SVG_IMAGE}</div>'
+            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             cards += f"""
             <a href="/post/{post['id']}" class="feed-card">
-                {img_html}
+                <div class="feed-card-img-container">{img_html}</div>
                 <div class="feed-card-info">
                     <div class="feed-card-title">{post['title']}</div>
                     <div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}</div>
                 </div>
             </a>
             """
-        content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t('search_results', lang)}: "{q}"</h2><div class="feed-grid">{cards}</div>'
+        content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{q}"</h2><div class="feed-grid">{cards}</div>'
         
     return HTMLResponse(content=render_layout(content, user, request, "feed"))
 
@@ -628,10 +703,10 @@ async def saved_posts(request: Request):
         for post in saved_posts_list:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="height:200px; background:#222; display:flex; align-items:center; justify-content:center;">{SVG_IMAGE}</div>'
+            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             cards += f"""
             <a href="/post/{post['id']}" class="feed-card">
-                {img_html}
+                <div class="feed-card-img-container">{img_html}</div>
                 <div class="feed-card-info">
                     <div class="feed-card-title">{post['title']}</div>
                     <div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}</div>
@@ -745,7 +820,7 @@ async def create_post_page(request: Request):
             
             <div class="input-group">
                 <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
-                <textarea name="content" placeholder="{t('description', lang)}" style="min-height:180px; resize:vertical; padding:14px;"></textarea>
+                <textarea name="content" placeholder="{t('description', lang)}" style="min-height:120px; resize:vertical; padding:14px;"></textarea>
             </div>
 
             <div class="input-group">
@@ -761,20 +836,28 @@ async def create_post_page(request: Request):
                 <input type="hidden" name="visibility" id="vis-input" value="feed">
             </div>
 
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px; margin-top:10px;">{SVG_PLUS} {t('publish', lang)}</button>
+            <div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label>
+                <label class="switch">
+                    <input type="checkbox" name="allow_comments" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button>
         </div>
     </form>
     """
     return HTMLResponse(content=render_layout(content, user, request, "feed"))
 
 @app.post("/write")
-async def create_post(request: Request, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), images: List[UploadFile] = File(None)):
+async def create_post(request: Request, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
     
     img_b64_list = []
     if images and images[0].filename:
-        for img in images[:5]: 
+        for img in images[:3]: # Max 3 images
             b64 = await image_to_base64(img)
             if b64: img_b64_list.append(b64)
             
@@ -785,39 +868,88 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         "content": content,
         "images": img_b64_list,
         "visibility": visibility,
-        "upvotes": 0,
-        "downvotes": 0,
-        "comments": []
+        "votes": {"up": [], "down": []},
+        "comments": [],
+        "allow_comments": allow_comments
     }
     posts_db.insert(0, new_post)
     return RedirectResponse(url=f"/post/{new_post['id']}", status_code=status.HTTP_302_FOUND)
 
-@app.post("/vote/{post_id}/{action}")
+# --- API Endpoints for AJAX ---
+@app.post("/api/vote/{post_id}/{action}")
 async def vote_post(post_id: str, action: str, request: Request):
     user = get_current_user(request)
-    if not user: return RedirectResponse(url="/login")
+    if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
     post = next((p for p in posts_db if p['id'] == post_id), None)
-    if post:
-        if action == "up": post['upvotes'] += 1
-        elif action == "down": post['downvotes'] += 1
+    if not post: return JSONResponse({"error": "Not found"}, status_code=404)
     
-    return RedirectResponse(url=f"/post/{post_id}", status_code=status.HTTP_302_FOUND)
+    username = user['username']
+    up_votes = post['votes'].get('up', [])
+    down_votes = post['votes'].get('down', [])
+    
+    user_vote = 0
+    if action == 'up':
+        if username in up_votes:
+            up_votes.remove(username)
+        else:
+            up_votes.append(username)
+            if username in down_votes: down_votes.remove(username)
+            user_vote = 1
+    elif action == 'down':
+        if username in down_votes:
+            down_votes.remove(username)
+        else:
+            down_votes.append(username)
+            if username in up_votes: up_votes.remove(username)
+            user_vote = -1
+            
+    post['votes']['up'] = up_votes
+    post['votes']['down'] = down_votes
+    score = len(up_votes) - len(down_votes)
+    
+    # Check actual user vote for response
+    if username in post['votes']['up']: user_vote = 1
+    elif username in post['votes']['down']: user_vote = -1
+    else: user_vote = 0
+        
+    return JSONResponse({"score": score, "user_vote": user_vote})
 
-@app.post("/save/{post_id}")
+@app.post("/api/save/{post_id}")
 async def save_post(post_id: str, request: Request):
     user = get_current_user(request)
-    if not user: return RedirectResponse(url="/login")
+    if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
     if 'saved_posts' not in users_db[user['username']]:
         users_db[user['username']]['saved_posts'] = []
         
     if post_id in users_db[user['username']]['saved_posts']:
         users_db[user['username']]['saved_posts'].remove(post_id)
+        saved = False
     else:
         users_db[user['username']]['saved_posts'].append(post_id)
+        saved = True
         
-    return RedirectResponse(url=f"/post/{post_id}", status_code=status.HTTP_302_FOUND)
+    return JSONResponse({"saved": saved})
+
+@app.post("/api/comment/{post_id}")
+async def add_comment(post_id: str, request: Request, text: str = Form(...)):
+    user = get_current_user(request)
+    if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    
+    post = next((p for p in posts_db if p['id'] == post_id), None)
+    if not post: return JSONResponse({"error": "Not found"}, status_code=404)
+    if not post.get('allow_comments', True): return JSONResponse({"error": "Comments disabled"}, status_code=403)
+    
+    comment = {
+        "id": str(uuid.uuid4())[:6],
+        "author": user['username'],
+        "display_name": user['display_name'],
+        "avatar": user.get('avatar'),
+        "text": text
+    }
+    post['comments'].append(comment)
+    return JSONResponse({"comment": comment, "total_comments": len(post['comments'])})
 
 @app.post("/delete/{post_id}")
 async def delete_post(post_id: str, request: Request):
@@ -844,12 +976,13 @@ async def view_post(request: Request, post_id: str):
         
     author = users_db.get(post['author'])
     ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-    score = post['upvotes'] - post['downvotes']
+    score = len(post['votes']['up']) - len(post['votes']['down'])
     
-    idx = next((i for i, p in enumerate(posts_db) if p['id'] == post_id), -1)
-    prev_id = posts_db[idx - 1]['id'] if idx > 0 else ""
-    next_id = posts_db[idx + 1]['id'] if idx < len(posts_db) - 1 and idx != -1 else ""
-    
+    user_vote = 0
+    if user:
+        if user['username'] in post['votes']['up']: user_vote = 1
+        elif user['username'] in post['votes']['down']: user_vote = -1
+        
     is_saved = user and post_id in user.get('saved_posts', [])
     save_icon = SVG_SAVED if is_saved else SVG_SAVE
 
@@ -860,7 +993,7 @@ async def view_post(request: Request, post_id: str):
     ''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
-        media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:80vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
+        media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:70vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
         if len(post['images']) > 1:
             media_html += f"""
             <div style="position:absolute; bottom:20px; left:0; width:100%; display:flex; justify-content:center; gap:15px;">
@@ -880,6 +1013,32 @@ async def view_post(request: Request, post_id: str):
             """
     else:
         media_html = f'<div style="color:#555;">{SVG_IMAGE}</div>'
+
+    # Comment form or message
+    if post.get('allow_comments', True):
+        comments_input_html = f"""
+        <form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;">
+            <input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;">
+            <button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button>
+        </form>
+        """
+    else:
+        comments_input_html = f'<div style="background:rgba(239,68,68,0.1); color:var(--danger-color); padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; font-weight:500;">{t("comments_disabled", lang)}</div>'
+
+    comments_list_html = ""
+    for c in post['comments']:
+        c_ava = c.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['author']}"
+        comments_list_html += f"""
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <img src="{c_ava}" style="width:32px; height:32px; border-radius:50%;">
+            <div>
+                <div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div>
+                <div style="font-size:14px; margin-top:2px;">{c['text']}</div>
+            </div>
+        </div>
+        """
+
+    no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
 
     content = f"""
     <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
@@ -902,18 +1061,12 @@ async def view_post(request: Request, post_id: str):
             
             <div class="actions-row">
                 <div class="vote-controls">
-                    <form action="/vote/{post['id']}/up" method="post" style="margin:0;">
-                        <button type="submit" class="vote-btn up">{SVG_UP}</button>
-                    </form>
-                    <span class="vote-count">{score}</span>
-                    <form action="/vote/{post['id']}/down" method="post" style="margin:0;">
-                        <button type="submit" class="vote-btn down">{SVG_DOWN}</button>
-                    </form>
+                    <button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button>
+                    <span class="vote-count" id="vote-count">{score}</span>
+                    <button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button>
                 </div>
                 
-                <form action="/save/{post['id']}" method="post" style="margin:0;">
-                    <button type="submit" class="action-btn" title="{t('save_post', lang)}">{save_icon}</button>
-                </form>
+                <button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{'color:var(--accent-color); border-color:var(--accent-color);' if is_saved else ''}" title="{t('save_post', lang)}">{save_icon}</button>
                 
                 <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
                 
@@ -921,17 +1074,17 @@ async def view_post(request: Request, post_id: str):
             </div>
             
             <div class="comments-section" style="flex:1; border-top:1px solid var(--border-color); padding-top:20px; overflow-y:auto;">
-                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} ({len(post['comments'])})</h3>
-                <div style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;">
-                    <input type="text" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;">
-                    <button class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button>
+                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>
+                {comments_input_html}
+                <div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
+                <div id="comments-list">
+                    {comments_list_html}
                 </div>
-                <div style="font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
             </div>
         </div>
     </div>
     """
-    return HTMLResponse(content=render_layout(content, user, request, "feed", prev_id=prev_id, next_id=next_id, is_post_view=True))
+    return HTMLResponse(content=render_layout(content, user, request, "feed"))
 
 @app.get("/@{username}", response_class=HTMLResponse)
 async def view_profile(request: Request, username: str):
@@ -950,10 +1103,10 @@ async def view_profile(request: Request, username: str):
         
     posts_html = ""
     for post in user_posts:
-        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="height:200px; background:#222; display:flex; align-items:center; justify-content:center;">{SVG_IMAGE}</div>'
+        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
         posts_html += f"""
         <a href="/post/{post['id']}" class="feed-card">
-            {img_html}
+            <div class="feed-card-img-container">{img_html}</div>
             <div class="feed-card-info">
                 <div class="feed-card-title">{post['title']}</div>
             </div>
@@ -961,9 +1114,9 @@ async def view_profile(request: Request, username: str):
         """
         
     if not posts_html:
-        posts_html = f'<div style="color:var(--text-muted); font-size:18px;">{t("no_posts", lang)}</div>'
+        posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
 
-    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff;">{SVG_SETTINGS} {t("edit_profile", lang)}</a>' if current_user and current_user['username'] == username else ''
+    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff; display:flex; gap:8px;">{SVG_SETTINGS} {t("edit_profile", lang)}</a>' if current_user and current_user['username'] == username else ''
 
     content = f"""
     <div class="profile-header">
