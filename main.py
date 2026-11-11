@@ -5,7 +5,7 @@ import uuid
 import base64
 from typing import List, Optional
 
-app = FastAPI(title="sol.id")
+app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # ==========================================
@@ -31,7 +31,7 @@ users_db["admin"] = {
 TRANSLATIONS = {
     "en": {
         "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings",
-        "logout": "Logout", "login_register": "Login / Register", "new_post": "New Post",
+        "logout": "Logout", "login": "Login", "new_post": "New Post",
         "search_placeholder": "Search...", "title": "Title", "description": "Description",
         "publish": "Publish", "visibility": "Who can see", "in_feed": "In Feed",
         "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
@@ -39,18 +39,18 @@ TRANSLATIONS = {
         "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile",
         "display_name": "Display Name", "avatar": "Avatar", "save": "Save",
-        "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
+        "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required for registration",
         "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete",
         "no_posts": "No posts yet", "posts": "posts", "search_results": "Search results",
         "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
         "wrong_pass": "Wrong password", "need_name": "Display name is required for registration",
         "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post",
         "edit_post": "Edit Post", "remove_saved": "Remove from saved", "delete_comment": "Delete comment",
-        "edit": "Edit", "update": "Update"
+        "edit": "Edit", "update": "Update", "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist."
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
-        "logout": "Выйти", "login_register": "Вход / Регистрация", "new_post": "Новый пост",
+        "logout": "Выйти", "login": "Вход", "new_post": "Новый пост",
         "search_placeholder": "Поиск...", "title": "Название", "description": "Описание",
         "publish": "Опубликовать", "visibility": "Кто увидит", "in_feed": "Все, в ленте",
         "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
@@ -65,7 +65,7 @@ TRANSLATIONS = {
         "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя",
         "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены",
         "edit_post": "Редактировать пост", "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий",
-        "edit": "Редактировать", "update": "Обновить"
+        "edit": "Редактировать", "update": "Обновить", "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует."
     }
 }
 
@@ -84,21 +84,22 @@ SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 vi
 
 SVG_UP = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
 SVG_DOWN = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
-SVG_FEED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
-SVG_PLUS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
-SVG_USER = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
+SVG_FEED = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
+SVG_PLUS = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
+SVG_USER = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
 SVG_SETTINGS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>"""
 SVG_LOGOUT = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>"""
 SVG_EYE = """<svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
 SVG_EYE_OFF = """<svg class="eye-closed" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 SVG_BACK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
 SVG_IMAGE = """<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>"""
-SVG_SAVE = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
+SVG_SAVE = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_SAVED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_LINK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>"""
 SVG_TRASH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>"""
 SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>"""
 SVG_LANG = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>"""
+SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>"""
 
 # ==========================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -127,6 +128,13 @@ CSS_STYLES = """
         --bg-color: #0a0a0a; --card-bg: #151515; --text-main: #f8fafc; --text-muted: #94a3b8;
         --accent-color: #3b82f6; --border-color: #262626; --danger-color: #ef4444;
     }
+    
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-color); }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+    
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Manrope', sans-serif; user-select: none; }
     input, textarea, .selectable { user-select: text; }
     
@@ -134,12 +142,17 @@ CSS_STYLES = """
     a { color: var(--accent-color); text-decoration: none; }
     
     /* Layout */
-    .app-layout { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 70px 1fr; height: 100vh; width: 100%; }
+    .app-layout { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 70px 1fr; height: 100vh; width: 100%; transition: grid-template-columns 0.3s; }
+    .app-layout.sidebar-collapsed { grid-template-columns: 80px 1fr; }
     
     /* Topbar */
     .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; gap: 20px; }
-    .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; transition: width 0.3s; }
+    .app-layout.sidebar-collapsed .topbar-left { width: 80px; }
+    
     .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
+    .menu-toggle { cursor: pointer; padding: 5px; color: var(--text-muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .menu-toggle:hover { background: var(--card-bg); color: var(--text-main); }
     
     .topbar-center { flex: 1; display: flex; justify-content: center; position: relative; }
     .search-container { width: 100%; max-width: 500px; position: relative; }
@@ -151,7 +164,6 @@ CSS_STYLES = """
     .search-dropdown { display: none; position: absolute; top: 50px; left: 0; width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 150; max-height: 300px; overflow-y: auto; }
     .search-dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 15px; color: var(--text-main); border-bottom: 1px solid var(--border-color); transition: background 0.2s; }
     .search-dropdown-item:hover { background: #2a2a2a; }
-    .search-dropdown-item img { width: 30px; height: 30px; border-radius: 4px; object-fit: cover; }
     
     .topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 15px; width: 260px; flex-shrink: 0; }
     
@@ -174,11 +186,16 @@ CSS_STYLES = """
     .dropdown-item.danger { color: var(--danger-color); border-top: 1px solid var(--border-color); }
     
     /* Sidebar */
-    .sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-color); padding: 20px 15px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
-    .sidebar a { color: var(--text-muted); padding: 12px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; font-size: 16px; font-weight: 500; }
+    .sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-color); padding: 20px 15px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; transition: padding 0.3s; }
+    .sidebar a { color: var(--text-muted); padding: 12px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; font-size: 16px; font-weight: 500; transition: all 0.2s; }
     .sidebar a:hover:not(.active), .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
     .sidebar a.active svg { color: var(--accent-color); }
     .sidebar a.active { pointer-events: none; }
+    
+    .app-layout.sidebar-collapsed .sidebar { padding: 20px 10px; align-items: center; }
+    .app-layout.sidebar-collapsed .sidebar a { justify-content: center; padding: 15px 0; width: 100%; }
+    .app-layout.sidebar-collapsed .sidebar span { display: none; }
+    .app-layout.sidebar-collapsed .sidebar svg { margin: 0; }
     
     /* Main Content */
     .main-content { grid-column: 2; grid-row: 2; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; }
@@ -190,6 +207,7 @@ CSS_STYLES = """
     .input-group { margin-bottom: 20px; position: relative; }
     .input-group input, .input-group select, .input-group textarea { width: 100%; padding: 14px 16px; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: white; font-size: 16px; outline: none; }
     .input-group input:focus, .input-group select:focus, .input-group textarea:focus { border-color: var(--accent-color); }
+    .input-group textarea { resize: none; max-height: 250px; overflow-y: auto; }
     .pass-toggle { position: absolute; right: 15px; top: 15px; cursor: pointer; color: var(--text-muted); }
     .error { color: var(--danger-color); text-align: center; margin-bottom: 15px; font-size: 15px; }
     
@@ -256,9 +274,10 @@ CSS_STYLES = """
 
     /* Mobile Nav */
     .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 10px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 10px); }
-    .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--text-muted); gap: 4px; width: 60px; text-decoration: none; }
+    .bottom-nav a { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); gap: 4px; width: 60px; text-decoration: none; }
     .bottom-nav a.active { color: var(--accent-color); pointer-events: none; }
-    .bottom-nav a svg { width: 24px; height: 24px; }
+    .bottom-nav a span { display: none; } /* Hide text */
+    .bottom-nav a svg { width: 26px; height: 26px; }
     
     /* Mobile Profile Menu */
     .mobile-profile-menu { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card-bg); z-index: 1000; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; transform: translateY(100%); transition: transform 0.3s ease-in-out; flex-direction: column; gap: 15px; padding-bottom: env(safe-area-inset-bottom, 20px); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
@@ -275,6 +294,7 @@ CSS_STYLES = """
     /* Responsive */
     @media (max-width: 1024px) {
         .app-layout { grid-template-columns: 220px 1fr; }
+        .app-layout.sidebar-collapsed { grid-template-columns: 80px 1fr; }
         .main-content { padding: 20px; }
         .feed-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
     }
@@ -288,6 +308,7 @@ CSS_STYLES = """
         .topbar { padding: 0 15px; gap: 10px; height: 60px; }
         .topbar-left { width: auto; }
         .logo span { display: none; }
+        .menu-toggle { display: none !important; } /* Hide on mobile */
         .topbar-center { display: none; } 
         .topbar-right { width: auto; }
         
@@ -307,6 +328,11 @@ CSS_STYLES = """
     }
 </style>
 <script>
+    // Sidebar Toggle
+    function toggleSidebar() {
+        document.querySelector('.app-layout').classList.toggle('sidebar-collapsed');
+    }
+
     // Dropdown Menu Desktop
     function toggleDropdown() {
         if(window.innerWidth <= 900) {
@@ -378,45 +404,44 @@ CSS_STYLES = """
         }, 300);
     }
 
-    // Multiple File Upload Logic (Append)
-    let selectedFiles = new DataTransfer();
+    // Multiple File Upload Logic (FIXED)
+    let filesList = [];
     function handleFiles(input) {
-        const newFiles = Array.from(input.files || input.dataTransfer?.files || []);
+        const newFiles = Array.from(input.files);
         for (let file of newFiles) {
-            if (selectedFiles.items.length < 3) {
-                selectedFiles.items.add(file);
+            if (filesList.length < 3) {
+                filesList.push(file);
             } else {
                 alert('Максимум 3 файла! / Maximum 3 files!');
                 break;
             }
         }
-        const fileInput = document.getElementById('file-input');
-        if (fileInput) fileInput.files = selectedFiles.files;
-        renderFileList();
-    }
-    
-    function removeFile(index) {
-        const dt = new DataTransfer();
-        const files = Array.from(selectedFiles.files);
-        files.splice(index, 1);
-        files.forEach(f => dt.items.add(f));
-        selectedFiles = dt;
-        document.getElementById('file-input').files = selectedFiles.files;
-        renderFileList();
+        updateInputAndRender();
+        input.value = ''; // Reset to allow selecting same file again if removed
     }
 
-    function renderFileList() {
+    function removeFile(index) {
+        filesList.splice(index, 1);
+        updateInputAndRender();
+    }
+
+    function updateInputAndRender() {
+        const dt = new DataTransfer();
+        filesList.forEach(f => dt.items.add(f));
+        const fileInput = document.getElementById('file-input');
+        if(fileInput) fileInput.files = dt.files;
+        
         const previewContainer = document.getElementById('file-list');
         if(!previewContainer) return;
         previewContainer.innerHTML = '';
-        const files = Array.from(selectedFiles.files);
-        if (files.length === 0) {
+        
+        if (filesList.length === 0) {
             document.getElementById('dropzone-text').style.display = 'flex';
             document.getElementById('dropzone-text').style.flexDirection = 'column';
             document.getElementById('dropzone-text').style.alignItems = 'center';
         } else {
             document.getElementById('dropzone-text').style.display = 'none';
-            files.forEach((file, index) => {
+            filesList.forEach((file, index) => {
                 let reader = new FileReader();
                 reader.onload = function(e) {
                     let div = document.createElement('div');
@@ -485,7 +510,7 @@ CSS_STYLES = """
         document.getElementById('panorama').style.display = 'none';
     }
 
-    // AJAX Functions (Real-time)
+    // AJAX Functions
     async function vote(postId, action) {
         const res = await fetch(`/api/vote/${postId}/${action}`, { method: 'POST' });
         const data = await res.json();
@@ -587,7 +612,7 @@ CSS_STYLES = """
 # ==========================================
 # LAYOUT
 # ==========================================
-def render_layout(content_html, user, request: Request, active_page="feed", is_create_page=False):
+def render_layout(content_html, user, request: Request, active_page="feed"):
     lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
     current_lang_str = "RU" if lang == "ru" else "EN"
@@ -621,7 +646,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", is_c
     else:
         nav_right = f"""
         <a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} <span class="desktop-only">{current_lang_str}</span></a>
-        <a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login_register', lang)}</span></a>
+        <a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login', lang)}</span></a>
         """
 
     # Sidebar
@@ -629,9 +654,27 @@ def render_layout(content_html, user, request: Request, active_page="feed", is_c
     if user:
         sidebar_html = f"""
         <div class="sidebar">
-            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} {t('feed', lang)}</a>
-            <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} {t('saved', lang)}</a>
-            <a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} {t('profile', lang)}</a>
+            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a>
+            <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a>
+            <a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a>
+        </div>
+        """
+
+    # Mobile Bottom Nav
+    if user:
+        bottom_nav = f"""
+        <div class="bottom-nav">
+            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a>
+            <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a>
+            <a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a>
+            <a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a>
+        </div>
+        """
+    else:
+        bottom_nav = f"""
+        <div class="bottom-nav">
+            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a>
+            <a href="/login" class="{'active' if active_page == 'login' else ''}">{SVG_USER}</a>
         </div>
         """
 
@@ -641,14 +684,15 @@ def render_layout(content_html, user, request: Request, active_page="feed", is_c
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>sol.id</title>
+        <title>sol-id</title>
         {CSS_STYLES}
     </head>
     <body>
         <div class="app-layout">
             <div class="topbar">
                 <div class="topbar-left">
-                    <a href="/" class="logo">{SVG_LOGO} <span>sol.id</span></a>
+                    <div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>
+                    <a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a>
                 </div>
                 
                 <div class="topbar-center">
@@ -699,14 +743,41 @@ def render_layout(content_html, user, request: Request, active_page="feed", is_c
             <img id="panorama-img" src="" onclick="event.stopPropagation()">
         </div>
 
-        <div class="bottom-nav">
-            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} {t('feed', lang)}</a>
-            {f'<a href="/write">{SVG_PLUS} {t("new_post", lang)}</a>' if user else ''}
-            <a href="/@{user['username'] if user else 'login'}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} {t('profile', lang)}</a>
-        </div>
+        {bottom_nav}
     </body>
     </html>
     """
+
+# ==========================================
+# ERROR HANDLERS
+# ==========================================
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc: HTTPException):
+    lang = get_lang(request)
+    user = get_current_user(request)
+    content = f"""
+    <div style="text-align:center; padding: 100px 20px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1;">
+        <h1 style="font-size: 100px; font-weight: 900; color: var(--accent-color); margin-bottom: 10px; line-height:1;">404</h1>
+        <h2 style="margin-bottom: 20px; font-weight:700;">{t('404_title', lang)}</h2>
+        <p style="color:var(--text-muted); margin-bottom:30px;">{t('404_desc', lang)}</p>
+        <a href="/" class="btn-primary" style="padding:12px 24px;">{SVG_BACK} {t('back', lang)}</a>
+    </div>
+    """
+    return HTMLResponse(content=render_layout(content, user, request), status_code=404)
+
+@app.exception_handler(500)
+async def custom_500_handler(request: Request, exc: Exception):
+    lang = get_lang(request)
+    user = get_current_user(request)
+    content = f"""
+    <div style="text-align:center; padding: 100px 20px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1;">
+        <h1 style="font-size: 100px; font-weight: 900; color: var(--danger-color); margin-bottom: 10px; line-height:1;">500</h1>
+        <h2 style="margin-bottom: 20px; font-weight:700;">Internal Server Error</h2>
+        <p style="color:var(--text-muted); margin-bottom:30px;">Something went wrong.</p>
+        <a href="/" class="btn-primary" style="padding:12px 24px;">{SVG_BACK} {t('back', lang)}</a>
+    </div>
+    """
+    return HTMLResponse(content=render_layout(content, user, request), status_code=500)
 
 # ==========================================
 # МАРШРУТЫ
@@ -733,7 +804,7 @@ async def api_search(q: str = ""):
             q_lower in p['content'].lower() or
             q_lower in p['author'].lower()
         )
-    ][:5] # limit to 5 for dropdown
+    ][:5]
     return JSONResponse({"results": results})
 
 @app.get("/search", response_class=HTMLResponse)
@@ -846,31 +917,34 @@ async def login_page(request: Request):
     content = f"""
     <div class="auth-container">
         <form class="auth-form" action="/login" method="post">
-            <h2>{t('login_register', lang)}</h2>
+            <h2>{t('login', lang)}</h2>
             <div class="input-group"><input type="text" name="username" placeholder="{t('username', lang)}" required></div>
-            <div class="input-group"><input type="text" name="display_name" placeholder="{t('display_name', lang)} (New only)"></div>
+            <div class="input-group"><input type="text" name="display_name" placeholder="{t('display_name', lang)} (Only for new accounts)"></div>
             <div class="input-group">
                 <input type="password" name="password" placeholder="{t('password', lang)}" required>
                 <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
             </div>
             <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;">{t('login_hint', lang)}</p>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login_register', lang)}</button>
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login', lang)}</button>
         </form>
     </div>
     """
-    return HTMLResponse(content=render_layout(content, None, request))
+    return HTMLResponse(content=render_layout(content, None, request, "login"))
 
 @app.post("/login")
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...), display_name: str = Form("")):
     lang = get_lang(request)
+    username = username.strip()
     user = users_db.get(username)
     
     if user:
+        # User exists, check password
         if not pwd_context.verify(password, user["password"]):
-            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request))
+            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login"))
     else:
+        # User does not exist, create if display_name is provided
         if not display_name.strip():
-            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request))
+            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login"))
         
         users_db[username] = {
             "username": username,
@@ -943,7 +1017,7 @@ async def create_post_page(request: Request):
             
             <div class="input-group">
                 <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
-                <textarea name="content" placeholder="{t('description', lang)}" style="min-height:120px; resize:vertical; padding:14px;"></textarea>
+                <textarea name="content" placeholder="{t('description', lang)}" style="min-height:120px; padding:14px;"></textarea>
             </div>
 
             <div class="input-group">
@@ -971,7 +1045,7 @@ async def create_post_page(request: Request):
         </div>
     </form>
     """
-    return HTMLResponse(content=render_layout(content, user, request, "feed", is_create_page=True))
+    return HTMLResponse(content=render_layout(content, user, request, "write"))
 
 @app.post("/write")
 async def create_post(request: Request, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
@@ -980,7 +1054,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     
     img_b64_list = []
     if images and images[0].filename:
-        for img in images[:3]: # Max 3 images
+        for img in images[:3]:
             b64 = await image_to_base64(img)
             if b64: img_b64_list.append(b64)
             
@@ -1037,7 +1111,7 @@ async def edit_post_page(request: Request, post_id: str):
             
             <div class="input-group">
                 <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
-                <textarea name="content" style="min-height:120px; resize:vertical; padding:14px;">{post['content']}</textarea>
+                <textarea name="content" style="min-height:120px; padding:14px;">{post['content']}</textarea>
             </div>
 
             <div class="input-group">
@@ -1065,7 +1139,7 @@ async def edit_post_page(request: Request, post_id: str):
         </div>
     </form>
     """
-    return HTMLResponse(content=render_layout(content, user, request, "feed", is_create_page=True))
+    return HTMLResponse(content=render_layout(content, user, request, "write"))
 
 @app.post("/edit_post/{post_id}")
 async def update_post(request: Request, post_id: str, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
