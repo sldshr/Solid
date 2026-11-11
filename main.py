@@ -150,25 +150,26 @@ input,textarea,.selectable{user-select:text;}
 body{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}
 a{color:var(--accent-color);text-decoration:none;}
 
-/* Сетка без ебучих фреймов */
+/* Сетка */
 .app-layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}
 .app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}
-.topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;gap:20px;height:70px;}
-.topbar-left{display:flex;align-items:center;gap:15px;width:260px;flex-shrink:0;transition:width .3s;}
-.app-layout.sidebar-collapsed .topbar-left{width:80px;}
+
+/* Верхняя панель (ФИКСИРОВАННАЯ, НЕЗАВИСИМАЯ ОТ САЙДБАРА) */
+.topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}
+.topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;}
 .logo{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}
-.app-layout.sidebar-collapsed .logo span{display:none;}
 .menu-toggle{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}
 .menu-toggle:hover{background:var(--card-bg);color:var(--text-main);}
-.topbar-center{flex:1;display:flex;justify-content:center;position:relative;}
-.search-container{width:100%;max-width:500px;position:relative;}
+.topbar-center{position:absolute;left:50%;transform:translateX(-50%);width:100%;max-width:500px;display:flex;justify-content:center;z-index:10;}
+.search-container{width:100%;position:relative;}
 .search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:10px 15px 10px 40px;border-radius:8px;color:#fff;font-size:15px;outline:none;}
 .search-input:focus{border-color:var(--accent-color);}
 .search-icon{position:absolute;left:12px;top:10px;color:var(--text-muted);}
 .search-dropdown{display:none;position:absolute;top:50px;left:0;width:100%;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.6);z-index:150;max-height:300px;overflow-y:auto;}
 .search-dropdown-item{display:flex;align-items:center;gap:10px;padding:10px 15px;color:var(--text-main);border-bottom:1px solid var(--border-color);}
 .search-dropdown-item:hover{background:#2a2a2a;}
-.topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:15px;width:auto;}
+.topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:15px;flex-shrink:0;}
+
 .btn-primary{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;}
 .btn-primary:hover{opacity:.9;}
 .user-menu-container{position:relative;}
@@ -309,7 +310,7 @@ input:checked+.slider:before{transform:translateX(22px);}
     .sidebar{display:none;}
     .topbar{height:60px;padding:0 15px;gap:10px;}
     .topbar-left{width:auto;}
-    .topbar-center{display:flex; flex:1;}
+    .topbar-center{position:relative; left:auto; transform:none; max-width:100%; flex:1; margin-left:10px;}
     .topbar-right{width:auto;}
     .logo span{display:none;}
     .menu-toggle{display:none!important;}
@@ -597,7 +598,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     if user:
         nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
-        # ВЕРНУЛ КНОПКУ ВХОДА НА ПК (desktop-only)
         nav_right = f"""<a href="/login" class="btn-primary desktop-only" style="padding:8px 16px;">{SVG_USER} <span>{t('login', lang)}</span></a>"""
         
     lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold; margin-right:10px;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
