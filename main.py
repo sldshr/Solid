@@ -149,7 +149,7 @@ input,textarea,.selectable{user-select:text;}
 body{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}
 a{color:var(--accent-color);text-decoration:none;}
 
-/* Исправленная сетка без фреймов */
+/* Сетка без ебучих фреймов */
 .app-layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}
 .app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}
 .topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;gap:20px;height:70px;}
@@ -635,7 +635,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 {JS_SCRIPT}
 </body></html>"""
     
-    return HTMLResponse(content=html_content)
+    return html_content
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
@@ -643,6 +643,13 @@ async def custom_404_handler(request: Request, exc: HTTPException):
     user = get_current_user(request)
     content = f"""<div style="text-align:center; padding: 100px 20px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1;"><h1 style="font-size: 100px; font-weight: 900; color: var(--accent-color); margin-bottom: 10px; line-height:1;">404</h1><h2 style="margin-bottom: 20px; font-weight:700;">{t('404_title', lang)}</h2><p style="color:var(--text-muted); margin-bottom:30px;">{t('404_desc', lang)}</p><a href="/" class="btn-primary" style="padding:12px 24px;">{SVG_BACK} {t('back', lang)}</a></div>"""
     return HTMLResponse(content=render_layout(content, user, request), status_code=404)
+
+@app.exception_handler(500)
+async def custom_500_handler(request: Request, exc: Exception):
+    lang = get_lang(request)
+    user = get_current_user(request)
+    content = f"""<div style="text-align:center; padding: 100px 20px; display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1;"><h1 style="font-size: 100px; font-weight: 900; color: var(--danger-color); margin-bottom: 10px; line-height:1;">500</h1><h2 style="margin-bottom: 20px; font-weight:700;">Internal Server Error</h2><p style="color:var(--text-muted); margin-bottom:30px;">Something went wrong.</p><a href="/" class="btn-primary" style="padding:12px 24px;">{SVG_BACK} {t('back', lang)}</a></div>"""
+    return HTMLResponse(content=render_layout(content, user, request), status_code=500)
 
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, next: str = "/"):
@@ -925,7 +932,6 @@ async def view_profile(request: Request, username: str):
         posts_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div></div></a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
     
-    # Исправленная кнопка редактирования для мобилок (position absolute на CSS)
     edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if current_user and current_user['username'] == username else ''
     
     content = f"""<div class="profile-header"><img src="{ava}" class="profile-avatar"><div class="profile-details"><h1>{html.escape(profile_user['display_name'])}</h1><p>@{html.escape(username)}</p><p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p></div>{edit_btn}</div><div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;"><a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a></div><div class="feed-grid">{posts_html}</div>"""
