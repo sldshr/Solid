@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.30"
+APP_VERSION = "0.31"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -42,7 +42,6 @@ deleted_records, pinned_records, pending_records = set(), {}, {}
 MAX_B64_LEN = 900000
 POST_MAX_LEN = 5000
 VALID_NICK_RE = re.compile(r'^[a-zA-Z0-9_\-]{3,30}$')
-# Поддержка кириллицы для имен
 VALID_USER_RE = re.compile(r'^[\w\s\-]{1,60}$', re.UNICODE)
 
 class _DBUnavailable:
@@ -301,11 +300,6 @@ async def manifest():
                 "name": "Новый пост",
                 "url": "/cabinet/new",
                 "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PGxpbmUgeDE9IjEyIiB5MT0iOCIgeDI9IjEyIiB5Mj0iMTYiLz48bGluZSB4MT0iOCIgeTE9IjEyIiB4Mj0iMTYiIHkyPSIxMiIvPjwvc3ZnPg==", "sizes": "192x192"}]
-            },
-            {
-                "name": "Настройки",
-                "url": "/settings",
-                "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiLz48cGF0aCBkPSJNMTkuNCAxNWExLjY1IDEuNjUgMCAwIDAgLjMzIDEuODJsLjA2LjA2YTIgMiAwIDEgMS0yLjgzIDIuODNsLS4wNi0uMDZhMS42NSAxLjY1IDAgMCAwLTEuODItLjMzIDEuNjUgMS42NSAwIDAgMC0xIDEuNTFWMjFhMiAyIDAgMSAxLTQgMHYtLjA5QTEuNjUgMS42NSAwIDAgMCA5IDE5LjRhMS42NSAxLjY1IDAgMCAwLTEuODIuMzNsLS4wNi4wNmEyIDIgMCAxIDEtMi44My0yLjgzbC4wNi0uMDZhMS42NSAxLjY1IDAgMCAwIC4zMy0xLjgyIDEuNjUgMS42NSAwIDAgMC0xLjUxLTFIM2EyIDIgMCAxIDEgMC00aC4wOUExLjY1IDEuNjUgMCAwIDAgNC42IDlhMS42NSAxLjY1IDAgMCAwLS4zMy0xLjgybC0uMDYtLjA2YTIgMiAwIDEgMSAyLjgzLTIuODNsLjA2LjA2YTEuNjUgMS42NSAwIDAgMCAxLjgyLjMzSDlhMS42NSAxLjY1IDAgMCAwIDEtMS41MVYzYTIgMiAwIDEgMSA0IDB2LjA5YTEuNjUgMS42NSAwIDAgMCAxIDEuNTEgMS42NSAxLjY1IDAgMCAwIDEuODItLjMzbC4wNi0uMDZhMiAyIDAgMSAxIDIuODMgMi44M2wtLjA2LjA2YTEuNjUgMS42NSAwIDAgMC0uMzMgMS44MlY5YTEuNjUgMS42NSAwIDAgMCAxLjUxIDFIMjFhMiAyIDAgMSAxIDAgNGgtLjA5YTEuNjUgMS42NSAwIDAgMC0xLjUxIDF6Ii8+PC9zdmc+", "sizes": "192x192"}]
             }
         ]
     }, headers={"Cache-Control": "public, max-age=86400"})
@@ -395,8 +389,8 @@ def set_csrf_cookie(res, t, r):
 @app.exception_handler(RequestValidationError)
 async def val_handler(request: Request, exc: RequestValidationError):
     lang = _resolve_lang(request, request.query_params.get("setlang"))
-    if request.url.path == "/cabinet/edit":
-        return RedirectResponse("/cabinet/edit?error=empty", 303)
+    if request.url.path in ("/settings/account", "/cabinet/edit"):
+        return RedirectResponse("/settings/account?error=empty", 303)
     em = "Заполните все обязательные поля!" if lang == "ru" else "Please fill all required fields!"
     token = get_csrf_token(request)
     res = HTMLResponse(content=auth_html(lang, em, token), status_code=422)
@@ -589,6 +583,11 @@ LOCALES = {
         "settings_links": "Полезные ссылки",
         "settings_version": "Версия",
         "pwa_install": "Установить приложение",
+        "settings_info": "Инфо",
+        "settings_account": "Аккаунт",
+        "settings_appearance": "Оформление",
+        "back": "Назад",
+        "settings_account_title": "Настройки аккаунта",
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -660,6 +659,11 @@ LOCALES = {
         "settings_links": "Useful links",
         "settings_version": "Version",
         "pwa_install": "Install App",
+        "settings_info": "Info",
+        "settings_account": "Account",
+        "settings_appearance": "Appearance",
+        "back": "Back",
+        "settings_account_title": "Account Settings",
     }
 }
 
@@ -670,42 +674,76 @@ def format_date(iso):
     try: return datetime.fromisoformat(iso.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M")
     except: return iso[:10]
 
-SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
-SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
+SVG_EYE = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'></path><circle cx='12' cy='12' r='3'></circle></svg>"""
+SVG_EYE_OFF = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'></path><line x1='1' y1='1' x2='23' y2='23'></line></svg>"""
 SVG_UPLOAD = """<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'></path><polyline points='17 8 12 3 7 8'></polyline><line x1='12' y1='3' x2='12' y2='15'></line></svg>"""
 SVG_CAMERA = """<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z'></path><circle cx='12' cy='13' r='4'></circle></svg>"""
+SVG_BACK = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='19' y1='12' x2='5' y2='12'></line><polyline points='12 19 5 12 12 5'></polyline></svg>"""
 
-SVG_ICONS = {
-    "lock": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
-    "pencil": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>",
-    "lightbulb": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18h6'/><path d='M10 22h4'/><path d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/></svg>",
-    "gear": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>",
-    "image": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2' ry='2'/><circle cx='8.5' cy='8.5' r='1.5'/><polyline points='21 15 16 10 5 21'/></svg>",
-    "shield": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg>",
-    "bug": "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#4da6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='8' y='6' width='8' height='14' rx='4'/><path d='M19 7l-3 2'/><path d='M5 7l3 2'/><path d='M19 19l-3-2'/><path d='M5 19l3-2'/><path d='M20 13h-4'/><path d='M4 13h4'/><path d='M10 4l1 2'/><path d='M14 4l-1 2'/></svg>",
-}
-
+# Sidebar & Bottom Nav Icons
+SVG_NAV_HOME = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><polyline points='9 22 9 12 15 12 15 22'/></svg>"""
 SVG_NAV_CREATE = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/></svg>"""
-SVG_NAV_CABINET = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
+SVG_NAV_PROFILE = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>"""
 SVG_NAV_SETTINGS = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"""
 SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='22 12 16 12 14 15 10 15 8 12 2 12'/><path d='M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/></svg>"""
+SVG_INFO = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'></circle><line x1='12' y1='16' x2='12' y2='12'></line><line x1='12' y1='8' x2='12.01' y2='8'></line></svg>"""
+SVG_USER = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path><circle cx='12' cy='7' r='4'></circle></svg>"""
+SVG_PALETTE = """<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='13.5' cy='6.5' r='.5' fill='currentColor'></circle><circle cx='17.5' cy='10.5' r='.5' fill='currentColor'></circle><circle cx='8.5' cy='7.5' r='.5' fill='currentColor'></circle><circle cx='6.5' cy='12.5' r='.5' fill='currentColor'></circle><path d='M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z'></path></svg>"""
 
 def bottom_nav_html(lang):
     current = _current_path.get() or "/"
     create_active = "active" if current == "/cabinet/new" else ""
     sug_active = "active" if current == "/cabinet/suggestions" else ""
-    set_active = "active" if current == "/settings" else ""
+    set_active = "active" if current.startswith("/settings") else ""
     profile_active = ""
     if current.startswith("/cabinet") and current not in ("/cabinet/new", "/cabinet/suggestions"):
         profile_active = "active"
     return f"""
     <nav class="bottom-nav" aria-label="Навигация">
         <a href="/cabinet/new" class="bottom-nav-item {create_active}">{SVG_NAV_CREATE}</a>
-        <a href="/cabinet/profile" class="bottom-nav-item {profile_active}">{SVG_NAV_CABINET}</a>
+        <a href="/cabinet/profile" class="bottom-nav-item {profile_active}">{SVG_NAV_PROFILE}</a>
         <a href="/cabinet/suggestions" class="bottom-nav-item {sug_active}">{SVG_NAV_SUGGES}</a>
         <a href="/settings" class="bottom-nav-item {set_active}">{SVG_NAV_SETTINGS}</a>
     </nav>
     <script>document.body.classList.add('has-bottom-nav');</script>
+    """
+
+def pc_sidebar_html(lang, nickname, avatar, username):
+    current = _current_path.get() or "/"
+    home_active = "active" if current in ("/cabinet", "/cabinet/profile") else ""
+    sug_active = "active" if current == "/cabinet/suggestions" else ""
+    set_active = "active" if current.startswith("/settings") else ""
+    
+    avatar_html = f'<img src="{avatar}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">' if avatar else f'<div style="width:40px;height:40px;border-radius:50%;background:#333;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;">{username[0].upper()}</div>'
+    
+    return f"""
+    <aside class="pc-sidebar">
+        <div class="sidebar-logo">Solid</div>
+        <a href="/cabinet/profile" class="sidebar-item {home_active}">
+            {SVG_NAV_HOME} <span>ЛК</span>
+        </a>
+        <a href="/cabinet/suggestions" class="sidebar-item {sug_active}">
+            {SVG_NAV_SUGGES} <span>Предложка</span>
+        </a>
+        <a href="javascript:void(0)" onclick="openCreateModal()" class="sidebar-item">
+            {SVG_NAV_CREATE} <span>Создать пост</span>
+        </a>
+        <a href="/settings" class="sidebar-item {set_active}">
+            {SVG_NAV_SETTINGS} <span>Настройки</span>
+        </a>
+        <div class="sidebar-profile">
+            <a href="/cabinet/profile" style="display:flex; align-items:center; gap:10px; text-decoration:none; color:#fff;">
+                {avatar_html}
+                <div>
+                    <div style="font-weight:bold; font-size:15px;">{username}</div>
+                    <div style="color:#888; font-size:13px;">@{nickname}</div>
+                </div>
+            </a>
+            <button onclick="confirmLogout()" style="background:transparent; border:none; color:#e63946; cursor:pointer; width:auto; padding:5px; margin-left:auto;" title="Выйти">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            </button>
+        </div>
+    </aside>
     """
 
 _CSS_CACHE = None
@@ -725,286 +763,125 @@ def get_css():
             }
 
             * { box-sizing: border-box; }
-            html, body { margin: 0; padding: 0; }
-            body {
-                font-family: 'Source Sans 3', 'RuFont', Arial, sans-serif;
-                background-color: #f4f4f4;
-                display: flex;
-                flex-direction: column;
-                min-height: 100vh;
-                min-height: 100dvh;
-                color: #222;
-            }
-
-            /* Herokid for headings and bold UI */
-            h1, h2, h3, h4, h5, h6, .label-text, .btn, button, .file-label, .post-author {
-                font-family: 'Herokid', 'Impact', 'Arial Black', sans-serif;
-                letter-spacing: 0.5px;
-            }
-
-            .page-content {
-                min-height: 100vh;
-                min-height: 100dvh;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                padding: 20px;
-                width: 100%;
-            }
-            a { color: #0056b3; text-decoration: none; font-weight: 600; transition: color 0.2s; }
-            a:hover { text-decoration: underline; color: #003d82; }
-
-            /* Auth forms */
-            .container { background: #ffffff; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); display: flex; gap: 40px; align-items: flex-start; max-width: 100%; }
-            .auth-wrapper { display: flex; gap: 20px; flex-direction: column; width: 100%; max-width: 340px; }
-            .label-text { font-size: 32px; color: #111; margin-bottom: 10px; white-space: nowrap; }
-            .form-box { background-color: #f9f9f9; padding: 20px; display: flex; flex-direction: column; gap: 12px; border-radius: 12px; border: 1px solid #eaeaea; width: 100%;}
-            .form-box form { display: flex; flex-direction: column; gap: 12px; margin: 0; width: 100%;}
-            .input-group { position: relative; display: flex; align-items: center; width: 100%; }
+            html, body { margin: 0; padding: 0; background: #000; color: #e7e9ea; font-family: 'Source Sans 3', 'RuFont', Arial, sans-serif; }
             
-            input[type="text"], input[type="password"], textarea, select { 
-                background-color: #f0f2f5; border: 2px solid transparent; padding: 14px; border-radius: 10px;
-                font-size: 18px; font-family: 'Source Sans 3', sans-serif; width: 100%; 
-                text-align: left; outline: none; transition: border 0.2s, background 0.2s; color: #333;
-            }
-            input[type="text"]:focus, input[type="password"]:focus, textarea:focus { border-color: #4da6ff; background-color: #fff; }
-            textarea { text-align: left; resize: vertical; }
+            h1, h2, h3, h4, h5, h6 { font-family: 'Herokid', 'Impact', sans-serif; color: #e7e9ea !important; margin: 0; letter-spacing: 0.5px; }
 
-            .eye-btn { position: absolute; right: 10px; background: transparent; border: none; cursor: pointer; width: 40px; padding: 5px; display: flex; align-items: center; justify-content: center; opacity: 0.6; }
+            /* Layout */
+            .pc-layout { display: none; }
+            .mobile-layout { display: block; min-height: 100vh; min-height: 100dvh; padding-bottom: 70px; }
+
+            /* Auth Page */
+            .auth-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+            .auth-box { background: #16181c; border: 1px solid #2f3336; padding: 40px; border-radius: 16px; width: 100%; max-width: 400px; }
+            .auth-title { font-size: 32px; text-align: center; margin-bottom: 24px; }
+            .input-group { position: relative; margin-bottom: 16px; }
+            input[type="text"], input[type="password"], textarea, select { background-color: #202327; border: 1px solid #333; color: #e7e9ea; border-radius: 8px; padding: 16px; font-size: 16px; width: 100%; font-family: 'Source Sans 3', sans-serif; transition: all 0.2s; }
+            input[type="text"]:focus, input[type="password"]:focus, textarea:focus { outline: none; border-color: #1d9bf0; background-color: #202327; color: #fff; }
+            .eye-btn { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: none; cursor: pointer; padding: 5px; display: flex; align-items: center; justify-content: center; opacity: 0.6; width: auto; }
             .eye-btn:hover { opacity: 1; }
             
-            .file-label { display: flex; align-items: center; justify-content: center; gap: 8px; background: #e9ecef; padding: 14px; border-radius: 10px; cursor: pointer; font-size: 16px; color: #333; user-select: none; transition: background 0.2s; border: 1px solid #ddd; }
-            .file-label:hover { background: #dee2e6; }
+            button, .btn { background-color: #e7e9ea; color: #000; border: none; border-radius: 9999px; padding: 14px; font-size: 16px; font-weight: 700; font-family: 'Source Sans 3', sans-serif; cursor: pointer; width: 100%; transition: background 0.2s; text-align: center; display: block; text-decoration: none; }
+            button:hover, .btn:hover { background-color: #d7dbdc; }
+            .btn-blue { background-color: #1d9bf0; color: #fff; }
+            .btn-blue:hover { background-color: #1a8cd8; }
+            .btn-danger { background-color: #e63946; color: #fff; }
+            .btn-danger:hover { background-color: #d62828; }
+
+            .captcha-container { display: flex; align-items: center; gap: 10px; background: #202327; padding: 12px; border-radius: 8px; border: 1px solid #333; margin-bottom: 12px; cursor: pointer; font-size: 15px; }
+            .captcha-container input { width: 20px; height: 20px; cursor: pointer; }
             
-            button, .btn { 
-                background-color: #111; border: none; padding: 14px; border-radius: 10px; font-size: 18px; 
-                width: 100%; text-align: center; cursor: pointer; color: #fff; display: inline-block; 
-                transition: background 0.2s, transform 0.1s;
-            }
-            button:hover, .btn:hover { background-color: #333; }
-            button:active, .btn:active { transform: scale(0.98); }
-            button:disabled { opacity: 0.6; cursor: wait; }
+            .error-msg { color: #e63946; font-size: 14px; text-align: center; margin-bottom: 15px; font-weight: 600; }
+            .privacy-link { color: #1d9bf0; text-decoration: none; }
+            .privacy-link:hover { text-decoration: underline; }
 
-            .captcha-container { background-color: #f0f2f5; padding: 12px; border-radius: 10px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: 100%; cursor: pointer; font-size: 16px; border: 1px solid #eaeaea; }
-            .captcha-container input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; flex-shrink: 0; border-radius: 4px; }
-            .privacy-link { color: #0056b3; text-decoration: underline; margin-left: 5px; }
+            /* Content Pages */
+            .content-wrapper { max-width: 600px; margin: 0 auto; border-left: 1px solid #2f3336; border-right: 1px solid #2f3336; min-height: 100vh; }
+            .page-header { padding: 16px 20px; border-bottom: 1px solid #2f3336; display: flex; align-items: center; gap: 15px; position: sticky; top: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px); z-index: 100; }
+            .page-header h2 { font-size: 20px; }
+            .back-btn { color: #e7e9ea; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; transition: background 0.2s; text-decoration: none; }
+            .back-btn:hover { background: rgba(255,255,255,0.1); text-decoration: none; }
 
-            /* Dashboard */
-            .dashboard-container { display: flex; gap: 24px; width: 100%; max-width: 1200px; margin: 0 auto; align-items: flex-start; padding: 20px; }
-            .sidebar { background: #fff; padding: 24px; border-radius: 20px; width: 100%; max-width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eaeaea; }
-            .sidebar h2 { color: #111; text-align: center; font-size: 28px; margin: 0 0 10px 0; }
-            .info-card { background: #f8f9fa; padding: 15px; border-radius: 10px; font-size: 16px; text-align: left; word-wrap: break-word; color: #333; border: 1px solid #eaeaea; }
-            .info-card b { color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
-            
-            .avatar { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 15px auto; border: 4px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); background: #eee; cursor: zoom-in; }
-            .avatar-upload { position: relative; width: 120px; height: 120px; margin: 0 auto 15px auto; border-radius: 50%; overflow: hidden; cursor: pointer; background: #eee; border: 4px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: block; }
-            .avatar-upload .avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-            .avatar-upload-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.2s; pointer-events: none; }
-            .avatar-upload:hover .avatar-upload-icon { opacity: 1; }
+            /* Post Card */
+            .post-card { padding: 16px 20px; border-bottom: 1px solid #2f3336; display: flex; gap: 12px; transition: background 0.2s; cursor: pointer; }
+            .post-card:hover { background: rgba(255,255,255,0.03); }
+            .post-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: #333; }
+            .post-body { flex: 1; min-width: 0; }
+            .post-header { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; flex-wrap: wrap; }
+            .post-author { color: #e7e9ea; font-weight: 700; font-size: 15px; text-decoration: none; }
+            .post-author:hover { text-decoration: underline; }
+            .post-nickname { color: #71767b; font-size: 15px; }
+            .post-dot { color: #71767b; }
+            .post-date { color: #71767b; font-size: 15px; }
+            .post-text { font-size: 15px; line-height: 1.5; color: #e7e9ea; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
+            .post-text a { color: #1d9bf0; text-decoration: none; }
+            .post-text a:hover { text-decoration: underline; }
+            .post-img { width: 100%; max-height: 500px; object-fit: cover; border-radius: 16px; border: 1px solid #2f3336; margin-top: 10px; margin-bottom: 10px; cursor: zoom-in; }
+            .post-actions { display: flex; justify-content: space-between; align-items: center; max-width: 400px; margin-top: 10px; }
+            .action-icon { color: #71767b; display: flex; align-items: center; gap: 5px; font-size: 13px; background: none; border: none; padding: 8px; border-radius: 50%; cursor: pointer; transition: all 0.2s; width: auto; }
+            .action-icon:hover { color: #1d9bf0; background: rgba(29,155,240,0.1); }
+            .action-icon.del:hover { color: #f4212e; background: rgba(244,33,46,0.1); }
 
-            .logout-btn { background: #e63946; margin-top: 10px; }
-            .logout-btn:hover { background: #d62828; }
-            .edit-btn { background: #4da6ff; color: #fff; }
-            .edit-btn:hover { background: #1a82e2; }
-            .sugges-btn { background: #9b59b6; color: #fff; position: relative; }
-            .sugges-btn:hover { background: #8e44ad; }
-            .badge { background: #e63946; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-left: 6px; font-family: 'Source Sans 3', sans-serif; vertical-align: middle; }
-
-            .main-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 24px; width: 100%; }
-
-            /* Create Post */
-            .create-post-box { background: #fff; padding: 20px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eaeaea; }
-            .create-post-box form { display: flex; flex-direction: column; gap: 12px; }
-            .create-post-box textarea { height: 100px; font-size: 18px; padding: 15px; border-radius: 12px; border: 1px solid #ddd; background: #f8f9fa; }
-            .post-buttons-row { display: flex; gap: 12px; align-items: stretch; }
-            .post-buttons-row > .file-label, .post-buttons-row > button { flex: 1; margin: 0; min-width: 0; }
-
-            /* Posts area */
-            .posts-area { display: flex; flex-direction: column; gap: 16px; width: 100%; }
-            .posts-area h2 { color: #111; font-size: 26px; margin: 0 0 10px 0; text-align: left; }
-            
-            .post-wrapper { position: relative; transition: opacity 0.3s ease; }
-            .post-item { 
-                background: #ffffff; padding: 24px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); 
-                border: 1px solid #eaeaea; display: flex; flex-direction: column; position: relative; overflow: hidden;
-            }
-            .post-item.pinned { border: 2px solid #4da6ff; background: #f0f8ff; }
-            
-            .post-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-            .post-author { color: #111; font-size: 18px; text-decoration: none; }
-            .post-author:hover { color: #0056b3; text-decoration: none; }
-            .post-date { font-size: 13px; color: #888; font-family: 'Source Sans 3', sans-serif; font-weight: normal; }
-            .post-suggested { font-size: 14px; color: #1e8449; font-weight: bold; margin-bottom: 10px; background: #e8f5e9; padding: 6px 12px; border-radius: 8px; display: inline-block; }
-
-            .post-content { font-size: 17px; line-height: 1.6; text-align: left; word-break: break-word; white-space: pre-wrap; color: #333; margin-bottom: 15px; }
-            .post-content a.ext-link { color: #0056b3; text-decoration: underline; word-break: break-all; }
-            
-            .img-preview { max-width: 100%; max-height: 200px; border-radius: 12px; display: block; margin: 10px 0; cursor: zoom-in;}
-            .post-image { width: 100%; max-height: 600px; object-fit: cover; display: block; cursor: zoom-in; border-radius: 12px; margin-bottom: 15px;}
-            
-            .post-footer { display: flex; justify-content: flex-end; align-items: center; padding-top: 15px; border-top: 1px solid #f0f0f0; gap: 10px; flex-wrap: wrap; }
-            
-            .post-actions { display: flex; gap: 8px; transition: opacity 0.2s; }
-            .action-btn { 
-                background: #f0f2f5; color: #555; border: 1px solid #e0e0e0; padding: 8px 16px; 
-                font-size: 14px; cursor: pointer; border-radius: 8px; width: auto; 
-                font-family: 'Source Sans 3', sans-serif; font-weight: 600;
-            }
-            .action-btn:hover { background: #e4e6e9; color: #111; }
-            .action-btn.pin-btn:hover { background: #d0e8ff; color: #0056b3; border-color: #a0cfff; }
-            .action-btn.link-btn:hover { background: #fff3cd; color: #856404; border-color: #ffeeba; }
-            .action-btn.del-btn:hover { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
-
-            /* Settings & others */
-            .settings-card { background: #fff; border-radius: 20px; padding: 24px; margin-bottom: 16px; border: 1px solid #eaeaea; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-            .settings-card h3 { color: #111; margin: 0 0 16px 0; font-size: 22px; }
-            .settings-about-text { color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 16px 0; }
-            .settings-version { color: #888; font-size: 14px; margin: 0; }
-            .settings-link { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f0f0f0; color: #333; font-size: 16px; font-weight: 600; }
-            .settings-link:last-child { border-bottom: none; }
-            .settings-link:hover { color: #0056b3; text-decoration: none; }
-            .settings-link::after { content: '›'; color: #aaa; font-size: 22px; font-weight: normal; }
-
-            /* Skeletons */
-            .image-skeleton { margin: 10px 0; border-radius: 12px; overflow: hidden; background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; min-height: 150px; position: relative; }
-            .image-skeleton.loaded { animation: none; background: transparent; min-height: 0; }
-            .image-skeleton .post-image { margin: 0; opacity: 0; transition: opacity 0.4s; }
-            .image-skeleton .post-image.loaded { opacity: 1; }
-            .avatar-skeleton { display: block; width: 120px; height: 120px; margin: 0 auto 15px; border-radius: 50%; overflow: hidden; background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 50%, #f0f0f0 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; }
-            .avatar-skeleton.loaded { animation: none; background: transparent; }
-            .avatar-skeleton .avatar { margin: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.4s; border-radius: 0; border: none; box-shadow: none; }
-            .avatar-skeleton .avatar.loaded { opacity: 1; }
-            @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-            .btn-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
-            @keyframes spin { to { transform: rotate(360deg); } }
-
-            /* Progress bar */
-            .progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: linear-gradient(90deg, #4da6ff 0%, #9b59b6 50%, #4da6ff 100%); background-size: 200% 100%; animation: progress-shimmer 1.5s linear infinite; z-index: 99999; opacity: 0; pointer-events: none; }
-            .progress-bar.show { width: 80%; opacity: 1; transition: width 0.4s ease-out, opacity 0.2s; }
-            @keyframes progress-shimmer { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
-
-            /* Modal / Image Viewer */
-            #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 14px 28px; border-radius: 12px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: 600; pointer-events: none; text-align: center; max-width: 90%; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-            #toast.show { opacity: 1; }
-            .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 10000; justify-content: center; align-items: center; padding: 20px; }
+            /* Create Post Modal */
+            .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(91,112,131,0.4); z-index: 10000; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(4px); }
             .modal-overlay.show { display: flex; }
-            .modal-box { background: white; padding: 30px; border-radius: 20px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-            .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
-            .btn-danger { background: #e63946; }
-            .btn-danger:hover { background: #d62828; }
-            .og-box { margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 12px; border: 1px solid #eaeaea; text-align: left; overflow: hidden;}
-            .og-img { max-width: 100%; max-height: 200px; border-radius: 8px; margin-bottom: 10px; object-fit: cover; }
-            .og-title { margin: 0 0 5px 0; font-size: 16px; color: #111; font-weight: bold; word-break: break-word;}
-            .og-desc { margin: 0; font-size: 14px; color: #555; word-break: break-word;}
+            .modal-box { background: #000; border: 1px solid #2f3336; border-radius: 16px; width: 100%; max-width: 600px; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+            .modal-header { padding: 12px 16px; border-bottom: 1px solid #2f3336; display: flex; justify-content: space-between; align-items: center; }
+            .modal-header button { background: #1d9bf0; color: #fff; border-radius: 9999px; padding: 8px 20px; font-size: 15px; width: auto; }
+            .modal-header button:disabled { opacity: 0.5; cursor: not-allowed; }
+            .modal-header button:hover { background: #1a8cd8; }
+            .modal-body { padding: 16px; display: flex; gap: 12px; }
+            .modal-textarea { background: transparent; border: none; color: #e7e9ea; font-size: 20px; resize: none; height: 150px; padding: 0; width: 100%; }
+            .modal-textarea:focus { outline: none; border: none; background: transparent; }
+            .modal-footer { padding: 12px 16px; border-top: 1px solid #2f3336; display: flex; justify-content: flex-start; }
+            .modal-close { background: transparent; color: #e7e9ea; border: none; cursor: pointer; padding: 8px; border-radius: 50%; width: auto; }
+            .modal-close:hover { background: rgba(255,255,255,0.1); }
 
-            #img-viewer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 20000; display: none; justify-content: center; align-items: center; padding: 0; }
+            /* Settings Menu */
+            .settings-menu-list { display: flex; flex-direction: column; }
+            .settings-menu-item { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #2f3336; text-decoration: none; color: #e7e9ea; transition: background 0.2s; }
+            .settings-menu-item:hover { background: rgba(255,255,255,0.03); }
+            .settings-menu-item-left { display: flex; align-items: center; gap: 15px; font-weight: 700; font-size: 16px; }
+            .settings-menu-item svg { color: #e7e9ea; }
+            .settings-menu-item::after { content: '›'; color: #71767b; font-size: 24px; font-weight: normal; }
+
+            /* Image Viewer */
+            #img-viewer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 20000; display: none; justify-content: center; align-items: center; }
             #img-viewer.show { display: flex; animation: fadeIn 0.2s; }
-            #img-viewer-img { max-width: 90vw; max-height: 82vh; max-height: 82dvh; object-fit: contain; border-radius: 8px; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); cursor: zoom-in; user-select: none; -webkit-user-select: none; touch-action: manipulation; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
-            #img-viewer-img.zoomed { transform: scale(2.2); cursor: zoom-out; }
-            .img-viewer-close { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #fff; border: 2px solid #fff; width: 48px; height: 48px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20005; padding: 0; line-height: 1; box-sizing: border-box; transition: background 0.2s; }
-            .img-viewer-close:hover { background: rgba(255,255,255,0.2); }
+            #img-viewer-img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; }
+            .img-viewer-close { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #fff; border: 2px solid #fff; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-            /* Create page */
-            .create-page-container { width: 100%; max-width: 700px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-            .create-page-title { color: #111; font-size: 32px; text-align: center; margin: 0 0 20px; }
-            .create-page-form { display: flex; flex-direction: column; gap: 15px; }
-            .create-page-textarea { width: 100%; min-height: 300px; height: 40vh; padding: 20px; font-size: 18px; border-radius: 12px; background: #f8f9fa; border: 2px solid transparent; resize: vertical; font-family: 'Source Sans 3', sans-serif; transition: border 0.2s; }
-            .create-page-textarea:focus { border-color: #4da6ff; background: #fff; }
+            /* Toast */
+            #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1d9bf0; color: #fff; padding: 12px 24px; border-radius: 8px; opacity: 0; transition: opacity 0.3s; z-index: 9999; font-weight: 600; pointer-events: none; font-size: 15px; }
+            #toast.show { opacity: 1; }
 
-            /* Footer */
-            .footer { text-align: center; font-size: 15px; color: #777; width: 100%; padding: 30px 20px; display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
-            .footer a { color: #333; border-bottom: 1px solid transparent; font-weight: 600; }
-            .footer a:hover { border-bottom-color: #333; text-decoration: none; }
-            .footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; }
-            .footer-contacts { font-size: 14px; color: #888; }
-            .footer-badge img { display: block; border: 0; margin: 0 auto; }
+            /* Progress bar */
+            .progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: #1d9bf0; z-index: 99999; opacity: 0; pointer-events: none; }
+            .progress-bar.show { width: 80%; opacity: 1; transition: width 0.4s ease-out, opacity 0.2s; }
 
-            .bottom-nav { display: none; }
+            .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: #000; border-top: 1px solid #2f3336; z-index: 5000; height: 60px; padding-bottom: env(safe-area-inset-bottom); }
+            .bottom-nav-item { flex: 1; display: flex; align-items: center; justify-content: center; color: #71767b; transition: color 0.15s; position: relative; text-decoration: none; }
+            .bottom-nav-item svg { width: 26px; height: 26px; }
+            .bottom-nav-item.active { color: #1d9bf0; pointer-events: none; }
+            .bottom-nav-item.active::before { content: ''; position: absolute; top: 0; width: 30px; height: 3px; background: #1d9bf0; border-radius: 0 0 3px 3px; }
 
-            /* Mobile Styles */
-            @media (max-width: 768px) {
-                body { background-color: #000 !important; color: #fff; }
-                .page-content { justify-content: flex-start; padding: 0; min-height: 100vh; min-height: 100dvh; }
-                body.has-bottom-nav .page-content { padding-bottom: 70px; }
+            /* Media Queries */
+            @media (min-width: 769px) {
+                .mobile-layout { display: none; }
+                .pc-layout { display: flex; justify-content: center; max-width: 1200px; margin: 0 auto; min-height: 100vh; }
                 
-                .container { flex-direction: column; padding: 15px; border: none; background: #000; gap: 20px; width: 100%; box-shadow: none; border-radius: 0; }
-                .auth-wrapper { width: 100%; max-width: 100%; background: transparent; padding: 0; box-shadow: none; }
-                .label-text { color: #fff; font-size: 32px; text-align: center; margin: 10px 0 15px 0; order: -1; }
-                .form-box { border: 1px solid #222; background: #111; border-radius: 16px; padding: 15px; }
-                .captcha-container { background: #222; color: #ddd; border: 1px solid #333; border-radius: 12px; }
-                input[type="text"], input[type="password"], textarea, select { background: #222; color: #fff; border: 1px solid #333; border-radius: 12px; font-size: 16px; padding: 16px; }
-                input[type="text"]:focus, input[type="password"]:focus, textarea:focus { border-color: #4da6ff; background: #1a1a1a; }
-                button, .btn, .file-label { background: #333; color: #fff; border: 1px solid #444; border-radius: 12px; font-size: 16px; padding: 16px; }
-                button:hover, .btn:hover { background: #444; }
+                .pc-sidebar { width: 275px; padding: 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; border-right: 1px solid #2f3336; }
+                .sidebar-logo { font-family: 'Herokid', 'Impact', sans-serif; font-size: 32px; color: #e7e9ea; margin-bottom: 30px; padding-left: 10px; }
+                .sidebar-item { display: flex; align-items: center; gap: 20px; padding: 12px 15px; color: #e7e9ea; text-decoration: none; font-size: 20px; font-weight: 600; border-radius: 9999px; margin-bottom: 5px; transition: background 0.2s; cursor: pointer; background: transparent; border: none; width: 100%; text-align: left; }
+                .sidebar-item:hover { background: rgba(255,255,255,0.1); }
+                .sidebar-item.active { font-weight: 700; }
+                .sidebar-item svg { width: 26px; height: 26px; }
+                .sidebar-profile { margin-top: auto; padding: 12px; display: flex; align-items: center; background: #16181c; border-radius: 9999px; border: 1px solid #2f3336; }
                 
-                .dashboard-container { flex-direction: column; gap: 0; width: 100%; max-width: 100%; padding: 15px; }
-                .sidebar { width: 100%; max-width: 100%; padding: 20px; border-radius: 20px; background: #111; border: 1px solid #222; gap: 12px; margin-bottom: 20px; box-shadow: none; }
-                .sidebar h2 { color: #fff; font-size: 26px; margin: 0 0 10px; }
-                .info-card { background: #1a1a1a; color: #eee; border: 1px solid #222; padding: 15px; font-size: 15px; border-radius: 12px; }
-                .info-card a { color: #4da6ff !important; }
-                .info-card b { color: #888; }
-                .main-content { width: 100%; gap: 15px; }
-                
-                .post-item { background: #111; color: #fff; border: 1px solid #222; border-radius: 16px; padding: 16px; box-shadow: none; }
-                .post-item.pinned { border-color: #4da6ff; background: #0d1b2a; }
-                .post-header { margin-bottom: 12px; }
-                .post-author { color: #fff; font-size: 18px; }
-                .post-date { color: #888; }
-                .post-content { color: #ddd; font-size: 16px; line-height: 1.5; text-align: left !important; margin-bottom: 12px; }
-                .post-footer { border-top: 1px solid #222; padding-top: 12px; }
-                .post-actions { display: flex; width: 100%; justify-content: space-between; gap: 8px; opacity: 1; position: static; background: transparent; padding: 0; }
-                .action-btn { background: #222; color: #ccc; border: 1px solid #333; padding: 8px 14px; border-radius: 8px; font-size: 13px; flex: 1; text-align: center; }
-                .action-btn:hover, .action-btn:active { background: #333; color: #fff; }
-                
-                .create-post-box { display: none !important; }
-                .lang-switch { display: none !important; }
-                .settings-card .lang-switch { display: flex !important; }
-
-                .modal-box { background: #111; color: #fff; border: 1px solid #333; border-radius: 16px; }
-                .modal-box p, .modal-box h3 { color: #fff; }
-                .og-box { background: #222; border-color: #333; color: #fff; }
-                .og-title { color: #fff; }
-                .og-desc { color: #aaa; }
-                
-                .settings-card { background: #111; border: 1px solid #222; border-radius: 16px; margin-bottom: 12px; padding: 20px; box-shadow: none; }
-                .settings-card h3 { color: #fff; }
-                .settings-about-text { color: #aaa; }
-                .settings-link { color: #eee; border-bottom: 1px solid #222; }
-                .settings-link:hover { color: #4da6ff; }
-                .settings-link::after { color: #555; }
-                
-                .footer { display: none; }
-                body.show-footer .footer {
-                    display: flex;
-                    margin: 0 !important;
-                    padding: 20px 15px 100px 15px !important;
-                    background: #000 !important;
-                    border-radius: 0;
-                    border-top: 1px solid #222;
-                    gap: 10px;
-                    font-size: 13px;
-                    color: #888;
-                }
-                body.show-footer .footer a { color: #4da6ff; border: none; }
-                body.show-footer .footer-links { flex-wrap: wrap; justify-content: center; gap: 6px; }
-                body.show-footer .footer-links a { background: #111; padding: 8px 12px; border-radius: 8px; }
-                
-                .avatar, .avatar-upload, .avatar-skeleton { width: 100px; height: 100px; }
-                .post-image { max-height: 400px; border-radius: 12px; }
-                
-                .bottom-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); border-top: 1px solid #222; z-index: 5000; height: 65px; padding-bottom: env(safe-area-inset-bottom); }
-                .bottom-nav-item { flex: 1; display: flex; align-items: center; justify-content: center; color: #666; transition: color 0.15s; position: relative; }
-                .bottom-nav-item svg { width: 26px; height: 26px; }
-                .bottom-nav-item.active { color: #4da6ff; pointer-events: none; }
-                .bottom-nav-item.active::before { content: ''; position: absolute; top: 0; width: 30px; height: 3px; background: #4da6ff; border-radius: 0 0 3px 3px; }
-                
-                #toast { bottom: 85px; background: #333; border: 1px solid #555; border-radius: 12px; }
-                .create-page-container { padding: 20px; background: #111; border-radius: 20px; border: 1px solid #222; }
-                .create-page-title { color: #fff; font-size: 28px; }
-                .create-page-textarea { background: #222; color: #fff; border: 1px solid #333; border-radius: 12px; }
+                .pc-main { flex: 1; max-width: 600px; border-right: 1px solid #2f3336; min-height: 100vh; }
+                .pc-right-panel { width: 350px; padding: 20px; display: none; }
+                @media (min-width: 1024px) { .pc-right-panel { display: block; } }
             }
         </style>
         """
@@ -1026,7 +903,7 @@ def get_js(lang, token, current_user=""):
         function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
         function safeUrl(u) { if (!u) return ''; u = String(u); if (/^https?:\\/\\//i.test(u) || /^data:image\\//i.test(u)) return u; return ''; }
         function formatLocalDates() {
-            const opts = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+            const opts = { day: '2-digit', month: 'short', year: 'numeric' };
             document.querySelectorAll('[data-iso]').forEach(el => {
                 const iso = el.getAttribute('data-iso');
                 if (!iso) return;
@@ -1040,16 +917,13 @@ def get_js(lang, token, current_user=""):
             if (!src) return;
             const img = document.getElementById('img-viewer-img');
             img.src = src;
-            img.classList.remove('zoomed');
             document.getElementById('img-viewer').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
         function closeImgViewer() {
             document.getElementById('img-viewer').classList.remove('show');
-            document.getElementById('img-viewer-img').classList.remove('zoomed');
             document.body.style.overflow = '';
         }
-        function toggleImgZoom(img) { img.classList.toggle('zoomed'); }
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImgViewer(); });
 
         window.skelLoad = function(el) {
@@ -1075,25 +949,13 @@ def get_js(lang, token, current_user=""):
             window.addEventListener('pagehide', () => bar.classList.remove('show'));
         })();
 
-        // PWA Install Prompt
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            const installBtn = document.getElementById('pwa-install-btn');
-            if (installBtn) installBtn.style.display = 'block';
-        });
-        function installPWA() {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {
-                    if (choiceResult.outcome === 'accepted') {
-                        const installBtn = document.getElementById('pwa-install-btn');
-                        if (installBtn) installBtn.style.display = 'none';
-                    }
-                    deferredPrompt = null;
-                });
-            }
+        function openCreateModal() {
+            const m = document.getElementById('create-modal');
+            if (m) { m.classList.add('show'); document.getElementById('modal-textarea').focus(); }
+        }
+        function closeCreateModal() {
+            const m = document.getElementById('create-modal');
+            if (m) m.classList.remove('show');
         }
 
         async function compressImage(file, maxWidth=1000, quality=0.75) {
@@ -1130,7 +992,7 @@ def get_js(lang, token, current_user=""):
             const file = input.files[0]; 
             const container = document.getElementById('post-img-container'); 
             const preview = document.getElementById('post-img-preview'); 
-            const btn = document.getElementById('create-post-btn');
+            const btn = document.getElementById('modal-submit-btn') || document.getElementById('create-post-btn');
             if (!file) { window.postImageCache = ""; if(container) container.style.display='none'; return; }
             showToast(L.ic); if(btn) btn.disabled = true;
             try { 
@@ -1178,6 +1040,7 @@ def get_js(lang, token, current_user=""):
             catch (e) { showToast(e === 'Image too big' ? L.ib : L.ie); input.value = ''; }
         }
         if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err)); }); }
+        
         let ws;
         function connectWS() {
             const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -1235,47 +1098,23 @@ def get_js(lang, token, current_user=""):
         function uc(e) { document.getElementById('char-count').innerText = e.value.length + ' / 300'; }
         function ucRules(e) { document.getElementById('rules-count').innerText = e.value.length + ' / 1000'; }
 
-        async function hc(e) {
+        async function submitModalPost(e) {
             e.preventDefault();
             const f = e.target, c = f.querySelector('textarea').value.trim();
             if (!c) return;
             if (c.length > 5000) { showToast(L.ptl); return; }
-            const i = crypto.randomUUID(), n = new Date();
-            const d = n.toLocaleString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const iso = n.toISOString();
             const img = window.postImageCache || "";
-            const a = document.querySelector('#my-records-container');
-            if (!a) { try { await rpc('create_record', { content: c, client_id: i, image_data: img }); location.reload(); } catch (x) { showToast(L.tf + ' ' + x.message); } return; }
-            const m = a.querySelector('.empty-state'); if (m) m.remove();
-            const w = document.createElement('div'); w.className = 'post-wrapper'; w.id = 'post-' + i;
-            const acts = document.createElement('div'); acts.className = 'post-actions';
-            const linkBtn = document.createElement('button'); linkBtn.className = 'action-btn link-btn'; linkBtn.textContent = L.cl; linkBtn.dataset.user = ME; linkBtn.dataset.rid = i;
-            linkBtn.addEventListener('click', function() { copyLink(this); });
-            const pinBtn = document.createElement('button'); pinBtn.className = 'action-btn pin-btn'; pinBtn.textContent = L.p;
-            pinBtn.addEventListener('click', function() { hp(i, this); });
-            const delBtn = document.createElement('button'); delBtn.className = 'action-btn del-btn'; delBtn.textContent = L.d;
-            delBtn.addEventListener('click', function() { hd(i); });
-            acts.append(linkBtn, pinBtn, delBtn);
-            const item = document.createElement('div'); item.className = 'post-item';
-            const header = document.createElement('div'); header.className = 'post-header';
-            header.innerHTML = `<a href="/${ME}" class="post-author">@${ME}</a><span class="post-date" data-iso="${iso}">${d}</span>`;
-            item.appendChild(header);
-            const contentEl = document.createElement('div'); contentEl.className = 'post-content'; contentEl.textContent = c;
-            item.appendChild(contentEl);
-            if (img) {
-                const wrap = document.createElement('div'); wrap.className = 'image-skeleton';
-                const imgEl = document.createElement('img'); imgEl.className = 'post-image loaded'; imgEl.src = img; imgEl.onclick = function() { viewImage(this.src); };
-                wrap.appendChild(imgEl); wrap.classList.add('loaded');
-                item.appendChild(wrap);
+            const btn = document.getElementById('modal-submit-btn');
+            btn.disabled = true; btn.innerHTML = '...';
+            try {
+                await rpc('create_record', { content: c, image_data: img });
+                showToast(L.tn);
+                closeCreateModal();
+                setTimeout(() => { window.location.reload(); }, 500);
+            } catch (x) {
+                showToast(L.tf + ' ' + x.message);
+                btn.disabled = false; btn.innerHTML = 'Опубликовать';
             }
-            const footer = document.createElement('div'); footer.className = 'post-footer';
-            footer.appendChild(acts); item.appendChild(footer);
-            w.appendChild(item);
-            let inserted = false; const wrappers = a.querySelectorAll('.post-wrapper');
-            for (let ww of wrappers) { if (!ww.querySelector('.pinned')) { a.insertBefore(w, ww); inserted = true; break; } }
-            if (!inserted) a.appendChild(w);
-            f.reset(); window.postImageCache = ""; removePostImage();
-            try { await rpc('create_record', { content: c, client_id: i, image_data: img }); } catch (x) { w.remove(); showToast(L.tf + ' ' + x.message); }
         }
 
         async function hcNew(e) {
@@ -1332,45 +1171,21 @@ def get_overlay(lang):
     s = """
     <div id="progress-bar" class="progress-bar"></div>
     <div id="toast"></div>
-    <div id="modal-overlay" class="modal-overlay"><div class="modal-box"><p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p><div class="modal-actions"><button id="modal-cancel" class="btn" style="background:#aaa;color:black;">__CANCEL__</button><button id="modal-confirm" class="btn btn-danger">OK</button></div></div></div>
-    <div id="link-modal" class="modal-overlay"><div class="modal-box" style="text-align: left;"><h3 style="margin-top:0;">__EXT_TITLE__</h3><p style="font-size:14px; color:#555; margin-bottom:10px;">__EXT_DESC__</p><div id="og-preview" class="og-box"><p style="margin:0; font-size:14px; color:#666;">__EXT_LOADING__</p></div><div class="modal-actions"><button onclick="closeLinkModal()" class="btn" style="background:#aaa;color:black;">__CANCEL__</button><a id="link-modal-confirm" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">__EXT_CONTINUE__</a></div></div></div>
+    <div id="modal-overlay" class="modal-overlay"><div class="modal-box" style="max-width:400px; padding:30px; text-align:center;"><p id="modal-text" style="font-size:18px;margin-bottom:20px;"></p><div class="modal-actions" style="display:flex; gap:10px;"><button id="modal-cancel" class="btn" style="background:#333;color:#fff;">__CANCEL__</button><button id="modal-confirm" class="btn btn-danger">OK</button></div></div></div>
+    <div id="link-modal" class="modal-overlay"><div class="modal-box" style="text-align: left; padding:20px;"><h3 style="margin-top:0;">__EXT_TITLE__</h3><p style="font-size:14px; color:#888; margin-bottom:10px;">__EXT_DESC__</p><div id="og-preview" style="background:#16181c; padding:15px; border-radius:12px;"><p style="margin:0; font-size:14px; color:#888;">__EXT_LOADING__</p></div><div class="modal-actions" style="display:flex; gap:10px; margin-top:20px;"><button onclick="closeLinkModal()" class="btn" style="background:#333;color:#fff;">__CANCEL__</button><a id="link-modal-confirm" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-blue" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">__EXT_CONTINUE__</a></div></div></div>
     <div id="img-viewer" onclick="if(event.target===this)closeImgViewer()">
         <button class="img-viewer-close" onclick="event.stopPropagation();closeImgViewer()" aria-label="Close">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
-        <img id="img-viewer-img" src="" alt="" onclick="event.stopPropagation();toggleImgZoom(this)">
+        <img id="img-viewer-img" src="" alt="">
     </div>
     """
     for k, v in [("__CANCEL__", t('cancel',lang)),("__EXT_TITLE__", t('ext_title',lang)),("__EXT_DESC__", t('ext_desc',lang)),("__EXT_LOADING__", t('ext_loading',lang)),("__EXT_CONTINUE__", t('ext_continue',lang))]:
         s = s.replace(k, v)
     return s
 
-def get_footer(lang):
-    contacts = " | ".join(f"<a href='mailto:{e}'>{e}</a>" for e in CONTACT_EMAILS)
-    current_path = _current_path.get() or "/"
-    current_url = SITE_URL + current_path
-    badge_url = DESTROY_BASE + quote(current_url, safe='')
-    s = """
-    <div class="footer">
-        <div>__CREATED_BY__ <a href="http://solid-link.ddns.net" target="_blank" rel="noopener noreferrer">Solid</a> | __HOSTING__ <a href="https://fastapicloud.com" target="_blank" rel="noopener noreferrer">FastAPICloud</a></div>
-        <div class="footer-links">
-            <a href="/docs">__FAQ_LINK__</a> | <a href="/privacy">__PRIVACY_TITLE__</a> | <a href="/bugreport">__BUGREPORT_TITLE__</a> | <a href="/stats">__STATS_LINK__</a>
-        </div>
-        <div class="footer-contacts">__CONTACTS__</div>
-        <div class="footer-badge">
-            <a href="__BADGE_URL__" target="_blank" rel="noopener noreferrer">
-                <img src="https://destroy.spritefusion.com/badge.svg" alt="Destroy this website" width="180" height="40" />
-            </a>
-        </div>
-        <div style="font-size: 12px; color: #999; margin-top: 5px;">v__APP_VERSION__ (__SERVER_START_DATE__)</div>
-    </div>
-    """
-    for k, v in [("__CREATED_BY__",t('created_by',lang)),("__HOSTING__",t('hosting',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__STATS_LINK__",t('stats_link',lang)),("__CONTACTS__",contacts),("__BADGE_URL__",badge_url),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE)]:
-        s = s.replace(k, v)
-    return s
-
 def auth_html(lang, error_msg="", token=""):
-    eb = f"<div class='error-msg'>{esc(error_msg)}</div>" if error_msg else "<div class='error-msg'></div>"
+    eb = f"<div class='error-msg'>{esc(error_msg)}</div>" if error_msg else ""
     og_title = "Solid — Вход / Регистрация" if lang == "ru" else "Solid — Login / Registration"
     og_desc = "Solid — простая социальная платформа с записями и предложкой" if lang == "ru" else "Solid — simple social platform with records and suggestions"
     og = og_tags(og_title, og_desc, "/", lang=lang)
@@ -1379,51 +1194,56 @@ def auth_html(lang, error_msg="", token=""):
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
     <title>__LOGIN__ / __REG__ — Solid</title>__OG__
     __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="container">
-        <div class="auth-wrapper">
-            <div class="label-text">__REG__</div>
-            <div class="form-box"><form action="/register" method="post">
+    <div class="auth-container">
+        <div class="auth-box">
+            <div class="auth-title">__REG__</div>
+            __ERROR__
+            <form action="/register" method="post">
                 <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="text" name="username" placeholder="__USERNAME__" required maxlength="60">
-                <input type="text" name="nickname" placeholder="__NICKNAME__" required maxlength="30" pattern="[a-zA-Z0-9_\\-]{3,30}" title="3-30: a-z 0-9 _ -">
+                <div class="input-group"><input type="text" name="username" placeholder="__USERNAME__" required maxlength="60"></div>
+                <div class="input-group"><input type="text" name="nickname" placeholder="__NICKNAME__" required maxlength="30" pattern="[a-zA-Z0-9_\\-]{3,30}" title="3-30: a-z 0-9 _ -"></div>
                 <div class="input-group"><input type="password" name="password" id="rp" placeholder="__PASSWORD__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rp',this)">__SVG_EYE__</button></div>
                 <div class="input-group"><input type="password" name="re_pass" id="rr" placeholder="__REPASS__" required minlength="8"><button type="button" class="eye-btn" onclick="tp('rr',this)">__SVG_EYE__</button></div>
                 <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-                <label class="captcha-container" style="margin-top:2px"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
-                <button type="submit">__REG_BTN__</button>
-            </form></div>
-        </div>
-        <div class="auth-wrapper">
-            <div class="label-text">__LOGIN__</div>
-            <div class="form-box"><form action="/login" method="post">
+                <label class="captcha-container"><input type="checkbox" name="privacy" required><span>__PRIVACY_AGREE__ <a href="/privacy" target="_blank" rel="noopener noreferrer" class="privacy-link">__PRIVACY_LINK__</a></span></label>
+                <button type="submit" class="btn-blue" style="margin-top:10px;">__REG_BTN__</button>
+            </form>
+            
+            <hr style="border:0; border-top:1px solid #333; margin:30px 0;">
+            
+            <div class="auth-title" style="font-size:26px;">__LOGIN__</div>
+            <form action="/login" method="post">
                 <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="text" name="nickname" placeholder="__NICKNAME__" required>
+                <div class="input-group"><input type="text" name="nickname" placeholder="__NICKNAME__" required></div>
                 <div class="input-group"><input type="password" name="password" id="lp" placeholder="__PASSWORD__" required><button type="button" class="eye-btn" onclick="tp('lp',this)">__SVG_EYE__</button></div>
                 <label class="captcha-container"><input type="checkbox" name="captcha" required> __CAPTCHA__</label>
-                <button type="submit">__LOGIN_BTN__</button>
-            </form></div>
+                <button type="submit" style="margin-top:10px;">__LOGIN_BTN__</button>
+            </form>
+            
+            <div style="margin-top:20px; text-align:center;">
+                <a href="/set_lang/ru?next=/" class="btn" style="display:inline-block; width:auto; padding:6px 15px; font-size:14px; background:#333; color:#fff; margin:0 5px; text-decoration:none; border-radius:20px;" class="__RU_ACTIVE__">RU</a>
+                <a href="/set_lang/en?next=/" class="btn" style="display:inline-block; width:auto; padding:6px 15px; font-size:14px; background:#333; color:#fff; margin:0 5px; text-decoration:none; border-radius:20px;" class="__EN_ACTIVE__">EN</a>
+            </div>
         </div>
-        <div class="login-lang-wrapper"><div class="lang-switch"><a href="/set_lang/ru?next=/" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/" class="btn lang-btn __EN_ACTIVE__">EN</a></div></div>
-        __ERROR__
     </div>
-    </div>__FOOTER____OVERLAY__</body></html>
+    __OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
+    for k, v in [("__LANG__",lang),("__LOGIN__",t('login',lang)),("__REG__",t('reg',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",t('username',lang)),("__NICKNAME__",t('nickname',lang)),("__PASSWORD__",t('password',lang)),("__REPASS__",t('re_pass',lang)),("__CAPTCHA__",t('captcha',lang)),("__PRIVACY_AGREE__",t('privacy_agree',lang)),("__PRIVACY_LINK__",t('privacy_link',lang)),("__REG_BTN__",t('register_btn',lang)),("__LOGIN_BTN__",t('login_btn',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__ERROR__",eb),("__OVERLAY__",get_overlay(lang)),("__SVG_EYE__",SVG_EYE)]:
         s = s.replace(k, v)
     return s
 
 def _img_html(img_src, extra_onclick=True):
     if not img_src: return ""
     oc = " onclick=\"viewImage(this.src)\"" if extra_onclick else ""
-    return f'<div class="image-skeleton"><img class="post-image" src="{img_src}" loading="lazy" onload="window.skelLoad(this)"{oc}></div>'
+    return f'<img class="post-img" src="{img_src}" loading="lazy" onload="window.skelLoad(this)"{oc}>'
 
-def _avatar_html(avatar_src):
-    if not avatar_src: return ""
-    return f'<div class="avatar-skeleton"><img class="avatar" src="{avatar_src}" loading="lazy" onload="window.skelLoad(this)" onclick="viewImage(this.src)"></div>'
+def _avatar_html(avatar_src, username):
+    if not avatar_src: 
+        return f'<div class="post-avatar" style="display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff;font-size:20px;">{username[0].upper()}</div>'
+    return f'<img class="post-avatar" src="{avatar_src}" loading="lazy" onload="window.skelLoad(this)" onclick="viewImage(this.src)">'
 
 def render_records(records, lang, own=False, uid=None):
-    if not records or not isinstance(records, list): return f"<div class='post-item empty-state' style='text-align:center; padding:30px; color:#888;'>{t('no_posts', lang)}</div>"
+    if not records or not isinstance(records, list): return f"<div style='padding:40px; text-align:center; color:#71767b;'>{t('no_posts', lang)}</div>"
     out = ""
     for x in records:
         if not isinstance(x, dict): continue
@@ -1436,29 +1256,37 @@ def render_records(records, lang, own=False, uid=None):
         sugg_by = esc(x.get('suggested_by', ''))
         img = sanitize_url(x.get('image_data', ''))
         safe_nick = esc(x.get('user_nickname', ''))
-        pc = "pinned" if pinned else ""
+        
+        # Get user details for post header
+        user_info = CACHE["users"].get(safe_nick, {})
+        display_name = esc(user_info.get('username', safe_nick))
+        avatar_data = sanitize_url(user_info.get('avatar_data', ''))
+        avatar_html = _avatar_html(avatar_data, display_name)
         
         acts = "<div class='post-actions'>"
-        acts += f"<button class='action-btn link-btn' data-user='{safe_nick}' data-rid='{rid}' onclick='copyLink(this)'>{t('copy_link', lang)}</button>"
+        acts += f"<button class='action-icon' onclick='copyLink(this)' data-user='{safe_nick}' data-rid='{rid}'>🔗 {t('copy_link', lang)}</button>"
         if own:
-            acts += f"<button onclick='hp(\"{rid}\",this)' class='action-btn pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
-            acts += f"<button onclick='hd(\"{rid}\",this)' class='action-btn del-btn'>{t('delete', lang)}</button>"
+            acts += f"<button onclick='hp(\"{rid}\",this)' class='action-icon pin-btn'>{t('unpin', lang) if pinned else t('pin', lang)}</button>"
+            acts += f"<button onclick='hd(\"{rid}\",this)' class='action-icon del'>{t('delete', lang)}</button>"
         acts += "</div>"
         
-        sugg_html = f"<div class='post-suggested'>{t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
+        sugg_html = f"<div style='font-size:13px; color:#1d9bf0; margin-bottom:8px;'>↳ {t('suggested_by', lang)} {sugg_by}</div>" if sugg_by else ""
         img_html = _img_html(img)
         
         out += f"""
         <div class='post-wrapper' id='post-{rid}'>
-            <div class='post-item {pc}'>
-                <div class='post-header'>
-                    <a href='/{safe_nick}' class='post-author'>@{safe_nick}</a>
-                    <span class='post-date' data-iso='{iso}'>{date}</span>
-                </div>
-                {sugg_html}
-                <div class='post-content'>{content}</div>
-                {img_html}
-                <div class='post-footer'>
+            <div class='post-card'>
+                {avatar_html}
+                <div class='post-body'>
+                    <div class='post-header'>
+                        <a href='/{safe_nick}' class='post-author'>{display_name}</a>
+                        <span class='post-nickname'>@{safe_nick}</span>
+                        <span class='post-dot'>·</span>
+                        <span class='post-date' data-iso='{iso}'>{date}</span>
+                    </div>
+                    {sugg_html}
+                    <div class='post-text'>{content}</div>
+                    {img_html}
                     {acts}
                 </div>
             </div>
@@ -1480,93 +1308,126 @@ def merge_memory(db_records, nickname):
     except Exception: pass
     return f
 
-def dashboard_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
-    rh_my = render_records(my_p, lang, own=True, uid=viewer)
-    user_username = esc(user.get('username'))
-    desc = esc(user.get('description'))
-    avatar = sanitize_url(user.get('avatar_data', ''))
-    avatar_html = _avatar_html(avatar)
-    db = f"<div class='info-card'><b>{t('description', lang)}</b>{desc}</div>" if desc else ""
-    badge = f'<span class="badge">{sugg_count}</span>' if sugg_count else ''
-    safe_nick_url = quote(nickname, safe='')
-    og_title = f"Личный кабинет — {nickname}" if lang == "ru" else f"Personal cabinet — {nickname}"
-    og_desc = desc or ("Solid — личный кабинет" if lang == "ru" else "Solid — personal cabinet")
-    og = og_tags(og_title, og_desc, "/cabinet", image=avatar, lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__CABINET__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>__CABINET__</h2>
-        __AVATAR__
-        <div class="info-card"><b>__USERNAME_LABEL__</b>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__</b><a href="/__NICK_URL__" target="_blank" rel="noopener noreferrer">__NICKNAME__ __LINK_PROFILE__</a></div>__DB__
-        <div class="info-card"><b>__TOTAL_POSTS__</b>__POST_COUNT__</div>
-        <a href="/cabinet/edit" class="btn edit-btn">__EDIT_PROFILE__</a>
-        <a href="/cabinet/suggestions" class="btn sugges-btn">__SUGGESTIONS_TITLE____BADGE__</a>
-        <button type="button" onclick="confirmLogout()" class="logout-btn">__LOGOUT__</button>
-        <div class="lang-switch"><a href="/set_lang/ru?next=/cabinet" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div>
-    <div class="main-content">
-        <div class="create-post-box"><form id="create-form" onsubmit="hc(event)">
-            <textarea name="content" placeholder="__CREATE_POST_PLACEHOLDER__" required maxlength="5000"></textarea>
-            <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
-                <img id="post-img-preview" class="img-preview">
-                <button type="button" onclick="removePostImage()" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; line-height:1; backdrop-filter:blur(4px);">&times;</button>
+def create_post_modal(lang):
+    return f"""
+    <div id="create-modal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-header">
+                <button type="button" onclick="closeCreateModal()" class="modal-close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <button type="button" id="modal-submit-btn" onclick="document.getElementById('modal-form').requestSubmit()">{t('create_post_btn', lang)}</button>
             </div>
-            <div class="post-buttons-row">
-                <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
-                <input type="file" id="post-file-input" accept="image/*" onchange="handlePostImage(this)" style="display:none;">
-                <button type="submit" id="create-post-btn">__CREATE_POST_BTN__</button>
-            </div>
-        </form></div>
-        <div class="posts-area" id="my-records-container"><h2>__MY_POSTS__</h2>__RECORDS_HTML__</div>
-    </div></div>
-    </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__CABINET__",t('cabinet',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICK_URL__",safe_nick_url),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__LINK_PROFILE__",t('link_profile',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(my_p))),("__EDIT_PROFILE__",t('edit_profile',lang)),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__BADGE__",badge),("__LOGOUT__",t('logout',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__CREATE_POST_PLACEHOLDER__",t('create_post_placeholder',lang)),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__CREATE_POST_BTN__",t('create_post_btn',lang)),("__MY_POSTS__",t('my_posts',lang)),("__RECORDS_HTML__",rh_my),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
-    return s
-
-def create_page_html(nickname, lang, token):
-    og_title = t('create_page_title', lang) + " — Solid"
-    og_desc = t('create_post_placeholder', lang)
-    og = og_tags(og_title, og_desc, "/cabinet/new", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__TITLE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <script>if(window.innerWidth > 768) window.location.href='/cabinet';</script>
-    <div class="page-content">
-        <div class="create-page-container">
-            <h1 class="create-page-title">__TITLE__</h1>
-            <form class="create-page-form" onsubmit="hcNew(event)">
-                <textarea class="create-page-textarea" name="content" placeholder="__PLACEHOLDER__" required maxlength="5000" autofocus></textarea>
-                <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
-                    <img id="post-img-preview" class="img-preview">
-                    <button type="button" onclick="removePostImage()" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; line-height:1; backdrop-filter:blur(4px);">&times;</button>
+            <form id="modal-form" onsubmit="submitModalPost(event)">
+                <div class="modal-body">
+                    <div class="modal-textarea" contenteditable="true" id="modal-textarea" oninput="document.getElementById('hidden-modal-text').value = this.innerText" style="outline:none;"></div>
+                    <textarea name="content" id="hidden-modal-text" style="display:none;"></textarea>
                 </div>
-                <div class="post-buttons-row">
-                    <label class="file-label" for="post-file-input">__SVG_CAMERA__ __ATTACH_PHOTO__</label>
+                <div style="padding: 0 16px 16px;">
+                    <div id="post-img-container" style="display:none; position:relative; margin-bottom:10px;">
+                        <img id="post-img-preview" class="img-preview">
+                        <button type="button" onclick="removePostImage()" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; line-height:1;">&times;</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <label class="file-label" for="post-file-input" style="background:transparent; border:none; padding:8px; width:auto; cursor:pointer; color:#1d9bf0;">
+                        {SVG_CAMERA}
+                    </label>
                     <input type="file" id="post-file-input" accept="image/*" onchange="handlePostImage(this)" style="display:none;">
-                    <button type="submit" id="create-post-btn">__CREATE_BTN__</button>
                 </div>
             </form>
         </div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__TITLE__",t('create_page_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__PLACEHOLDER__",t('create_post_placeholder',lang)),("__SVG_CAMERA__",SVG_CAMERA),("__ATTACH_PHOTO__",t('attach_photo',lang)),("__CREATE_BTN__",t('create_post_btn',lang)),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
+
+def feed_html(nickname, user, my_p, lang, token, viewer, sugg_count=0):
+    rh_my = render_records(my_p, lang, own=True, uid=viewer)
+    user_username = esc(user.get('username'))
+    avatar = sanitize_url(user.get('avatar_data', ''))
+    og_title = f"Лента — Solid" if lang == "ru" else f"Feed — Solid"
+    og = og_tags(og_title, "", "/cabinet", image=avatar, lang=lang)
+    
+    pc_sidebar = pc_sidebar_html(lang, nickname, avatar, user_username)
+    
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>{t('feed_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, viewer)}</head><body>
+    
+    <!-- PC Layout -->
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <h2>{t('feed_title', lang)}</h2>
+            </div>
+            <div style="padding: 20px; border-bottom: 1px solid #2f3336; display: flex; gap: 12px; cursor: pointer;" onclick="openCreateModal()">
+                <div class="post-avatar" style="display:flex;align-items:center;justify-content:center;font-weight:bold;color:#fff;background:#333;">{user_username[0].upper()}</div>
+                <div style="flex:1; display:flex; align-items:center; color:#71767b; font-size:20px;">{t('create_post_placeholder', lang)}</div>
+                <button class="btn-blue" style="width:auto; padding:8px 20px;">{t('create_post_btn', lang)}</button>
+            </div>
+            {rh_my}
+        </div>
+    </div>
+
+    <!-- Mobile Layout -->
+    <div class="mobile-layout">
+        <div class="page-header">
+            <h2>{t('feed_title', lang)}</h2>
+        </div>
+        {rh_my}
+    </div>
+
+    {create_post_modal(lang)}
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
+    """
+    return s
+
+def create_page_html(nickname, lang, token):
+    og_title = t('create_page_title', lang) + " — Solid"
+    og = og_tags(og_title, "", "/cabinet/new", lang=lang)
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>{t('create_page_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, nickname)}</head><body>
+    <script>if(window.innerWidth > 768) window.location.href='/cabinet';</script>
+    
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('create_page_title', lang)}</h2>
+        </div>
+        <div style="padding: 20px;">
+            <form onsubmit="hcNew(event)" style="display:flex; flex-direction:column; gap:15px;">
+                <textarea name="content" placeholder="{t('create_post_placeholder', lang)}" required maxlength="5000" style="height:200px; font-size:20px; border:none; background:transparent; padding:0;" autofocus></textarea>
+                <div id="post-img-container" style="display:none; position:relative;">
+                    <img id="post-img-preview" class="img-preview">
+                    <button type="button" onclick="removePostImage()" style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.6); color:white; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; line-height:1;">&times;</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #2f3336; padding-top:15px;">
+                    <label class="file-label" for="post-file-input" style="background:transparent; border:none; padding:8px; width:auto; cursor:pointer; color:#1d9bf0;">
+                        {SVG_CAMERA}
+                    </label>
+                    <input type="file" id="post-file-input" accept="image/*" onchange="handlePostImage(this)" style="display:none;">
+                    <button type="submit" id="create-post-btn" class="btn-blue" style="width:auto; padding:10px 24px;">{t('create_post_btn', lang)}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
+    """
     return s
 
 def suggestions_page_html(nickname, suggestions, lang, token):
     if not suggestions:
-        rh = f"<div class='post-item' style='text-align:center; padding:30px; color:#888;'>{t('sugges_empty', lang)}</div>"
+        rh = f"<div style='padding:40px; text-align:center; color:#71767b;'>{t('sugges_empty', lang)}</div>"
     else:
         rh = ""
         for sg in suggestions:
@@ -1578,84 +1439,261 @@ def suggestions_page_html(nickname, suggestions, lang, token):
             img = sanitize_url(sg.get('image_data', ''))
             img_html = _img_html(img)
             rh += f"""
-            <div class='suggestion-card' id='sugg-{sid}'>
-                <div class='post-header'>
-                    <span class='post-author'>{sugg_by}</span>
-                    <span class='post-date' data-iso='{iso}'>{date}</span>
-                </div>
-                <div class='post-content'>{content}</div>
-                {img_html}
-                <div class='post-footer' style='margin-top:15px;'>
-                    <button class='btn sugg-approve' onclick="approveSugg('{sid}')">{t('sugges_approve',lang)}</button>
-                    <button class='btn sugg-reject' onclick="rejectSugg('{sid}')">{t('sugges_reject',lang)}</button>
+            <div class='post-card' id='sugg-{sid}'>
+                <div class='post-body'>
+                    <div class='post-header'>
+                        <span class='post-author'>{sugg_by}</span>
+                        <span class='post-date' data-iso='{iso}'>{date}</span>
+                    </div>
+                    <div class='post-text'>{content}</div>
+                    {img_html}
+                    <div style='display:flex; gap:10px; margin-top:15px;'>
+                        <button class='btn-blue' onclick="approveSugg('{sid}')" style='padding:8px 20px; width:auto;'>{t('sugges_approve',lang)}</button>
+                        <button class='btn-danger' onclick="rejectSugg('{sid}')" style='padding:8px 20px; width:auto;'>{t('sugges_reject',lang)}</button>
+                    </div>
                 </div>
             </div>"""
     og_title = t('suggestions_title', lang) + " — " + nickname
     og = og_tags(og_title, "Solid — suggestions", "/cabinet/suggestions", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    user = CACHE["users"].get(nickname, {})
+    avatar = sanitize_url(user.get('avatar_data', ''))
+    pc_sidebar = pc_sidebar_html(lang, nickname, avatar, esc(user.get('username', nickname)))
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__SUGGESTIONS_TITLE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
-    <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="posts-area"><h2>__SUGGESTIONS_TITLE__</h2>__SUGGESTIONS_HTML__</div>
-        <a href="/cabinet" class="btn" style="background:#333; margin-top:15px">__BACK__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/suggestions" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/suggestions" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>
+    <title>{t('suggestions_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, nickname)}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <h2>{t('suggestions_title', lang)}</h2>
+            </div>
+            {rh}
+        </div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <h2>{t('suggestions_title', lang)}</h2>
+        </div>
+        {rh}
+    </div>
+
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__SUGGESTIONS_TITLE__",t('suggestions_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SUGGESTIONS_HTML__",rh),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
     return s
 
 def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabled=True, photo_enabled=True):
-    msg_html = f"<div class='error-msg' style='color:#e63946; font-size:16px; text-align:center; margin-bottom:10px;'>{esc(error)}</div>" if error else ""
+    msg_html = f"<div class='error-msg'>{esc(error)}</div>" if error else ""
     is_own = (viewer == nickname)
-    if is_own: form_block = f"<div class='error-msg' style='color:#e63946; font-size:16px; text-align:center;'>{t('sugges_own', lang)}</div>"
-    elif not enabled: form_block = f"<div class='error-msg' style='color:#e63946; font-size:16px; text-align:center;'>{t('sugges_disabled', lang)}</div>"
+    if is_own: form_block = f"<div class='error-msg'>{t('sugges_own', lang)}</div>"
+    elif not enabled: form_block = f"<div class='error-msg'>{t('sugges_disabled', lang)}</div>"
     else:
         safe_nick_attr = esc(nickname)
-        photo_block = f"<label class='file-label' for='sugg-file-input'>{SVG_CAMERA} {t('attach_photo', lang)}</label><input type='file' id='sugg-file-input' accept='image/*' onchange='handleSuggImage(this)' style='display:none;'><img id='sugg-img-preview' class='img-preview' style='display:none;'>" if photo_enabled else ""
-        form_block = f"<form data-nickname='{safe_nick_attr}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:15px; margin-top:20px;'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='height:150px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' style='background:#2ecc71;'>{t('sugges_send',lang)}</button></form>"
-    rules_block = f"<div class='info-card' style='background:#fff9e6; border-color:#ffeeba; color:#856404; margin-bottom:20px;'><b>{t('rules_title',lang)}</b>{esc(rules)}</div>" if rules else ""
+        photo_block = f"<label class='file-label' for='sugg-file-input' style='color:#1d9bf0; background:transparent; border:none; display:flex; align-items:center; gap:8px; cursor:pointer;'>{SVG_CAMERA} <span>{t('attach_photo', lang)}</span></label><input type='file' id='sugg-file-input' accept='image/*' onchange='handleSuggImage(this)' style='display:none;'><img id='sugg-img-preview' class='img-preview' style='display:none;'>" if photo_enabled else ""
+        form_block = f"<form data-nickname='{safe_nick_attr}' onsubmit='submitSuggestion(event)' style='display:flex;flex-direction:column;gap:15px;'><input type='text' name='sugg_name' placeholder='{t('sugges_name',lang)}' required maxlength='60'><textarea name='content' placeholder='{t('sugges_content',lang)}' required maxlength='500' style='height:150px;'></textarea>{photo_block}<button type='submit' id='sugg-submit-btn' class='btn-blue'>{t('sugges_send',lang)}</button></form>"
+    rules_block = f"<div style='background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:20px;'><b style='display:block; margin-bottom:8px; color:#1d9bf0;'>{t('rules_title',lang)}</b><div style='color:#e7e9ea; font-size:14px; white-space:pre-wrap;'>{esc(rules)}</div></div>" if rules else ""
+    
     og_title = f"Предложить пост для {nickname}" if lang == "ru" else f"Suggest a post for {nickname}"
     og = og_tags(og_title, "Solid — suggestions", f"/{quote(nickname, safe='')}/sugges", lang=lang)
     safe_nick_url = quote(nickname, safe='')
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__TITLE__ __NICKNAME__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
-        <div class="create-post-box" style="border-radius:20px;">
-            <h2 style="text-align:center; margin-bottom:20px;">__TITLE__ __NICKNAME__</h2>
-            __RULES_BLOCK____MSG____FORM_BLOCK__
-            <a href="/cabinet" class="btn" style="background:#333;margin-top:15px;">__BACK__</a>
-            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/__NICK_URL__/sugges" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__/sugges" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    <title>{t('sugges_title', lang)} {nickname} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, viewer)}</head><body>
+    
+    <div class="auth-container">
+        <div class="auth-box">
+            <h2 style="text-align:center; margin-bottom:20px;">{t('sugges_title', lang)} {nickname}</h2>
+            {msg_html}
+            {rules_block}
+            {form_block}
+            <a href="/cabinet" class="btn" style="background:#333; color:#fff; margin-top:15px;">{t('back_home',lang)}</a>
         </div>
-    </div></div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    {bottom_nav_html(lang) if viewer else ""}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__TITLE__",t('sugges_title',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__RULES_BLOCK__",rules_block),("__MSG__",msg_html),("__FORM_BLOCK__",form_block),("__BACK__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
     return s
 
-def edit_html(nickname, user, lang, token, error=""):
+def settings_menu_html(nickname, user, lang, token):
+    og_title = "Настройки — Solid" if lang == "ru" else "Settings — Solid"
+    og = og_tags(og_title, "", "/settings", lang=lang)
+    
+    avatar = sanitize_url(user.get('avatar_data', ''))
+    username = esc(user.get('username'))
+    pc_sidebar = pc_sidebar_html(lang, nickname, avatar, username)
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>{t('settings_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, nickname)}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <h2>{t('settings_title', lang)}</h2>
+            </div>
+            <div class="settings-menu-list">
+                <a href="/settings/info" class="settings-menu-item">
+                    <div class="settings-menu-item-left">
+                        {SVG_INFO} {t('settings_info', lang)}
+                    </div>
+                </a>
+                <a href="/settings/account" class="settings-menu-item">
+                    <div class="settings-menu-item-left">
+                        {SVG_USER} {t('settings_account', lang)}
+                    </div>
+                </a>
+                <a href="/settings/appearance" class="settings-menu-item">
+                    <div class="settings-menu-item-left">
+                        {SVG_PALETTE} {t('settings_appearance', lang)}
+                    </div>
+                </a>
+            </div>
+            <div style="padding: 20px;">
+                <button onclick="confirmLogout()" class="btn-danger">{t('logout', lang)}</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <h2>{t('settings_title', lang)}</h2>
+        </div>
+        <div class="settings-menu-list">
+            <a href="/settings/info" class="settings-menu-item">
+                <div class="settings-menu-item-left">
+                    {SVG_INFO} {t('settings_info', lang)}
+                </div>
+            </a>
+            <a href="/settings/account" class="settings-menu-item">
+                <div class="settings-menu-item-left">
+                    {SVG_USER} {t('settings_account', lang)}
+                </div>
+            </a>
+            <a href="/settings/appearance" class="settings-menu-item">
+                <div class="settings-menu-item-left">
+                    {SVG_PALETTE} {t('settings_appearance', lang)}
+                </div>
+            </a>
+        </div>
+        <div style="padding: 20px;">
+            <button onclick="confirmLogout()" class="btn-danger">{t('logout', lang)}</button>
+        </div>
+    </div>
+
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
+    """
+    return s
+
+def settings_info_html(nickname, user, lang, token):
+    og_title = "Инфо — Solid" if lang == "ru" else "Info — Solid"
+    og = og_tags(og_title, "", "/settings/info", lang=lang)
+    
+    avatar = sanitize_url(user.get('avatar_data', ''))
+    username = esc(user.get('username'))
+    pc_sidebar = pc_sidebar_html(lang, nickname, avatar, username)
+    contacts = " | ".join(f"<a href='mailto:{e}'>{e}</a>" for e in CONTACT_EMAILS)
+    current_url = SITE_URL + "/settings/info"
+    badge_url = DESTROY_BASE + quote(current_url, safe='')
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>Инфо — Solid</title>{og}
+    {get_css()}{get_js(lang, token, nickname)}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/settings" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('settings_info', lang)}</h2>
+            </div>
+            <div style="padding: 20px; text-align:center; color:#e7e9ea;">
+                <div style="font-size:32px; font-family:'Herokid','Impact',sans-serif; margin-bottom:10px;">Solid</div>
+                <div style="font-size:14px; color:#71767b; margin-bottom:20px;">v{APP_VERSION} ({SERVER_START_DATE})</div>
+                <div style="background:#16181c; border:1px solid #2f3336; padding:20px; border-radius:16px; text-align:left; margin-bottom:20px;">
+                    <div style="margin-bottom:10px;"><b>{t('created_by',lang)}</b> <a href="http://solid-link.ddns.net" target="_blank" style="color:#1d9bf0; text-decoration:none;">Solid</a></div>
+                    <div style="margin-bottom:10px;"><b>{t('hosting',lang)}</b> <a href="https://fastapicloud.com" target="_blank" style="color:#1d9bf0; text-decoration:none;">FastAPICloud</a></div>
+                    <div style="margin-bottom:10px;"><b>{t('stats_contacts',lang)}</b></div>
+                    <div style="color:#1d9bf0;">{contacts}</div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <a href="/privacy" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('privacy_title',lang)}</a>
+                    <a href="/docs" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('faq_link',lang)}</a>
+                    <a href="/stats" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('stats_link',lang)}</a>
+                    <a href="/bugreport" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('bugreport_title',lang)}</a>
+                </div>
+                <div style="margin-top:20px;">
+                    <a href="{badge_url}" target="_blank">
+                        <img src="https://destroy.spritefusion.com/badge.svg" alt="Destroy this website" width="180" height="40" />
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/settings" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('settings_info', lang)}</h2>
+        </div>
+        <div style="padding: 20px; text-align:center; color:#e7e9ea;">
+            <div style="font-size:32px; font-family:'Herokid','Impact',sans-serif; margin-bottom:10px;">Solid</div>
+            <div style="font-size:14px; color:#71767b; margin-bottom:20px;">v{APP_VERSION} ({SERVER_START_DATE})</div>
+            <div style="background:#16181c; border:1px solid #2f3336; padding:20px; border-radius:16px; text-align:left; margin-bottom:20px;">
+                <div style="margin-bottom:10px;"><b>{t('created_by',lang)}</b> <a href="http://solid-link.ddns.net" target="_blank" style="color:#1d9bf0; text-decoration:none;">Solid</a></div>
+                <div style="margin-bottom:10px;"><b>{t('hosting',lang)}</b> <a href="https://fastapicloud.com" target="_blank" style="color:#1d9bf0; text-decoration:none;">FastAPICloud</a></div>
+                <div style="margin-bottom:10px;"><b>{t('stats_contacts',lang)}</b></div>
+                <div style="color:#1d9bf0;">{contacts}</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <a href="/privacy" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('privacy_title',lang)}</a>
+                <a href="/docs" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('faq_link',lang)}</a>
+                <a href="/stats" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('stats_link',lang)}</a>
+                <a href="/bugreport" class="btn" style="background:#16181c; border:1px solid #2f3336; color:#e7e9ea;">{t('bugreport_title',lang)}</a>
+            </div>
+            <div style="margin-top:20px;">
+                <a href="{badge_url}" target="_blank">
+                    <img src="https://destroy.spritefusion.com/badge.svg" alt="Destroy this website" width="180" height="40" />
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
+    """
+    return s
+
+def settings_account_html(nickname, user, lang, token, error=""):
     desc = esc(user.get('description'))
     rules = esc(user.get('sugges_rules', ''))
     avatar = sanitize_url(user.get('avatar_data', ''))
     avatar_display = "block" if avatar else "none"
-    avatar_html = f'<label class="avatar-upload" for="avatar-file-input"><div class="avatar-skeleton"><img id="avatar-preview" class="avatar" src="{avatar}" style="display:{avatar_display};opacity:{1 if avatar else 0}" onload="window.skelLoad(this)" onerror="this.parentElement.classList.add(\'loaded\')"></div><div class="avatar-upload-icon">{SVG_UPLOAD}</div></label>'
+    avatar_html = f'<label class="avatar-upload" for="avatar-file-input" style="width:100px;height:100px;border-radius:50%;overflow:hidden;position:relative;display:block;cursor:pointer;border:2px solid #2f3336;margin:0 auto 20px;"><div class="avatar-skeleton"><img id="avatar-preview" class="avatar" src="{avatar}" style="display:{avatar_display};opacity:{1 if avatar else 0};width:100%;height:100%;object-fit:cover;" onload="window.skelLoad(this)" onerror="this.parentElement.classList.add(\'loaded\')"></div><div class="avatar-upload-icon" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;">{SVG_UPLOAD}</div></label>'
     user_username = esc(user.get('username'))
     sugges_checked = "checked" if user_sugges_enabled(user) else ""
     photo_checked = "checked" if user_sugges_photo_enabled(user) else ""
-    og_title = "Редактировать профиль — Solid" if lang == "ru" else "Edit Profile — Solid"
-    og = og_tags(og_title, desc or "", "/cabinet/edit", image=avatar, lang=lang)
+    og_title = "Аккаунт — Solid" if lang == "ru" else "Account — Solid"
+    og = og_tags(og_title, desc or "", "/settings/account", image=avatar, lang=lang)
     
     err_block = ""
     if error == "csrf":
@@ -1671,42 +1709,128 @@ def edit_html(nickname, user, lang, token, error=""):
     elif error == "db":
         err_block = f"<div class='error-msg'>{t('err_db', lang)}</div>"
 
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    avatar_side = sanitize_url(user.get('avatar_data', ''))
+    username_side = esc(user.get('username'))
+    pc_sidebar = pc_sidebar_html(lang, nickname, avatar_side, username_side)
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__EDIT_PROFILE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
-        <div class="create-post-box" style="padding:30px; border-radius:20px;">
-            <h2 style="text-align:center; margin-bottom:20px;">__EDIT_PROFILE__</h2>
-            __ERR_BLOCK__
-            <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:15px">
-                <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="hidden" name="avatar_data" id="avatar-data" value="">
-                <div style="display:flex; justify-content:center;">__AVATAR_HTML__</div>
-                <input type="file" id="avatar-file-input" accept="image/*" onchange="handleAvatarChange(this)" style="display:none;">
-                <div style="color:#666;font-size:15px;font-weight:bold;">__USERNAME_LABEL__</div>
-                <input type="text" name="username" value="__USERNAME__" required maxlength="60">
-                <div style="color:#666;font-size:15px;font-weight:bold;">__DESCRIPTION__</div>
-                <textarea name="description" maxlength="300" placeholder="__DESC_PLACEHOLDER__" oninput="uc(this)" style="height:100px;">__DESC__</textarea>
-                <div id="char-count" style="color:#888;text-align:right;font-size:13px; margin-top:-10px;">__DESC_LEN__ / 300</div>
-                <label class="captcha-container" style="justify-content:space-between; cursor:pointer;"><span>__SUGGES_ENABLE_LABEL__</span><input type="checkbox" name="sugges_enabled" __SUGGES_CHECKED__></label>
-                <label class="captcha-container" style="justify-content:space-between; cursor:pointer;"><span>__SUGGES_PHOTO_ENABLE_LABEL__</span><input type="checkbox" name="sugges_photo_enabled" __PHOTO_CHECKED__></label>
-                <div style="color:#666;font-size:15px;font-weight:bold;">__RULES_LABEL__</div>
-                <textarea name="sugges_rules" maxlength="1000" placeholder="__RULES_PLACEHOLDER__" oninput="ucRules(this)" style="height:100px;">__RULES__</textarea>
-                <div id="rules-count" style="color:#888;text-align:right;font-size:13px; margin-top:-10px;">__RULES_LEN__ / 1000</div>
-                <button type="submit" style="background:#4da6ff; margin-top:10px;">__SAVE_CHANGES__</button>
-                <a href="/cabinet" class="btn" style="background:#333;">__CANCEL__</a>
-            </form>
-            <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
+    <title>{t('settings_account_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, nickname)}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/settings" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('settings_account_title', lang)}</h2>
+            </div>
+            <div style="padding: 20px;">
+                {err_block}
+                <form action="/settings/account" method="post" style="display:flex;flex-direction:column;gap:15px">
+                    <input type="hidden" name="csrf_token" value="{token}">
+                    <input type="hidden" name="avatar_data" id="avatar-data" value="">
+                    {avatar_html}
+                    <input type="file" id="avatar-file-input" accept="image/*" onchange="handleAvatarChange(this)" style="display:none;">
+                    <div style="color:#71767b;font-size:14px;font-weight:bold;">{t('username_label',lang)}</div>
+                    <input type="text" name="username" value="{user_username}" required maxlength="60">
+                    <div style="color:#71767b;font-size:14px;font-weight:bold;">{t('description',lang)}</div>
+                    <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder',lang)}" oninput="uc(this)" style="height:100px;">{desc}</textarea>
+                    <div id="char-count" style="color:#71767b;text-align:right;font-size:12px; margin-top:-10px;">{len(desc)} / 300</div>
+                    <label class="captcha-container" style="justify-content:space-between;"><span>{t('sugges_enable_label',lang)}</span><input type="checkbox" name="sugges_enabled" {sugges_checked}></label>
+                    <label class="captcha-container" style="justify-content:space-between;"><span>{t('sugges_photo_enable_label',lang)}</span><input type="checkbox" name="sugges_photo_enabled" {photo_checked}></label>
+                    <div style="color:#71767b;font-size:14px;font-weight:bold;">{t('rules_edit_label',lang)}</div>
+                    <textarea name="sugges_rules" maxlength="1000" placeholder="{t('rules_placeholder',lang)}" oninput="ucRules(this)" style="height:100px;">{rules}</textarea>
+                    <div id="rules-count" style="color:#71767b;text-align:right;font-size:12px; margin-top:-10px;">{len(rules)} / 1000</div>
+                    <button type="submit" class="btn-blue" style="margin-top:10px;">{t('save_changes',lang)}</button>
+                </form>
+            </div>
         </div>
-    </div></div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/settings" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('settings_account_title', lang)}</h2>
+        </div>
+        <div style="padding: 20px;">
+            {err_block}
+            <form action="/settings/account" method="post" style="display:flex;flex-direction:column;gap:15px">
+                <input type="hidden" name="csrf_token" value="{token}">
+                <input type="hidden" name="avatar_data" id="avatar-data" value="">
+                {avatar_html}
+                <input type="file" id="avatar-file-input" accept="image/*" onchange="handleAvatarChange(this)" style="display:none;">
+                <div style="color:#71767b;font-size:14px;font-weight:bold;">{t('username_label',lang)}</div>
+                <input type="text" name="username" value="{user_username}" required maxlength="60">
+                <div style="color:#71767b;font-size:14px;font-weight:bold;">{t('description',lang)}</div>
+                <textarea name="description" maxlength="300" placeholder="{t('desc_placeholder',lang)}" oninput="uc(this)" style="height:100px;">{desc}</textarea>
+                <div id="char-count" style="color:#71767b;text-align:right;font-size:12px; margin-top:-10px;">{len(desc)} / 300</div>
+                <label class="captcha-container" style="justify-content:space-between;"><span>{t('sugges_enable_label',lang)}</span><input type="checkbox" name="sugges_enabled" {sugges_checked}></label>
+                <label class="captcha-container" style="justify-content:space-between;"><span>{t('sugges_photo_enable_label',lang)}</span><input type="checkbox" name="sugges_photo_enabled" {photo_checked}></label>
+                <div style="color:#71767b;font-size:14px;font-weight:bold;">{t('rules_edit_label',lang)}</div>
+                <textarea name="sugges_rules" maxlength="1000" placeholder="{t('rules_placeholder',lang)}" oninput="ucRules(this)" style="height:100px;">{rules}</textarea>
+                <div id="rules-count" style="color:#71767b;text-align:right;font-size:12px; margin-top:-10px;">{len(rules)} / 1000</div>
+                <button type="submit" class="btn-blue" style="margin-top:10px;">{t('save_changes',lang)}</button>
+            </form>
+        </div>
+    </div>
+
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__ERR_BLOCK__",err_block)]:
-        s = s.replace(k, v)
+    return s
+
+def settings_appearance_html(nickname, user, lang, token):
+    og_title = "Оформление — Solid" if lang == "ru" else "Appearance — Solid"
+    og = og_tags(og_title, "", "/settings/appearance", lang=lang)
+    
+    avatar = sanitize_url(user.get('avatar_data', ''))
+    username = esc(user.get('username'))
+    pc_sidebar = pc_sidebar_html(lang, nickname, avatar, username)
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
+    <title>Оформление — Solid</title>{og}
+    {get_css()}{get_js(lang, token, nickname)}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/settings" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('settings_appearance', lang)}</h2>
+            </div>
+            <div style="padding: 20px;">
+                <h3 style="margin-bottom:20px; font-size:18px;">{t('settings_language', lang)}</h3>
+                <div style="display:flex; gap:15px;">
+                    <a href="/set_lang/ru?next=/settings/appearance" class="btn" style="background:{'#1d9bf0' if lang=='ru' else '#16181c'}; color:#fff; border:1px solid #2f3336;">RU (Русский)</a>
+                    <a href="/set_lang/en?next=/settings/appearance" class="btn" style="background:{'#1d9bf0' if lang=='en' else '#16181c'}; color:#fff; border:1px solid #2f3336;">EN (English)</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/settings" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('settings_appearance', lang)}</h2>
+        </div>
+        <div style="padding: 20px;">
+            <h3 style="margin-bottom:20px; font-size:18px;">{t('settings_language', lang)}</h3>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <a href="/set_lang/ru?next=/settings/appearance" class="btn" style="background:{'#1d9bf0' if lang=='ru' else '#16181c'}; color:#fff; border:1px solid #2f3336;">RU (Русский)</a>
+                <a href="/set_lang/en?next=/settings/appearance" class="btn" style="background:{'#1d9bf0' if lang=='en' else '#16181c'}; color:#fff; border:1px solid #2f3336;">EN (English)</a>
+            </div>
+        </div>
+    </div>
+
+    {bottom_nav_html(lang)}
+    {get_overlay(lang)}
+    </body></html>
+    """
     return s
 
 def public_html(nickname, user, records, lang, token, viewer):
@@ -1715,181 +1839,226 @@ def public_html(nickname, user, records, lang, token, viewer):
     user_username = esc(user.get('username'))
     desc = esc(user.get('description'))
     avatar = sanitize_url(user.get('avatar_data', ''))
-    avatar_html = _avatar_html(avatar)
-    db = f"<div class='info-card'><b>{t('description', lang)}</b>{desc}</div>" if desc else ""
+    avatar_html = _avatar_html(avatar, user_username)
     safe_nick_url = quote(nickname, safe='')
-    sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;margin-top:10px;'>{t('suggestions_btn', lang)}</a>"
+    sugg_btn = "" if is_owner or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn-blue' style='margin-top:15px; display:inline-block; text-decoration:none;'>{t('suggestions_btn', lang)}</a>"
     og_title = f"{nickname} — Solid"
     og_desc = desc or (f"Профиль {nickname}" if lang == "ru" else f"Profile {nickname}")
     og = og_tags(og_title, og_desc, f"/{safe_nick_url}", image=avatar, lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    pc_sidebar = pc_sidebar_html(lang, viewer or nickname, sanitize_url(CACHE["users"].get(viewer, {}).get('avatar_data', '')), esc(CACHE["users"].get(viewer, {}).get('username', viewer)))
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PROFILE__ __NICKNAME__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>__PROFILE__</h2>
-        __AVATAR__
-        <div class="info-card"><b>__USERNAME_LABEL__</b>__USERNAME__</div>
-        <div class="info-card"><b>__NICKNAME_LABEL__</b>__NICKNAME__</div>__DB__
-        <div class="info-card"><b>__TOTAL_POSTS__</b>__POST_COUNT__</div>
-        __SUGG_BTN__
-        <div class="lang-switch"><a href="/set_lang/ru?next=/__NICK_URL__" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/__NICK_URL__" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-        <a href="/cabinet" class="btn" style="margin-top:20px; background:#333;">__BACK_HOME__</a>
-    </div><div class="main-content"><div class="posts-area"><h2>__USER_POSTS__</h2>__RECORDS_HTML__</div></div></div>
+    <title>{user_username} (@{nickname}) — Solid</title>{og}
+    {get_css()}{get_js(lang, token, viewer or "")}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+                <div>
+                    <h2 style="font-size:18px;">{user_username}</h2>
+                    <div style="font-size:13px; color:#71767b;">{len(records)} {t('stats_posts', lang)}</div>
+                </div>
+            </div>
+            <div style="padding: 20px; border-bottom: 1px solid #2f3336; display:flex; gap:20px; align-items:flex-start;">
+                <div style="width:80px; height:80px; flex-shrink:0;">
+                    {avatar_html.replace('class="post-avatar"', 'style="width:80px;height:80px;border-radius:50%;object-fit:cover;"')}
+                </div>
+                <div style="flex:1;">
+                    <h2 style="font-size:22px; margin-bottom:2px;">{user_username}</h2>
+                    <div style="color:#71767b; margin-bottom:15px;">@{nickname}</div>
+                    <div style="margin-bottom:15px; font-size:15px;">{desc}</div>
+                    {sugg_btn}
+                </div>
+            </div>
+            {rh}
+        </div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+            <div>
+                <h2 style="font-size:18px;">{user_username}</h2>
+                <div style="font-size:13px; color:#71767b;">{len(records)} {t('stats_posts', lang)}</div>
+            </div>
+        </div>
+        <div style="padding: 20px; border-bottom: 1px solid #2f3336; display:flex; gap:20px; align-items:flex-start;">
+            <div style="width:80px; height:80px; flex-shrink:0;">
+                {avatar_html.replace('class="post-avatar"', 'style="width:80px;height:80px;border-radius:50%;object-fit:cover;"')}
+            </div>
+            <div style="flex:1;">
+                <h2 style="font-size:22px; margin-bottom:2px;">{user_username}</h2>
+                <div style="color:#71767b; margin-bottom:15px;">@{nickname}</div>
+                <div style="margin-bottom:15px; font-size:15px;">{desc}</div>
+                {sugg_btn}
+            </div>
+        </div>
+        {rh}
+    </div>
+
+    {bottom_nav_html(lang) if viewer else ""}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__PROFILE__",t('profile',lang)),("__OG__",og),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__AVATAR__",avatar_html),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__DB__",db),("__TOTAL_POSTS__",t('total_posts',lang)),("__POST_COUNT__",str(len(records))),("__SUGG_BTN__",sugg_btn),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BACK_HOME__",t('back_home',lang)),("__USER_POSTS__",t('user_posts',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
     return s
 
 def record_page_html(nickname, user, record, lang, token, viewer):
     rh = render_records([record], lang, own=False, uid=viewer)
     avatar = sanitize_url(user.get('avatar_data', ''))
-    avatar_html = _avatar_html(avatar)
     safe_nick_url = quote(nickname, safe='')
-    sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn' style='background:#2ecc71;margin-top:10px;'>{t('suggestions_btn', lang)}</a>"
+    sugg_btn = "" if (viewer == nickname) or not user_sugges_enabled(user) else f"<a href='/{safe_nick_url}/sugges' class='btn-blue' style='margin-top:15px; display:inline-block; text-decoration:none;'>{t('suggestions_btn', lang)}</a>"
     raw_content = record.get('content', '') or ''
     snippet = strip_html(raw_content)[:150] + ('...' if len(raw_content) > 150 else '')
     og_title = f"Запись от {nickname} — Solid" if lang == "ru" else f"Record by {nickname} — Solid"
     og_desc = snippet or "Solid"
     img_data = sanitize_url(record.get('image_data', ''))
     og = og_tags(og_title, og_desc, f"/{safe_nick_url}/{quote(str(record.get('id', '')), safe='')}", image=img_data, lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    pc_sidebar = pc_sidebar_html(lang, viewer or nickname, sanitize_url(CACHE["users"].get(viewer, {}).get('avatar_data', '')), esc(CACHE["users"].get(viewer, {}).get('username', viewer)))
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__RECORD_PAGE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container"><div class="sidebar">
-        <h2>__PROFILE__</h2>
-        __AVATAR__
-        <div class="info-card"><b>__NICKNAME_LABEL__</b><a href="/__NICK_URL__">__NICKNAME__</a></div>
-        <div class="info-card"><b>__USERNAME_LABEL__</b>__USERNAME__</div>
-        __SUGG_BTN__
-        <a href="/__NICK_URL__" class="btn" style="margin-top:20px; background:#333;">__BACK_HOME__</a>
-    </div><div class="main-content"><div class="posts-area"><h2>__RECORD_PAGE__</h2>__RECORDS_HTML__</div></div></div>
+    <title>{t('record_page', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, viewer or "")}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/{safe_nick_url}" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('record_page', lang)}</h2>
+            </div>
+            {rh}
+        </div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/{safe_nick_url}" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('record_page', lang)}</h2>
+        </div>
+        {rh}
+    </div>
+
+    {bottom_nav_html(lang) if viewer else ""}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__RECORD_PAGE__",t('record_page',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer or "")),("__PROFILE__",t('profile',lang)),("__AVATAR__",avatar_html),("__NICKNAME_LABEL__",t('nickname_label',lang)),("__NICKNAME__",esc(nickname)),("__NICK_URL__",safe_nick_url),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",esc(user.get('username'))),("__SUGG_BTN__",sugg_btn),("__BACK_HOME__",t('back_home',lang)),("__RECORDS_HTML__",rh),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
     return s
 
 def bugreport_html(username, reports, lang, token, show_nav=False):
-    rh = "<div class='post-item' style='text-align:center; padding:30px; color:#888;'>Заявок пока нет...</div>" if not reports else ""
+    rh = "<div style='padding:40px; text-align:center; color:#71767b;'>Заявок пока нет...</div>" if not reports else ""
     for x in reports:
         date_str = format_date(esc(x.get('created_at')))
         iso_str = esc(x.get('created_at', ''))
         rh += f"""
-        <div class='post-item' style='margin-bottom:15px;'>
-            <div class='post-header'>
-                <span class='post-author'>{t('bugreport_title',lang)}</span>
-                <span class='status-badge status-{esc(x.get('status','Принято')).replace(' ','-')}'>{esc(x.get('status','Принято'))}</span>
-            </div>
-            <div class='post-content'>{esc(x.get('content'))}</div>
-            <div class='post-footer' style='justify-content:flex-start;'>
-                <span class='post-date' data-iso='{iso_str}'>{date_str}</span>
+        <div class='post-card'>
+            <div class='post-body'>
+                <div class='post-header'>
+                    <span class='post-author'>{t('bugreport_title',lang)}</span>
+                    <span style='background:#1d9bf0; color:#fff; padding:2px 8px; border-radius:4px; font-size:12px;'>{esc(x.get('status','Принято'))}</span>
+                </div>
+                <div class='post-text'>{esc(x.get('content'))}</div>
+                <div style='color:#71767b; font-size:13px;' data-iso='{iso_str}'>{date_str}</div>
             </div>
         </div>"""
     og_title = "Баг-репорт — Solid" if lang == "ru" else "Bug Report — Solid"
     og = og_tags(og_title, "Solid", "/bugreport", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    
+    pc_sidebar = pc_sidebar_html(lang, "", "", "")
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__BUGREPORT_TITLE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container"><div class="sidebar" style="display:none"></div>
-    <div class="main-content" style="max-width:800px;margin:0 auto">
-        <div class="create-post-box"><h2 style="text-align:center;margin-bottom:20px;">__BUGREPORT_TITLE__</h2>
+    <title>{t('bugreport_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, "")}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('bugreport_title', lang)}</h2>
+            </div>
+            <div style="padding:20px; border-bottom:1px solid #2f3336;">
+                <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:15px">
+                    <input type="hidden" name="csrf_token" value="{token}">
+                    <input type="text" name="name" value="{esc(username)}" placeholder="{t('bugreport_name',lang)}" required maxlength="60">
+                    <textarea name="content" placeholder="{t('bugreport_desc',lang)}" required maxlength="5000" style="height:100px;"></textarea>
+                    <button type="submit" class="btn-blue">{t('bugreport_send',lang)}</button>
+                </form>
+            </div>
+            <div style="padding:10px 20px; border-bottom:1px solid #2f3336;"><h3>{t('bugreport_my',lang)}</h3></div>
+            {rh}
+        </div>
+    </div>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('bugreport_title', lang)}</h2>
+        </div>
+        <div style="padding:20px; border-bottom:1px solid #2f3336;">
             <form action="/bugreport" method="post" style="display:flex;flex-direction:column;gap:15px">
-                <input type="hidden" name="csrf_token" value="__TOKEN__">
-                <input type="text" name="name" value="__USERNAME__" placeholder="__BUGREPORT_NAME__" required maxlength="60">
-                <textarea name="content" placeholder="__BUGREPORT_DESC__" required maxlength="5000" style="height:150px;"></textarea>
-                <button type="submit" style="background:#f1c40f; color:#111;">__BUGREPORT_SEND__</button>
+                <input type="hidden" name="csrf_token" value="{token}">
+                <input type="text" name="name" value="{esc(username)}" placeholder="{t('bugreport_name',lang)}" required maxlength="60">
+                <textarea name="content" placeholder="{t('bugreport_desc',lang)}" required maxlength="5000" style="height:100px;"></textarea>
+                <button type="submit" class="btn-blue">{t('bugreport_send',lang)}</button>
             </form>
         </div>
-        <div class="posts-area" style="margin-top:20px;"><h2>__BUGREPORT_MY__</h2>__REPORTS_HTML__</div>
-        <a href="/cabinet" class="btn" style="background:#333;margin-top:15px">__CANCEL__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/bugreport" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/bugreport" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>
+        <div style="padding:10px 20px; border-bottom:1px solid #2f3336;"><h3>{t('bugreport_my',lang)}</h3></div>
+        {rh}
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    {bottom_nav_html(lang) if show_nav else ""}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, "")),("__TOKEN__",token),("__USERNAME__",esc(username)),("__BUGREPORT_NAME__",t('bugreport_name',lang)),("__BUGREPORT_DESC__",t('bugreport_desc',lang)),("__BUGREPORT_SEND__",t('bugreport_send',lang)),("__BUGREPORT_MY__",t('bugreport_my',lang)),("__REPORTS_HTML__",rh),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if show_nav else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
     return s
 
 def privacy_html(lang, token):
     og_title = "Политика конфиденциальности — Solid" if lang == "ru" else "Privacy Policy — Solid"
-    og_desc = "Политика конфиденциальности Solid" if lang == "ru" else "Solid Privacy Policy"
-    og = og_tags(og_title, og_desc, "/privacy", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    og = og_tags(og_title, "", "/privacy", lang=lang)
+    pc_sidebar = pc_sidebar_html(lang, "", "", "")
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__PRIVACY_TITLE__ — Solid</title>__OG__
-    __CSS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px"><div class="create-post-box" style="padding:30px; border-radius:20px;">
-        <h2 style="text-align:center;margin-bottom:20px">__PRIVACY_TITLE__</h2>
-        <div class="post-content" style="text-align:left; font-size:16px; line-height:1.7;">__PRIVACY_TEXT__</div>
-        <a href="/" class="btn" style="background:#333;margin-top:20px">__BACK_HOME__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/privacy" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/privacy" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div></div>
-    </div>__FOOTER__</body></html>
-    """
-    for k, v in [("__LANG__",lang),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__OG__",og),("__CSS__",get_css()),("__PRIVACY_TEXT__",t('privacy_text',lang)),("__BACK_HOME__",t('back_home',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__FOOTER__",get_footer(lang))]:
-        s = s.replace(k, v)
-    return s
-
-def settings_html(nickname, user, lang, token):
-    og_title = "Настройки — Solid" if lang == "ru" else "Settings — Solid"
-    og_desc = "Настройки приложения Solid"
-    og = og_tags(og_title, og_desc, "/settings", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__SETTINGS_TITLE__ — Solid</title>__OG__
-    __CSS____JS__</head><body class="show-footer">
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px">
-        <div class="posts-area" style="padding:0;">
-            <h2 style="color:#111;text-align:center;margin-bottom:20px">__SETTINGS_TITLE__</h2>
-
-            <div class="settings-card">
-                <h3>__SETTINGS_LANGUAGE__</h3>
-                <div class="lang-switch" style="justify-content:flex-start;">
-                    <a href="/set_lang/ru?next=/settings" class="btn lang-btn __RU_ACTIVE__">RU</a>
-                    <a href="/set_lang/en?next=/settings" class="btn lang-btn __EN_ACTIVE__">EN</a>
-                </div>
+    <title>{t('privacy_title', lang)} — Solid</title>{og}
+    {get_css()}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('privacy_title', lang)}</h2>
             </div>
-
-            <div class="settings-card">
-                <h3>__SETTINGS_ABOUT__</h3>
-                <p class="settings-about-text">__SETTINGS_ABOUT_TEXT__</p>
-                <p class="settings-version">__SETTINGS_VERSION__: v__APP_VERSION__ (__SERVER_START_DATE__)</p>
-                <button type="button" onclick="installPWA()" id="pwa-install-btn" style="display:none; background:#4da6ff; color:#fff; border-radius:10px; padding:14px; margin-top:15px;">__PWA_INSTALL__</button>
+            <div style="padding: 20px; color:#e7e9ea; font-size:15px; line-height:1.6;">
+                {t('privacy_text',lang)}
             </div>
-
-            <div class="settings-card">
-                <h3>__SETTINGS_LINKS__</h3>
-                <a href="/privacy" class="settings-link">__PRIVACY_TITLE__</a>
-                <a href="/docs" class="settings-link">__FAQ_LINK__</a>
-                <a href="/stats" class="settings-link">__STATS_LINK__</a>
-                <a href="/bugreport" class="settings-link">__BUGREPORT_TITLE__</a>
-            </div>
-
-            <button type="button" onclick="confirmLogout()" class="logout-btn" style="border-radius:10px;">__LOGOUT__</button>
         </div>
-    </div></div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/cabinet" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('privacy_title', lang)}</h2>
+        </div>
+        <div style="padding: 20px; color:#e7e9ea; font-size:15px; line-height:1.6;">
+            {t('privacy_text',lang)}
+        </div>
+    </div>
+
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SETTINGS_TITLE__",t('settings_title',lang)),("__SETTINGS_LANGUAGE__",t('settings_language',lang)),("__SETTINGS_ABOUT__",t('settings_about',lang)),("__SETTINGS_ABOUT_TEXT__",t('settings_about_text',lang)),("__SETTINGS_VERSION__",t('settings_version',lang)),("__SETTINGS_LINKS__",t('settings_links',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__LOGOUT__",t('logout',lang)),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__PWA_INSTALL__",t('pwa_install',lang))]:
-        s = s.replace(k, v)
     return s
 
 def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_iso, viewer=""):
@@ -1897,48 +2066,61 @@ def stats_html(lang, token, users_count, posts_count, sugg_count, last_update_is
     started = SERVER_START_DT.strftime("%d.%m.%y %H:%M UTC")
     last_upd = format_date(last_update_iso) if last_update_iso else "—"
     last_upd_iso = esc(last_update_iso or "")
-    contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}'>{e}</a></div>" for e in CONTACT_EMAILS)
+    contacts_html = "".join(f"<div style='margin-top:6px;'><a href='mailto:{e}' style='color:#1d9bf0;'>{e}</a></div>" for e in CONTACT_EMAILS)
     og_title = "Статистика — Solid" if lang == "ru" else "Stats — Solid"
-    og_desc = f"Пользователей: {users_count}, записей: {posts_count}" if lang == "ru" else f"Users: {users_count}, records: {posts_count}"
-    og = og_tags(og_title, og_desc, "/stats", lang=lang)
-    s = """
-    <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    og = og_tags(og_title, "", "/stats", lang=lang)
+    pc_sidebar = pc_sidebar_html(lang, viewer or "", "", "")
+
+    s = f"""
+    <!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
-    <title>__STATS_TITLE__ — Solid</title>__OG__
-    __CSS____JS__</head><body>
-    <div class="page-content">
-    <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:800px">
-        <div class="create-post-box" style="padding:30px; border-radius:20px;">
-            <h2 style="text-align:center; margin-bottom:20px;">__STATS_TITLE__</h2>
-            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_USERS__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__USERS_COUNT__</span></div>
-            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_POSTS__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__POSTS_COUNT__</span></div>
-            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_SUGGES__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__SUGG_COUNT__</span></div>
-            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_STARTED__</b><span style="font-size:14px;">__STARTED__</span></div>
-            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_LAST_UPDATE__</b><span style="font-size:14px;" data-iso="__LAST_UPDATE_ISO__">__LAST_UPDATE__</span></div>
-            <div class="info-card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>__STATS_UPTIME__</b><span style="font-size:20px; font-weight:bold; color:#0056b3;">__UPTIME__</span></div>
-            <div class="info-card" style="background:#222; color:#fff; border-color:#222;">
-                <b style="color:#aaa;">__STATS_CONTACTS__</b>
-                <div style="margin-bottom:10px;">__STATS_CONTACTS_DESC__</div>
-                __CONTACTS_HTML__
+    <title>{t('stats_title', lang)} — Solid</title>{og}
+    {get_css()}{get_js(lang, token, viewer)}</head><body>
+    
+    <div class="pc-layout">
+        {pc_sidebar}
+        <div class="pc-main">
+            <div class="page-header">
+                <a href="/settings/info" class="back-btn">{SVG_BACK}</a>
+                <h2>{t('stats_title', lang)}</h2>
+            </div>
+            <div style="padding: 20px;">
+                <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_users',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{users_count}</span></div>
+                <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_posts',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{posts_count}</span></div>
+                <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_sugges',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{sugg_count}</span></div>
+                <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_started',lang)}</b><span style="font-size:14px;">{started}</span></div>
+                <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_last_update',lang)}</b><span style="font-size:14px;" data-iso="{last_upd_iso}">{last_upd}</span></div>
+                <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_uptime',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{uptime}</span></div>
             </div>
         </div>
-        <a href="/" class="btn" style="background:#333;margin-top:15px;">__BACK__</a>
-        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/stats" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/stats" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
-    </div></div>
     </div>
-    __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
+
+    <div class="mobile-layout">
+        <div class="page-header">
+            <a href="/settings/info" class="back-btn">{SVG_BACK}</a>
+            <h2>{t('stats_title', lang)}</h2>
+        </div>
+        <div style="padding: 20px;">
+            <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_users',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{users_count}</span></div>
+            <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_posts',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{posts_count}</span></div>
+            <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_sugges',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{sugg_count}</span></div>
+            <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_started',lang)}</b><span style="font-size:14px;">{started}</span></div>
+            <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_last_update',lang)}</b><span style="font-size:14px;" data-iso="{last_upd_iso}">{last_upd}</span></div>
+            <div style="background:#16181c; border:1px solid #2f3336; padding:15px; border-radius:12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><b>{t('stats_uptime',lang)}</b><span style="font-size:20px; font-weight:bold; color:#1d9bf0;">{uptime}</span></div>
+        </div>
+    </div>
+
+    {bottom_nav_html(lang) if viewer else ""}
+    {get_overlay(lang)}
+    </body></html>
     """
-    for k, v in [("__LANG__",lang),("__STATS_TITLE__",t('stats_title',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, viewer)),("__STATS_USERS__",t('stats_users',lang)),("__STATS_POSTS__",t('stats_posts',lang)),("__STATS_SUGGES__",t('stats_sugges',lang)),("__STATS_STARTED__",t('stats_started',lang)),("__STATS_LAST_UPDATE__",t('stats_last_update',lang)),("__STATS_UPTIME__",t('stats_uptime',lang)),("__STATS_CONTACTS__",t('stats_contacts',lang)),("__STATS_CONTACTS_DESC__",t('stats_contacts_desc',lang)),("__CONTACTS_HTML__",contacts_html),("__USERS_COUNT__",str(users_count)),("__POSTS_COUNT__",str(posts_count)),("__SUGG_COUNT__",str(sugg_count)),("__STARTED__",started),("__LAST_UPDATE__",last_upd),("__LAST_UPDATE_ISO__",last_upd_iso),("__UPTIME__",uptime),("__BACK__",t('stats_back',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang) if viewer else ""),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
-        s = s.replace(k, v)
     return s
 
 def faq_markdown(lang: str) -> str:
     sections = FAQ_DATA.get(lang, FAQ_DATA["ru"])
     lines = [f"# {t('faq_title', lang)}", "", t('faq_intro', lang), ""]
     for icon_key, title, items in sections:
-        svg = SVG_ICONS.get(icon_key, "")
-        icon_html = f'<span class="docs-icon">{svg}</span> ' if svg else ""
-        lines.append(f"## {icon_html}{title}")
+        lines.append(f"## {title}")
         lines.append("")
         for q, a in items:
             lines.append(f"### {q}")
@@ -1949,8 +2131,7 @@ def faq_markdown(lang: str) -> str:
 
 def docs_html(lang: str, token: str) -> str:
     og_title = "FAQ — Solid"
-    og_desc = "Часто задаваемые вопросы о Solid" if lang == "ru" else "Frequently asked questions about Solid"
-    og = og_tags(og_title, og_desc, "/docs", lang=lang)
+    og = og_tags(og_title, "", "/docs", lang=lang)
     return f"""
     <!DOCTYPE html>
     <html lang="{lang}">
@@ -1963,38 +2144,24 @@ def docs_html(lang: str, token: str) -> str:
         <style>
             @import url('https://fonts.cdnfonts.com/css/herokid');
             @import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap');
-            
             @font-face {{
                 font-family: 'RuFont';
                 src: url('/static/ru_font.ttf') format('truetype');
                 font-weight: 300 700;
                 font-display: swap;
             }}
-            body {{
-                font-family: 'Source Sans 3', 'RuFont', Arial, sans-serif;
-                background: #0d1117;
-            }}
-            h1, h2, h3, .app-name {{
-                font-family: 'Herokid', 'Impact', sans-serif !important;
-                letter-spacing: 0.5px;
-            }}
-            :root {{ --theme-color: #4da6ff; }}
+            body {{ font-family: 'Source Sans 3', 'RuFont', Arial, sans-serif; background: #0d1117; color: #e7e9ea; }}
+            h1, h2, h3, .app-name {{ font-family: 'Herokid', 'Impact', sans-serif !important; letter-spacing: 0.5px; color: #fff !important; }}
+            :root {{ --theme-color: #1d9bf0; }}
             .sidebar {{ background: #0d1117; border-right: 1px solid #21262d; }}
             .sidebar ul li a {{ color: #c9d1d9; }}
-            .sidebar ul li.active > a,
-            .sidebar ul li a:hover {{ color: #4da6ff; border-right: 2px solid #4da6ff; }}
-            .sidebar-toggle {{ background: #4da6ff; }}
-            .sidebar-nav .docs-icon, .sidebar-nav svg {{ display: none; }}
+            .sidebar ul li.active > a, .sidebar ul li a:hover {{ color: #1d9bf0; border-right: 2px solid #1d9bf0; }}
+            .sidebar-toggle {{ background: #1d9bf0; }}
             .markdown-section {{ color: #c9d1d9; }}
             .markdown-section h1, .markdown-section h2, .markdown-section h3 {{ color: #ffffff; }}
-            .markdown-section h2 {{
-                display: flex; align-items: center; gap: 12px;
-                border-bottom: 2px solid #21262d;
-                padding-bottom: 12px; margin-top: 40px;
-            }}
-            .markdown-section h2 svg {{ flex-shrink: 0; }}
+            .markdown-section h2 {{ border-bottom: 2px solid #21262d; padding-bottom: 12px; margin-top: 40px; }}
             .markdown-section code {{ background: #161b22; color: #79c0ff; }}
-            .markdown-section a {{ color: #4da6ff; }}
+            .markdown-section a {{ color: #1d9bf0; }}
             .app-nav {{ background: #0d1117; }}
             .app-nav a {{ color: #c9d1d9; }}
             .app-name, .app-name-link {{ color: #ffffff !important; }}
@@ -2007,10 +2174,7 @@ def docs_html(lang: str, token: str) -> str:
                 basePath: '/docs/',
                 homepage: 'README.md',
                 coverpage: false,
-                onlyCover: false,
                 auto2top: true,
-                executeScript: false,
-                noEmoji: false,
                 mergeNavbar: true,
                 search: {{ placeholder: 'Поиск...', noData: 'Ничего не найдено' }}
             }};
@@ -2071,7 +2235,7 @@ async def privacy(r: Request, setlang: str = None):
     return res
 
 @app.get("/settings", response_class=HTMLResponse)
-async def settings_page(r: Request, setlang: str = None):
+async def settings_menu(r: Request, setlang: str = None):
     lang = _resolve_lang(r, setlang)
     nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
@@ -2080,7 +2244,52 @@ async def settings_page(r: Request, setlang: str = None):
         return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
     if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
-    res = HTMLResponse(settings_html(nickname, user_data, lang, token))
+    res = HTMLResponse(settings_menu_html(nickname, user_data, lang, token))
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/settings/info", response_class=HTMLResponse)
+async def settings_info(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    user_data = await _fetch_user(nickname)
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
+    if not user_data: return RedirectResponse("/", 303)
+    token = get_csrf_token(r)
+    res = HTMLResponse(settings_info_html(nickname, user_data, lang, token))
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/settings/account", response_class=HTMLResponse)
+async def settings_account(r: Request, setlang: str = None, error: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    user_data = await _fetch_user(nickname)
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
+    if not user_data: return RedirectResponse("/", 303)
+    token = get_csrf_token(r)
+    res = HTMLResponse(settings_account_html(nickname, user_data, lang, token, error=error))
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/settings/appearance", response_class=HTMLResponse)
+async def settings_appearance(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    user_data = await _fetch_user(nickname)
+    if user_data is DB_UNAVAILABLE:
+        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
+    if not user_data: return RedirectResponse("/", 303)
+    token = get_csrf_token(r)
+    res = HTMLResponse(settings_appearance_html(nickname, user_data, lang, token))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
@@ -2173,18 +2382,7 @@ async def cabinet(r: Request, setlang: str = None):
         resp = RedirectResponse("/", 303); resp.delete_cookie("nickname"); return resp
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname, sc))
-    set_csrf_cookie(res, token, r)
-    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
-    return res
-
-@app.get("/cabinet/new", response_class=HTMLResponse)
-async def cabinet_new(r: Request, setlang: str = None):
-    lang = _resolve_lang(r, setlang)
-    nickname = r.cookies.get("nickname")
-    if not nickname: return RedirectResponse("/", 303)
-    token = get_csrf_token(r)
-    res = HTMLResponse(create_page_html(nickname, lang, token))
+    res = HTMLResponse(feed_html(nickname, user_data, po, lang, token, nickname, sc))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
@@ -2200,7 +2398,18 @@ async def cabinet_profile(r: Request, setlang: str = None):
     if not user_data: return RedirectResponse("/", 303)
     po = merge_memory(p_data, nickname)
     token = get_csrf_token(r)
-    res = HTMLResponse(dashboard_html(nickname, user_data, po, lang, token, nickname))
+    res = HTMLResponse(public_html(nickname, user_data, po, lang, token, nickname))
+    set_csrf_cookie(res, token, r)
+    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
+    return res
+
+@app.get("/cabinet/new", response_class=HTMLResponse)
+async def cabinet_new(r: Request, setlang: str = None):
+    lang = _resolve_lang(r, setlang)
+    nickname = r.cookies.get("nickname")
+    if not nickname: return RedirectResponse("/", 303)
+    token = get_csrf_token(r)
+    res = HTMLResponse(create_page_html(nickname, lang, token))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
@@ -2325,34 +2534,19 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
     except HTTPException: raise
     except Exception as e: raise HTTPException(500, str(e))
 
-@app.get("/cabinet/edit", response_class=HTMLResponse)
-async def edit(r: Request, setlang: str = None, error: str = None):
-    lang = _resolve_lang(r, setlang)
-    nickname = r.cookies.get("nickname")
-    if not nickname: return RedirectResponse("/", 303)
-    user_data = await _fetch_user(nickname)
-    if user_data is DB_UNAVAILABLE:
-        return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
-    if not user_data: return RedirectResponse("/", 303)
-    token = get_csrf_token(r)
-    res = HTMLResponse(edit_html(nickname, user_data, lang, token, error=error))
-    set_csrf_cookie(res, token, r)
-    if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
-    return res
-
-@app.post("/cabinet/edit", response_class=HTMLResponse)
-async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), sugges_enabled: str = Form(None), sugges_photo_enabled: str = Form(None), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
+@app.post("/settings/account", response_class=HTMLResponse)
+async def settings_account_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), sugges_enabled: str = Form(None), sugges_photo_enabled: str = Form(None), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if lang not in ("ru", "en"): lang = "ru"
     if not nickname: return RedirectResponse("/", 303)
     if not check_csrf(r, csrf_token):
-        return RedirectResponse("/cabinet/edit?error=csrf", 303)
+        return RedirectResponse("/settings/account?error=csrf", 303)
     username = (username or "").strip()[:60]
     if not VALID_USER_RE.match(username):
-        return RedirectResponse("/cabinet/edit?error=format", 303)
+        return RedirectResponse("/settings/account?error=format", 303)
     if len(description) > 300:
-        return RedirectResponse("/cabinet/edit?error=desc", 303)
+        return RedirectResponse("/settings/account?error=desc", 303)
     if len(sugges_rules) > 1000:
-        return RedirectResponse("/cabinet/edit?error=rules", 303)
+        return RedirectResponse("/settings/account?error=rules", 303)
     update = {"username": username, "description": description, "sugges_rules": sugges_rules, "sugges_enabled": bool(sugges_enabled), "sugges_photo_enabled": bool(sugges_photo_enabled)}
     av = valid_b64(avatar_data)
     if av: update["avatar_data"] = av
@@ -2360,16 +2554,24 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
         await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
         if nickname in CACHE["users"]:
             CACHE["users"][nickname].update(update)
-        return RedirectResponse("/cabinet", 303)
+        return RedirectResponse("/settings/account", 303)
     except Exception:
         update.pop("avatar_data", None); update.pop("sugges_enabled", None); update.pop("sugges_photo_enabled", None)
         try: 
             await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
             if nickname in CACHE["users"]:
                 CACHE["users"][nickname].update(update)
-            return RedirectResponse("/cabinet", 303)
+            return RedirectResponse("/settings/account", 303)
         except Exception:
-            return RedirectResponse("/cabinet/edit?error=db", 303)
+            return RedirectResponse("/settings/account?error=db", 303)
+
+@app.get("/cabinet/edit")
+async def cabinet_edit_redirect():
+    return RedirectResponse("/settings/account", 303)
+
+@app.post("/cabinet/edit")
+async def cabinet_edit_post_redirect():
+    return RedirectResponse("/settings/account", 303)
 
 @app.get("/bugreport", response_class=HTMLResponse)
 async def bugreport(r: Request, setlang: str = None):
