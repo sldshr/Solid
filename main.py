@@ -592,13 +592,13 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     
     page_title = f"sol-id | {title_text}" if title_text else "sol-id"
     
-    # Используем json.dumps для безопасной передачи словаря в JS
     translations_json = f"""<script>window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang])}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`;</script>"""
 
     if user:
         nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
-        nav_right = "" # Убрали кнопку входа сверху
+        # ВЕРНУЛ КНОПКУ ВХОДА НА ПК (desktop-only)
+        nav_right = f"""<a href="/login" class="btn-primary desktop-only" style="padding:8px 16px;">{SVG_USER} <span>{t('login', lang)}</span></a>"""
         
     lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold; margin-right:10px;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
 
