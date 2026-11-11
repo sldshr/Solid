@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from passlib.context import CryptContext
 import uuid
 import base64
@@ -23,7 +23,7 @@ TRANSLATIONS = {
         "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
         "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
-        "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required for registration",
+        "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
         "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts",
         "search_results": "Search results", "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
         "wrong_pass": "Wrong password", "need_name": "Display name is required for registration", "choose_files": "Choose files",
@@ -31,7 +31,9 @@ TRANSLATIONS = {
         "remove_saved": "Remove from saved", "delete_comment": "Delete comment", "edit": "Edit", "update": "Update",
         "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist.", "login_to_comment": "Please log in to leave a comment",
         "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?",
-        "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply"
+        "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply",
+        "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
+        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -47,7 +49,9 @@ TRANSLATIONS = {
         "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий", "edit": "Редактировать", "update": "Обновить",
         "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует.", "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий",
         "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?",
-        "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить"
+        "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить",
+        "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
+        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля"
     }
 }
 
@@ -79,6 +83,7 @@ SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stro
 SVG_LANG = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>"""
 SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>"""
 SVG_CAMERA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>"""
+SVG_CHECK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
@@ -97,7 +102,6 @@ async def get_manifest():
 
 @app.get("/sw.js")
 async def get_sw():
-    from fastapi.responses import Response
     return Response(content="self.addEventListener('install',e=>{self.skipWaiting()});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))});", media_type="application/javascript")
 
 CSS_STYLES = """
@@ -196,8 +200,8 @@ a{color:var(--accent-color);text-decoration:none;}
 .action-btn:hover{background:#333;color:#fff;}
 .comments-section{flex:1;overflow-y:auto;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}
 .feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
-.feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;transition:transform .2s;position:relative;}
-.feed-card:hover{transform:translateY(-3px);border-color:#333;}
+.feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;}
+.feed-card:hover{border-color:#333;}
 .feed-card-img-container{width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
 .feed-card-img-container img{width:100%;height:100%;object-fit:cover;}
 .feed-card-info{padding:15px;flex:1;display:flex;flex-direction:column;}
@@ -217,13 +221,19 @@ a{color:var(--accent-color);text-decoration:none;}
 .slider:before{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background-color:white;transition:.4s;border-radius:50%;}
 input:checked+.slider{background-color:var(--accent-color);}
 input:checked+.slider:before{transform:translateX(22px);}
-.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;}
-.overlay img{max-width:95%;max-height:95%;object-fit:contain;}
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:9999;justify-content:center;align-items:center;flex-direction:column;}
 .close-overlay{position:absolute;top:20px;right:30px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;}
-.bottom-nav{display:none;position:fixed;bottom:0;left:0;width:100%;background:var(--bg-color);border-top:1px solid var(--border-color);justify-content:space-around;padding:12px 0;z-index:100;padding-bottom:env(safe-area-inset-bottom,12px);}
+.modal-box{background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);width:90%;max-width:400px;display:flex;flex-direction:column;gap:20px;text-align:center;}
+.modal-box h3{font-weight:700;font-size:20px;}
+.modal-box p{color:var(--text-muted);}
+.modal-actions{display:flex;gap:10px;}
+.modal-actions button{flex:1;padding:12px;justify-content:center;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-10px);}
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;width:100%;background:var(--bg-color);border-top:1px solid var(--border-color);justify-content:space-around;padding:16px 0 20px 0;z-index:100;padding-bottom:max(20px, env(safe-area-inset-bottom));}
 .bottom-nav a{display:flex;flex-direction:column;align-items:center;color:var(--text-muted);width:60px;text-decoration:none;}
 .bottom-nav a.active{color:var(--accent-color);pointer-events:none;}
-.bottom-nav a svg{width:32px;height:32px;margin-top:-8px;}
+.bottom-nav a svg{width:28px;height:28px;margin-bottom:4px;}
 .mobile-profile-menu{display:none;position:fixed;bottom:0;left:0;width:100%;background:var(--card-bg);z-index:1000;border-top-left-radius:20px;border-top-right-radius:20px;padding:20px;transform:translateY(100%);transition:transform .3s ease-in-out;flex-direction:column;gap:15px;padding-bottom:env(safe-area-inset-bottom,20px);box-shadow:0 -5px 20px rgba(0,0,0,.5);}
 .mobile-profile-menu.open{transform:translateY(0);display:flex;}
 .mobile-profile-header{display:flex;align-items:center;gap:15px;margin-bottom:10px;padding-bottom:15px;border-bottom:1px solid var(--border-color);}
@@ -241,8 +251,12 @@ input:checked+.slider:before{transform:translateX(22px);}
 .avatar-edit-container:hover .avatar-edit-overlay{opacity:1;}
 .mobile-only{display:none!important;}
 .desktop-only{display:flex!important;}
+.tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border-color);padding-bottom:10px;}
+.tab-btn{background:none;border:none;color:var(--text-muted);font-size:16px;font-weight:500;cursor:pointer;padding:10px 15px;border-radius:8px;transition:all .2s;}
+.tab-btn:hover{color:#fff;background:var(--card-bg);}
+.tab-btn.active{color:var(--accent-color);background:var(--card-bg);}
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}.main-content{padding:20px;}.feed-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));}}
-@media(max-width:900px){.app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}.sidebar{display:none;}.main-content{grid-column:1;padding:15px;padding-bottom:80px;}.bottom-nav{display:flex;}.topbar{padding:0 15px;gap:10px;height:60px;}.topbar-left{width:auto;}.logo span{display:none;}.menu-toggle{display:none!important;}.topbar-center{display:none;}.topbar-right .user-menu-container{display:none!important;}.topbar-right{width:auto;}.mobile-only{display:flex!important;}.desktop-only{display:none!important;}.mobile-search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 12px;border-radius:8px;color:#fff;font-size:14px;outline:none;}.post-view{flex-direction:column;padding:0;gap:15px;height:auto;max-height:none;overflow:visible;}.post-details{display:contents;}.post-author{order:1;margin-bottom:0;}.post-media{order:2;width:100%;max-height:50vh;min-height:200px;border-radius:12px;}.post-title{order:3;margin-bottom:0;}.post-desc{order:4;margin-bottom:0;max-height:none;}.actions-row{order:5;margin-bottom:0;padding:0 15px;}.comments-section{order:6;width:100%;border-top:1px solid var(--border-color);padding:15px;overflow:visible;}.create-layout{flex-direction:column;}.dropzone{padding:30px;min-height:250px;}.profile-header{flex-direction:column;text-align:center;gap:15px;}.profile-header .btn-primary{width:100%;margin-top:10px;}.profile-avatar{width:100px;height:100px;}}
+@media(max-width:900px){.app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}.sidebar{display:none;}.main-content{grid-column:1;padding:15px;padding-bottom:90px;}.bottom-nav{display:flex;}.topbar{padding:0 15px;gap:10px;height:60px;}.topbar-left{width:auto;}.logo span{display:none;}.menu-toggle{display:none!important;}.topbar-center{display:none;}.topbar-right .user-menu-container{display:none!important;}.topbar-right{width:auto;}.mobile-only{display:flex!important;}.desktop-only{display:none!important;}.mobile-search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 12px;border-radius:8px;color:#fff;font-size:14px;outline:none;}.post-view{flex-direction:column;padding:0;gap:15px;height:auto;max-height:none;overflow:visible;}.post-details{display:contents;}.post-author{order:1;margin-bottom:0;}.post-media{order:2;width:100%;max-height:50vh;min-height:200px;border-radius:12px;}.post-title{order:3;margin-bottom:0;}.post-desc{order:4;margin-bottom:0;max-height:none;}.actions-row{order:5;margin-bottom:0;padding:0 15px;}.comments-section{order:6;width:100%;border-top:1px solid var(--border-color);padding:15px;overflow:visible;}.create-layout{flex-direction:column;}.dropzone{padding:30px;min-height:250px;}.profile-header{flex-direction:column;text-align:center;gap:15px;}.profile-header .btn-primary{width:100%;margin-top:10px;}.profile-avatar{width:100px;height:100px;}}
 </style>
 """
 
@@ -333,7 +347,7 @@ function handleFiles(input){
         if(filesList.length<3){
             filesList.push(newFiles[i]);
         }else{
-            alert('Максимум 3 файла!');
+            showToast(window.TRANSLATIONS.max_files);
             break;
         }
     }
@@ -396,9 +410,32 @@ function setVisibility(val){
     }
 }
 
+function showToast(message){
+    var toast=document.getElementById('toast');
+    if(!toast)return;
+    toast.innerText=message;
+    toast.classList.add('show');
+    setTimeout(()=>{toast.classList.remove('show')},3000);
+}
+
+function showConfirm(title, desc, onConfirm){
+    var modal=document.getElementById('confirm-modal');
+    if(!modal)return;
+    document.getElementById('confirm-title').innerText=title;
+    document.getElementById('confirm-desc').innerText=desc;
+    var btn=document.getElementById('confirm-btn');
+    var newBtn=btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn,btn);
+    newBtn.onclick=function(){
+        modal.style.display='none';
+        onConfirm();
+    };
+    modal.style.display='flex';
+}
+
 function copyLink(){
     navigator.clipboard.writeText(window.location.href);
-    alert('Ссылка скопирована!');
+    showToast(window.TRANSLATIONS.link_copied);
 }
 
 function openPanorama(src){
@@ -460,7 +497,7 @@ function applyCrop(){
 async function vote(postId,action){
     var res=await fetch('/api/vote/'+postId+'/'+action,{method:'POST'});
     var data=await res.json();
-    if(data.error)return alert(data.error);
+    if(data.error)return showToast(data.error);
     var count=document.getElementById('vote-count');
     if(count)count.innerText=data.score;
     var upBtn=document.getElementById('btn-up');
@@ -472,23 +509,27 @@ async function vote(postId,action){
 async function toggleSave(postId,redirectToSaved=false){
     var res=await fetch('/api/save/'+postId,{method:'POST'});
     var data=await res.json();
-    if(data.error)return alert(data.error);
+    if(data.error)return showToast(data.error);
     if(redirectToSaved){
         window.location.reload();
         return;
     }
     var btn=document.getElementById('btn-save');
     if(btn){
-        if(data.saved){
-            btn.querySelector('.icon-save').style.display='none';
-            btn.querySelector('.icon-saved').style.display='block';
-            btn.style.color='var(--accent-color)';
-            btn.style.borderColor='var(--accent-color)';
-        }else{
-            btn.querySelector('.icon-save').style.display='block';
-            btn.querySelector('.icon-saved').style.display='none';
-            btn.style.color='';
-            btn.style.borderColor='';
+        var saveIcon=btn.querySelector('.icon-save');
+        var savedIcon=btn.querySelector('.icon-saved');
+        if(saveIcon&&savedIcon){
+            if(data.saved){
+                saveIcon.style.display='none';
+                savedIcon.style.display='block';
+                btn.style.color='var(--accent-color)';
+                btn.style.borderColor='var(--accent-color)';
+            }else{
+                saveIcon.style.display='block';
+                savedIcon.style.display='none';
+                btn.style.color='';
+                btn.style.borderColor='';
+            }
         }
     }
 }
@@ -503,7 +544,7 @@ async function submitComment(e,postId){
     formData.append('text',text);
     var res=await fetch('/api/comment/'+postId,{method:'POST',body:formData});
     var data=await res.json();
-    if(data.error)return alert(data.error);
+    if(data.error)return showToast(data.error);
     if(data.comment){
         input.value='';
         var noMsg=document.getElementById('no-comments-msg');
@@ -515,7 +556,7 @@ async function submitComment(e,postId){
         div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
         var deleteBtn='';
         if(data.is_author){
-            deleteBtn='<button onclick="deleteComment(\\''+postId+'\\', \\''+data.comment.id+'\\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">Удалить</button>';
+            deleteBtn='<button onclick="confirmDeleteComment(\\''+postId+'\\', \\''+data.comment.id+'\\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">'+window.TRANSLATIONS.delete+'</button>';
         }
         div.innerHTML='<div style="display:flex;gap:10px;"><img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><div><div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div><div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div></div></div>'+deleteBtn;
         if(list)list.appendChild(div);
@@ -524,22 +565,44 @@ async function submitComment(e,postId){
     }
 }
 
-async function deleteComment(postId,commentId){
-    if(!confirm('Удалить комментарий?'))return;
-    var res=await fetch('/api/comment/'+postId+'/'+commentId,{method:'DELETE'});
-    var data=await res.json();
-    if(data.success){
-        var el=document.getElementById('comment-'+commentId);
-        if(el)el.remove();
-        var cCount=document.getElementById('comment-count');
-        if(cCount)cCount.innerText=data.total_comments;
-        if(data.total_comments===0){
-            var noMsg=document.getElementById('no-comments-msg');
-            if(noMsg)noMsg.style.display='block';
+function confirmDeleteComment(postId,commentId){
+    showConfirm(window.TRANSLATIONS.delete, window.TRANSLATIONS.delete_comment_confirm, async function(){
+        var res=await fetch('/api/comment/'+postId+'/'+commentId,{method:'DELETE'});
+        var data=await res.json();
+        if(data.success){
+            var el=document.getElementById('comment-'+commentId);
+            if(el)el.remove();
+            var cCount=document.getElementById('comment-count');
+            if(cCount)cCount.innerText=data.total_comments;
+            if(data.total_comments===0){
+                var noMsg=document.getElementById('no-comments-msg');
+                if(noMsg)noMsg.style.display='block';
+            }
+        }else{
+            showToast(data.error||'Error');
         }
-    }else{
-        alert(data.error||'Error');
-    }
+    });
+}
+
+function confirmLogout(e){
+    e.preventDefault();
+    showConfirm(window.TRANSLATIONS.logout, window.TRANSLATIONS.logout_confirm, function(){
+        window.location.href='/logout';
+    });
+}
+
+function confirmDeletePost(e, form){
+    e.preventDefault();
+    showConfirm(window.TRANSLATIONS.delete, window.TRANSLATIONS.delete_confirm, function(){
+        form.submit();
+    });
+}
+
+function switchTab(tabId){
+    document.querySelectorAll('.tab-btn').forEach(btn=>btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(el=>el.style.display='none');
+    document.querySelector('[data-tab="'+tabId+'"]').classList.add('active');
+    document.getElementById('tab-'+tabId).style.display='block';
 }
 
 document.addEventListener('DOMContentLoaded',function(){
@@ -562,15 +625,18 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 """
 
-def render_layout(content_html, user, request: Request, active_page="feed"):
+def render_layout(content_html, user, request: Request, active_page="feed", title_text=""):
     lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
     current_lang_str = "RU" if lang == "ru" else "EN"
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
+    
+    page_title = f"sol-id | {title_text}" if title_text else "sol-id"
+    translations_json = f"""<script>window.TRANSLATIONS = {TRANSLATIONS[lang]};</script>"""
 
     if user:
-        nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px; display: flex; gap:6px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="/logout" class="dropdown-item danger" onclick="return confirm('{t('logout_confirm', lang)}')">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
+        nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px; display: flex; gap:6px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
         nav_right = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} <span class="desktop-only">{current_lang_str}</span></a><a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login', lang)}</span></a>"""
 
@@ -583,7 +649,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
     else:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/login" class="{'active' if active_page == 'login' else ''}">{SVG_USER}</a></div>"""
 
-    return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>sol-id</title>{CSS_STYLES}</head><body><div class="app-layout"><div class="topbar"><div class="topbar-left">{f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}<a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a></div><div class="topbar-center"><div class="search-container"><span class="search-icon">{SVG_SEARCH}</span><input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off"><div id="searchDropdown" class="search-dropdown"></div></div></div><form action="/search" method="get" class="mobile-only" style="flex:1;"><input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}"></form><div class="topbar-right">{nav_right}</div></div>{sidebar_html}<div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">{content_html}</div></div>{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="/logout" class="dropdown-item danger" onclick="return confirm('{t('logout_confirm', lang)}')">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div>{bottom_nav}{JS_SCRIPT}</body></html>"""
+    return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}{translations_json}</head><body><div class="app-layout"><div class="topbar"><div class="topbar-left">{f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}<a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a></div><div class="topbar-center"><div class="search-container"><span class="search-icon">{SVG_SEARCH}</span><input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off"><div id="searchDropdown" class="search-dropdown"></div></div></div><form action="/search" method="get" class="mobile-only" style="flex:1;"><input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}"></form><div class="topbar-right">{nav_right}</div></div>{sidebar_html}<div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">{content_html}</div></div>{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div><div id="confirm-modal" class="overlay" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div><div id="toast" class="toast"></div>{bottom_nav}{JS_SCRIPT}</body></html>"""
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
@@ -629,7 +695,7 @@ async def search_posts(request: Request, q: str = ""):
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div></div></a>"""
         content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div>'
-    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+    return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
 
 @app.get("/", response_class=HTMLResponse)
 async def read_feed(request: Request):
@@ -647,7 +713,7 @@ async def read_feed(request: Request):
             score = len(post['votes']['up']) - len(post['votes']['down'])
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}<span style="margin-left:auto; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
-    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+    return HTMLResponse(content=render_layout(content, user, request, "feed", t('feed', lang)))
 
 @app.get("/saved", response_class=HTMLResponse)
 async def saved_posts(request: Request):
@@ -666,13 +732,13 @@ async def saved_posts(request: Request):
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div></div></a></div>"""
         content = f'<h2 style="margin-bottom:25px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
-    return HTMLResponse(content=render_layout(content, user, request, "saved"))
+    return HTMLResponse(content=render_layout(content, user, request, "saved", t('saved', lang)))
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     lang = get_lang(request)
     content = f"""<div class="auth-container"><form class="auth-form" action="/login" method="post"><h2>{t('login', lang)}</h2><div class="input-group"><input type="text" name="username" placeholder="{t('username', lang)}" required></div><div class="input-group"><input type="text" name="display_name" placeholder="{t('display_name', lang)} (Only for new accounts)"></div><div class="input-group"><input type="password" name="password" placeholder="{t('password', lang)}" required><span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span></div><p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;">{t('login_hint', lang)}</p><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login', lang)}</button></form></div>"""
-    return HTMLResponse(content=render_layout(content, None, request, "login"))
+    return HTMLResponse(content=render_layout(content, None, request, "login", t('login', lang)))
 
 @app.post("/login")
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...), display_name: str = Form("")):
@@ -681,10 +747,10 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     user = users_db.get(username)
     if user:
         if not pwd_context.verify(password, user["password"]):
-            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login"))
+            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
         if not display_name.strip():
-            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login"))
+            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
         users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": display_name.strip(), "avatar": None, "saved_posts": []}
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
@@ -705,8 +771,73 @@ async def settings_page(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
-    content = f"""<div style="max-width: 700px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">{t('settings', lang)}</h2><div style="background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px;"><h3 style="margin-bottom: 15px; font-weight: 500; font-size: 20px;">Language / Язык</h3><div style="display:flex; gap:10px;"><a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a><a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a></div></div></div>"""
-    return HTMLResponse(content=render_layout(content, user, request, "settings"))
+    avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
+    
+    content = f"""
+    <div style="max-width: 800px; margin: 0 auto; width: 100%;">
+        <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">{t('settings', lang)}</h2>
+        
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="profile" onclick="switchTab('profile')">{t('profile', lang)}</button>
+            <button class="tab-btn" data-tab="language" onclick="switchTab('language')">{t('language', lang)}</button>
+        </div>
+
+        <div id="tab-profile" class="tab-content" style="display:block;">
+            <div class="editor-card">
+                <form action="/settings/profile" method="post" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:20px;">
+                    <div style="text-align:center;">
+                        <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
+                            <img id="avatar-preview" src="{avatar_url}">
+                            <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
+                        </div>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
+                        <input type="file" id="avatar-file" name="avatar" accept="image/*" onchange="loadAvatar(event)" style="display:none;">
+                        <input type="hidden" name="avatar_base64" id="avatar-base64">
+                    </div>
+                    <div class="input-group">
+                        <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
+                        <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required style="padding:14px;">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_SETTINGS} {t('save', lang)}</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="tab-language" class="tab-content" style="display:none;">
+            <div style="background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color);">
+                <div style="display:flex; gap:10px;">
+                    <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
+                    <a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="crop-modal" class="overlay">
+        <div class="crop-container" onclick="event.stopPropagation()">
+            <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
+            <canvas id="crop-canvas" width="300" height="300" class="crop-canvas"></canvas>
+            <div class="crop-controls">
+                <label style="font-size:14px; color:var(--text-muted);">{t('zoom', lang)}</label>
+                <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" oninput="currentZoom = parseFloat(this.value); drawCropCanvas();" style="width:100%;">
+            </div>
+            <div style="display:flex; gap:10px; width:100%;">
+                <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center;">{t('cancel', lang)}</button>
+                <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">{t('apply', lang)}</button>
+            </div>
+        </div>
+    </div>
+    """
+    return HTMLResponse(content=render_layout(content, user, request, "settings", t('settings', lang)))
+
+@app.post("/settings/profile")
+async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None)):
+    user = get_current_user(request)
+    if not user: raise HTTPException(401)
+    users_db[user['username']]['display_name'] = display_name
+    if avatar_base64: users_db[user['username']]['avatar'] = avatar_base64
+    elif avatar and avatar.filename: users_db[user['username']]['avatar'] = await image_to_base64(avatar)
+    return RedirectResponse(url="/settings", status_code=status.HTTP_302_FOUND)
 
 @app.get("/write", response_class=HTMLResponse)
 async def create_post_page(request: Request):
@@ -714,7 +845,7 @@ async def create_post_page(request: Request):
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
-    return HTMLResponse(content=render_layout(content, user, request, "write"))
+    return HTMLResponse(content=render_layout(content, user, request, "write", t('new_post', lang)))
 
 @app.post("/write")
 async def create_post(request: Request, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
@@ -821,61 +952,9 @@ async def view_profile(request: Request, username: str):
         img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
         posts_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div></div></a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
-    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff; display:flex; gap:8px;">{SVG_SETTINGS} {t("edit_profile", lang)}</a>' if current_user and current_user['username'] == username else ''
+    edit_btn = f'<a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a>' if current_user and current_user['username'] == username else ''
     content = f"""<div class="profile-header"><img src="{ava}" class="profile-avatar"><div class="profile-details"><h1>{html.escape(profile_user['display_name'])}</h1><p>@{html.escape(username)}</p><p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p></div><div style="margin-left:auto;">{edit_btn}</div></div><div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;"><a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a></div><div class="feed-grid">{posts_html}</div>"""
-    return HTMLResponse(content=render_layout(content, current_user, request, "profile"))
-
-@app.get("/edit_profile", response_class=HTMLResponse)
-async def edit_profile_page(request: Request):
-    user = get_current_user(request)
-    lang = get_lang(request)
-    if not user: return RedirectResponse(url="/login")
-    avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
-    content = f"""
-    <div class="editor-card">
-        <h2 style="margin-bottom:10px; font-weight:700; font-size:28px; text-align:center;">{t('edit_profile', lang)}</h2>
-        <form action="/edit_profile" method="post" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:20px;">
-            <div style="text-align:center;">
-                <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
-                    <img id="avatar-preview" src="{avatar_url}">
-                    <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
-                </div>
-                <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
-                <input type="file" id="avatar-file" name="avatar" accept="image/*" onchange="loadAvatar(event)" style="display:none;">
-                <input type="hidden" name="avatar_base64" id="avatar-base64">
-            </div>
-            <div class="input-group">
-                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
-                <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required style="padding:14px;">
-            </div>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:10px; padding:14px;">{SVG_SETTINGS} {t('save', lang)}</button>
-        </form>
-    </div>
-    <div id="crop-modal" class="overlay">
-        <div class="crop-container" onclick="event.stopPropagation()">
-            <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
-            <canvas id="crop-canvas" width="300" height="300" class="crop-canvas"></canvas>
-            <div class="crop-controls">
-                <label style="font-size:14px; color:var(--text-muted);">{t('zoom', lang)}</label>
-                <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" oninput="currentZoom = parseFloat(this.value); drawCropCanvas();" style="width:100%;">
-            </div>
-            <div style="display:flex; gap:10px; width:100%;">
-                <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center;">{t('cancel', lang)}</button>
-                <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">{t('apply', lang)}</button>
-            </div>
-        </div>
-    </div>
-    """
-    return HTMLResponse(content=render_layout(content, user, request, "profile"))
-
-@app.post("/edit_profile")
-async def edit_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None)):
-    user = get_current_user(request)
-    if not user: raise HTTPException(401)
-    users_db[user['username']]['display_name'] = display_name
-    if avatar_base64: users_db[user['username']]['avatar'] = avatar_base64
-    elif avatar and avatar.filename: users_db[user['username']]['avatar'] = await image_to_base64(avatar)
-    return RedirectResponse(url=f"/@{user['username']}", status_code=status.HTTP_302_FOUND)
+    return HTMLResponse(content=render_layout(content, current_user, request, "profile", f"@{username}"))
 
 @app.get("/{post_id}", response_class=HTMLResponse)
 async def view_post(request: Request, post_id: str):
@@ -891,8 +970,11 @@ async def view_post(request: Request, post_id: str):
         if user['username'] in post['votes']['up']: user_vote = 1
         elif user['username'] in post['votes']['down']: user_vote = -1
     is_saved = user and post_id in user.get('saved_posts', [])
-    save_icon = SVG_SAVED if is_saved else SVG_SAVE
-    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('{t("delete_confirm", lang)}');"><button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
+    
+    save_icon_html = f'<span class="icon-save" style="display:{"none" if is_saved else "block"}">{SVG_SAVE}</span><span class="icon-saved" style="display:{"block" if is_saved else "none"}">{SVG_SAVED}</span>'
+    save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
+    
+    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="confirmDeletePost(event, this);"><button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
     if post['images']:
         media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
         if len(post['images']) > 1:
@@ -905,11 +987,11 @@ async def view_post(request: Request, post_id: str):
     comments_list_html = ""
     for c in post['comments']:
         c_ava = c.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['author']}"
-        del_btn = f'<button onclick="deleteComment(\'{post["id"]}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">Удалить</button>' if user and user['username'] == c['author'] else ''
+        del_btn = f'<button onclick="confirmDeleteComment(\'{post["id"]}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">{t("delete_comment", lang)}</button>' if user and user['username'] == c['author'] else ''
         comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div><div style="font-size:14px; margin-top:2px;">{c['text']}</div></div></div>{del_btn}</div>"""
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
-    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{'color:var(--accent-color); border-color:var(--accent-color);' if is_saved else ''}" title="{t('save_post', lang)}">{save_icon}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div>"""
-    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div>"""
+    return HTMLResponse(content=render_layout(content, user, request, "feed", html.escape(post['title'])))
 
 if __name__ == "__main__":
     import uvicorn
