@@ -20,20 +20,59 @@ admin_pwd = pwd_context.hash("admin")
 users_db["admin"] = {
     "username": "admin",
     "password": admin_pwd,
-    "display_name": "Администратор",
+    "display_name": "Administrator",
     "avatar": None,
     "saved_posts": []
 }
 
 # ==========================================
+# ЛОКАЛИЗАЦИЯ (i18n)
+# ==========================================
+TRANSLATIONS = {
+    "en": {
+        "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings",
+        "logout": "Logout", "login_register": "Login / Register", "new_post": "New Post",
+        "search_placeholder": "Search...", "title": "Title", "description": "Description",
+        "publish": "Publish", "visibility": "Who can see", "in_feed": "In Feed",
+        "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
+        "upload_limit": "JPEG, PNG, GIF up to 5 images", "back": "Back to feed",
+        "comments": "Comments", "no_comments": "No comments yet.",
+        "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile",
+        "display_name": "Display Name", "avatar": "Avatar", "save": "Save",
+        "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
+        "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete"
+    },
+    "ru": {
+        "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
+        "logout": "Выйти", "login_register": "Вход / Регистрация", "new_post": "Новый пост",
+        "search_placeholder": "Поиск...", "title": "Название", "description": "Описание",
+        "publish": "Опубликовать", "visibility": "Кто увидит", "in_feed": "Все, в ленте",
+        "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
+        "upload_limit": "JPEG, PNG, GIF до 5 штук", "back": "Назад в ленту",
+        "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
+        "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль",
+        "display_name": "Отображаемое имя", "avatar": "Аватарка", "save": "Сохранить",
+        "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
+        "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить"
+    }
+}
+
+def get_lang(request: Request):
+    lang = request.cookies.get("lang", "en")
+    return lang if lang in TRANSLATIONS else "en"
+
+def t(key, lang):
+    return TRANSLATIONS[lang].get(key, key)
+
+# ==========================================
 # SVG ИКОНКИ
 # ==========================================
-SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#8cc84b"/></svg>"""
-SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%238cc84b%22/></svg>"
+SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#3b82f6"/></svg>"""
+SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%233b82f6%22/></svg>"
 
 SVG_UP = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
 SVG_DOWN = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
-SVG_FEED = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
+SVG_FEED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
 SVG_PLUS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
 SVG_USER = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
 SVG_SETTINGS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>"""
@@ -44,9 +83,11 @@ SVG_EYE_OFF = """<svg class="eye-closed" style="display:none;" width="20" height
 SVG_BACK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
 SVG_IMAGE = """<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>"""
 SVG_SAVE = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
-SVG_SAVED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="#8cc84b" stroke="#8cc84b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
+SVG_SAVED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_LINK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>"""
 SVG_TRASH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>"""
+SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>"""
+SVG_LANG = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>"""
 
 # ==========================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -72,8 +113,8 @@ CSS_STYLES = """
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
     :root {
-        --bg-color: #0f0f0f; --card-bg: #1c1c1c; --text-main: #f3f3f3; --text-muted: #888;
-        --accent-color: #8cc84b; --border-color: #2a2a2a; --danger-color: #ef4444;
+        --bg-color: #0a0a0a; --card-bg: #151515; --text-main: #f8fafc; --text-muted: #94a3b8;
+        --accent-color: #3b82f6; --border-color: #262626; --danger-color: #ef4444;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Manrope', sans-serif; user-select: none; }
     input, textarea, .selectable { user-select: text; }
@@ -85,9 +126,16 @@ CSS_STYLES = """
     .app-layout { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 70px 1fr; height: 100vh; width: 100%; }
     
     /* Topbar */
-    .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 30px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; }
+    .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; gap: 20px; }
     .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
-    .btn-primary { background-color: var(--accent-color); color: #000; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+    
+    /* Search Bar Desktop */
+    .search-container { flex: 1; max-width: 500px; position: relative; }
+    .search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px 15px 10px 40px; border-radius: 8px; color: #fff; font-size: 15px; outline: none; }
+    .search-input:focus { border-color: var(--accent-color); }
+    .search-icon { position: absolute; left: 12px; top: 10px; color: var(--text-muted); }
+    
+    .btn-primary { background-color: var(--accent-color); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; }
     .btn-primary:hover { opacity: 0.9; }
     
     /* User Dropdown */
@@ -122,7 +170,6 @@ CSS_STYLES = """
     .input-group input, .input-group select, .input-group textarea { width: 100%; padding: 14px 16px; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; color: white; font-size: 16px; outline: none; }
     .input-group input:focus, .input-group select:focus, .input-group textarea:focus { border-color: var(--accent-color); }
     .pass-toggle { position: absolute; right: 15px; top: 15px; cursor: pointer; color: var(--text-muted); }
-    .checkbox-group { display: flex; gap: 10px; align-items: center; margin-bottom: 25px; font-size: 14px; color: var(--text-muted); }
     .error { color: var(--danger-color); text-align: center; margin-bottom: 15px; font-size: 15px; }
     
     /* Profile */
@@ -165,7 +212,7 @@ CSS_STYLES = """
     /* Create Post */
     .create-layout { display: flex; gap: 30px; max-width: 1100px; margin: 0 auto; width: 100%; }
     .dropzone { flex: 2; border: 2px dashed var(--border-color); border-radius: 16px; padding: 50px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px; transition: border-color 0.2s; }
-    .dropzone.dragover { border-color: var(--accent-color); background: rgba(140, 200, 75, 0.05); }
+    .dropzone.dragover { border-color: var(--accent-color); background: rgba(59, 130, 246, 0.05); }
     .file-preview { display: flex; align-items: center; gap: 15px; background: var(--bg-color); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 15px; width: 100%; text-align: left; }
     .file-preview img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; }
     .create-sidebar { flex: 1; background: var(--card-bg); padding: 30px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
@@ -175,22 +222,32 @@ CSS_STYLES = """
     .overlay img { max-width: 95%; max-height: 95%; object-fit: contain; }
     .close-overlay { position: absolute; top: 20px; right: 30px; font-size: 40px; color: #fff; cursor: pointer; background: none; border: none; }
 
+    /* Mobile Search Overlay */
+    .mobile-search-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); z-index: 1000; padding: 20px; flex-direction: column; }
+    .mobile-search-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+
     /* Mobile Nav */
     .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 12px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 12px); }
     .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--text-muted); gap: 6px; }
     .bottom-nav a.active { color: var(--accent-color); }
-    .bottom-nav .plus-btn { background: var(--accent-color); color: #000; padding: 12px; border-radius: 50%; transform: translateY(-20px); box-shadow: 0 4px 15px rgba(140, 200, 75, 0.4); }
+    .bottom-nav .plus-btn { background: var(--accent-color); color: #fff; padding: 12px; border-radius: 50%; transform: translateY(-10px); box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); display: flex; align-items: center; justify-content: center; }
 
     @media (max-width: 900px) {
         .app-layout { grid-template-columns: 1fr; grid-template-rows: 70px 1fr; }
         .sidebar { display: none; }
         .main-content { grid-column: 1; padding: 15px; padding-bottom: 100px; }
         .bottom-nav { display: flex; }
-        .topbar .user-menu-btn span { display: none; }
-        .topbar .btn-primary span { display: none; }
+        
+        /* Topbar adjustments */
+        .topbar { padding: 0 15px; }
+        .logo span { display: none; } /* Hide text on mobile */
+        .search-container { display: none; } /* Hide desktop search */
+        .desktop-nav { display: none; } /* Hide desktop login buttons */
+        
         .post-view { flex-direction: column; padding: 15px; }
         .create-layout { flex-direction: column; }
-        .profile-header { flex-direction: column; text-align: center; }
+        .profile-header { flex-direction: column; text-align: center; gap: 15px; }
+        .profile-header .btn-primary { width: 100%; }
     }
 </style>
 <script>
@@ -224,13 +281,14 @@ CSS_STYLES = """
         }
     }
 
-    // File Upload Logic
+    // Multiple File Upload Logic
     function handleFiles(input) {
         const previewContainer = document.getElementById('file-list');
-        previewContainer.innerHTML = ''; // Clear existing
+        previewContainer.innerHTML = ''; 
         if (input.files.length > 5) {
-            alert('Максимум 5 файлов!');
+            alert('Maximum 5 files allowed! / Максимум 5 файлов!');
             input.value = '';
+            document.getElementById('dropzone-text').style.display = 'block';
             return;
         }
         if (input.files.length > 0) {
@@ -243,11 +301,11 @@ CSS_STYLES = """
                     div.className = 'file-preview';
                     div.innerHTML = `
                         <img src="${e.target.result}">
-                        <div style="flex:1;">
-                            <div style="font-size:14px; color:#fff; font-weight:500;">${file.name}</div>
-                            <div style="font-size:12px; color:var(--text-muted);">${(file.size/1024).toFixed(1)} КБ</div>
+                        <div style="flex:1; overflow:hidden;">
+                            <div style="font-size:14px; color:#fff; font-weight:500; text-overflow:ellipsis; white-space:nowrap; overflow:hidden;">${file.name}</div>
+                            <div style="font-size:12px; color:var(--text-muted);">${(file.size/1024).toFixed(1)} KB</div>
                         </div>
-                        <span style="cursor:pointer; color:var(--text-muted); font-size:20px;" onclick="this.parentElement.remove()">×</span>
+                        <span style="cursor:pointer; color:var(--text-muted); font-size:24px; padding:0 10px;" onclick="this.parentElement.remove()">×</span>
                     `;
                     previewContainer.appendChild(div);
                 }
@@ -256,10 +314,41 @@ CSS_STYLES = """
         }
     }
 
+    // Drag & Drop visual
+    const dropzone = document.getElementById('dropzone');
+    if(dropzone) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+        function preventDefaults (e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
+        });
+    }
+
+    // Visibility Toggle
+    function setVisibility(val) {
+        document.getElementById('vis-input').value = val;
+        if(val === 'feed') {
+            document.getElementById('btn-feed').style.borderColor = 'var(--accent-color)';
+            document.getElementById('btn-feed').style.color = 'var(--accent-color)';
+            document.getElementById('btn-link').style.borderColor = 'var(--border-color)';
+            document.getElementById('btn-link').style.color = 'var(--text-muted)';
+        } else {
+            document.getElementById('btn-feed').style.borderColor = 'var(--border-color)';
+            document.getElementById('btn-feed').style.color = 'var(--text-muted)';
+            document.getElementById('btn-link').style.borderColor = 'var(--accent-color)';
+            document.getElementById('btn-link').style.color = 'var(--accent-color)';
+        }
+    }
+
     // Copy Link
     function copyLink() {
         navigator.clipboard.writeText(window.location.href);
-        alert('Ссылка скопирована!');
+        alert('Link copied! / Ссылка скопирована!');
     }
 
     // Panorama Viewer
@@ -270,23 +359,39 @@ CSS_STYLES = """
     function closePanorama() {
         document.getElementById('panorama').style.display = 'none';
     }
+
+    // Mobile Search
+    function openMobileSearch() {
+        document.getElementById('mobileSearch').style.display = 'flex';
+        document.getElementById('mobileSearchInput').focus();
+    }
+    function closeMobileSearch() {
+        document.getElementById('mobileSearch').style.display = 'none';
+    }
 </script>
 """
 
 # ==========================================
 # LAYOUT
 # ==========================================
-def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=None, is_post_view=False):
+def render_layout(content_html, user, request: Request, active_page="feed", prev_id=None, next_id=None, is_post_view=False):
+    lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
+    current_lang_str = "RU" if lang == "ru" else "EN"
     
+    # Language switch URL
+    next_lang = "ru" if lang == "en" else "en"
+    switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
+
+    # Nav Links
     if user:
         nav_html = f"""
-        <div style="display:flex; align-items:center; gap:20px;">
-            <a href="/write" class="btn-primary">{SVG_PLUS} <span>Новый пост</span></a>
+        <div style="display:flex; align-items:center; gap:15px;">
+            <a href="/write" class="btn-primary">{SVG_PLUS} <span style="display:none; @media(min-width: 900px){display:inline}">{t('new_post', lang)}</span></a>
             <div class="user-menu-container">
                 <div class="user-menu-btn" onclick="toggleDropdown()">
                     <img src="{avatar_url}" class="user-avatar-small">
-                    <span style="font-weight:500; font-size:15px;">{user['display_name']}</span>
+                    <span style="font-weight:500; font-size:15px; display:none; @media(min-width: 900px){display:inline}">{user['display_name']}</span>
                 </div>
                 <div id="user-dropdown" class="dropdown-menu">
                     <div class="dropdown-header">
@@ -296,18 +401,22 @@ def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=
                             <span class="login">@{user['username']}</span>
                         </div>
                     </div>
-                    <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} Профиль</a>
-                    <a href="/settings" class="dropdown-item">{SVG_SETTINGS} Настройки</a>
-                    <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} Выход</a>
+                    <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
+                    <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
+                    <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
                 </div>
             </div>
         </div>
         """
     else:
         nav_html = f"""
-        <div style="display:flex; align-items:center; gap:20px;">
-            <a href="/login" style="color:var(--text-main); font-weight:700;">Вход</a>
-            <a href="/register" class="btn-primary">Регистрация</a>
+        <div style="display:flex; align-items:center; gap:15px;" class="desktop-nav">
+            <a href="{switch_lang_url}" style="color:var(--text-muted); display:flex; align-items:center; gap:5px; font-weight:bold;">{SVG_LANG} {current_lang_str}</a>
+            <a href="/login" class="btn-primary">{SVG_USER} {t('login_register', lang)}</a>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;" class="mobile-nav">
+            <a href="{switch_lang_url}" style="color:var(--text-muted); font-weight:bold; padding:5px;">{current_lang_str}</a>
+            <a href="/login" style="color:var(--text-main); font-weight:500;">{SVG_USER}</a>
         </div>
         """
 
@@ -315,13 +424,13 @@ def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=
     if user:
         sidebar_html = f"""
         <div class="sidebar">
-            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} Лента</a>
-            <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} Избранное</a>
-            <a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} Профиль</a>
+            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} {t('feed', lang)}</a>
+            <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} {t('saved', lang)}</a>
+            <a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} {t('profile', lang)}</a>
         </div>
         """
 
-    # Keyboard navigation script if on post view
+    # Keyboard navigation script
     keyboard_js = ""
     if is_post_view:
         keyboard_js = f"""
@@ -340,7 +449,7 @@ def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=
 
     return f"""
     <!DOCTYPE html>
-    <html lang="ru">
+    <html lang="{lang}">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -348,9 +457,31 @@ def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=
         {CSS_STYLES}
     </head>
     <body>
+        <!-- Mobile Search Overlay -->
+        <div id="mobileSearch" class="mobile-search-overlay">
+            <div class="mobile-search-header">
+                <button class="action-btn" onclick="closeMobileSearch()" style="border:none; background:none; padding:0;">{SVG_BACK}</button>
+                <form action="/search" method="get" style="flex:1; display:flex; gap:10px;">
+                    <input type="text" name="q" id="mobileSearchInput" placeholder="{t('search_placeholder', lang)}" style="flex:1; background:var(--card-bg); border:1px solid var(--border-color); border-radius:8px; padding:12px; color:#fff; outline:none; font-size:16px;">
+                    <button type="submit" class="btn-primary" style="padding:10px;">{SVG_SEARCH}</button>
+                </form>
+            </div>
+        </div>
+
         <div class="app-layout">
             <div class="topbar">
-                <a href="/" class="logo">{SVG_LOGO} sol.id</a>
+                <a href="/" class="logo">{SVG_LOGO} <span>sol.id</span></a>
+                
+                <!-- Desktop Search -->
+                <form action="/search" method="get" class="search-container">
+                    {SVG_SEARCH}
+                    <input type="text" name="q" class="search-input" placeholder="{t('search_placeholder', lang)}" value="{request.query_params.get('q', '')}">
+                </form>
+                
+                <!-- Mobile Search Icon -->
+                <button class="action-btn" onclick="openMobileSearch()" style="display:none; border:none; background:none; color:var(--text-main);" id="mobileSearchBtn">{SVG_SEARCH}</button>
+                <style>@media (max-width: 900px) {{ #mobileSearchBtn {{ display: block !important; }} }}</style>
+                
                 {nav_html}
             </div>
             {sidebar_html}
@@ -366,9 +497,9 @@ def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=
         </div>
 
         <div class="bottom-nav">
-            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} Лента</a>
+            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} {t('feed', lang)}</a>
             <a href="/write" class="plus-btn">{SVG_PLUS}</a>
-            <a href="/@{user['username'] if user else 'login'}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} Профиль</a>
+            <a href="/@{user['username'] if user else 'login'}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} {t('profile', lang)}</a>
         </div>
         {keyboard_js}
     </body>
@@ -379,16 +510,23 @@ def render_layout(content_html, user, active_page="feed", prev_id=None, next_id=
 # МАРШРУТЫ
 # ==========================================
 
+@app.get("/set_lang/{lang}")
+async def set_lang(lang: str, next: str = "/"):
+    response = RedirectResponse(url=next, status_code=status.HTTP_302_FOUND)
+    if lang in ["en", "ru"]:
+        response.set_cookie(key="lang", value=lang, max_age=31536000, httponly=False)
+    return response
+
 @app.get("/", response_class=HTMLResponse)
 async def read_feed(request: Request):
     user = get_current_user(request)
+    lang = get_lang(request)
     feed_posts = [p for p in posts_db if p.get('visibility') == 'feed']
     
     if not feed_posts:
-        content = """
+        content = f"""
         <div style="text-align:center; padding: 80px 20px; color: var(--text-muted);">
-            <h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">Здесь пока пусто</h3>
-            <p style="font-size: 18px;">Станьте первым, кто опубликует пост!</p>
+            <h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t('no_posts', lang)}</h3>
         </div>
         """
     else:
@@ -413,18 +551,64 @@ async def read_feed(request: Request):
             """
         content = f'<div class="feed-grid">{cards}</div>'
         
-    return HTMLResponse(content=render_layout(content, user, "feed"))
+    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+
+@app.get("/search", response_class=HTMLResponse)
+async def search_posts(request: Request, q: str = ""):
+    user = get_current_user(request)
+    lang = get_lang(request)
+    q_lower = q.lower().strip()
+    
+    if not q_lower:
+        results = []
+    else:
+        # "Powerful search engine" - checks title and content, case-insensitive
+        results = [
+            p for p in posts_db 
+            if p.get('visibility') == 'feed' and (
+                q_lower in p['title'].lower() or 
+                q_lower in p['content'].lower() or
+                q_lower in p['author'].lower()
+            )
+        ]
+    
+    if not results:
+        content = f"""
+        <h2 style="margin-bottom:30px; font-size:24px;">{t('search_results', lang)}: "{q}"</h2>
+        <div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">
+            {t('nothing_found', lang)}
+        </div>
+        """
+    else:
+        cards = ""
+        for post in results:
+            author = users_db.get(post['author'])
+            ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
+            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="height:200px; background:#222; display:flex; align-items:center; justify-content:center;">{SVG_IMAGE}</div>'
+            cards += f"""
+            <a href="/post/{post['id']}" class="feed-card">
+                {img_html}
+                <div class="feed-card-info">
+                    <div class="feed-card-title">{post['title']}</div>
+                    <div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}</div>
+                </div>
+            </a>
+            """
+        content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t('search_results', lang)}: "{q}"</h2><div class="feed-grid">{cards}</div>'
+        
+    return HTMLResponse(content=render_layout(content, user, request, "feed"))
 
 @app.get("/saved", response_class=HTMLResponse)
 async def saved_posts(request: Request):
     user = get_current_user(request)
+    lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     
     saved_ids = user.get('saved_posts', [])
     saved_posts_list = [p for p in posts_db if p['id'] in saved_ids]
     
     if not saved_posts_list:
-        content = "<div style='text-align:center; padding:60px; color:var(--text-muted); font-size:18px;'>У вас пока нет избранных постов.</div>"
+        content = f"<div style='text-align:center; padding:60px; color:var(--text-muted); font-size:18px;'>{t('no_saved', lang)}</div>"
     else:
         cards = ""
         for post in saved_posts_list:
@@ -440,76 +624,49 @@ async def saved_posts(request: Request):
                 </div>
             </a>
             """
-        content = f'<h2 style="margin-bottom:25px;">Избранное</h2><div class="feed-grid">{cards}</div>'
+        content = f'<h2 style="margin-bottom:25px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
         
-    return HTMLResponse(content=render_layout(content, user, "saved"))
-
-@app.get("/register", response_class=HTMLResponse)
-async def register_page():
-    content = f"""
-    <div class="auth-container">
-        <form class="auth-form" action="/register" method="post">
-            <h2>Регистрация</h2>
-            <div class="input-group"><input type="text" name="username" placeholder="Логин (без @)" required></div>
-            <div class="input-group"><input type="text" name="display_name" placeholder="Отображаемое имя" required></div>
-            <div class="input-group">
-                <input type="password" name="password" placeholder="Пароль" required>
-                <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
-            </div>
-            <div class="input-group">
-                <input type="password" name="confirm_password" placeholder="Подтвердите пароль" required>
-                <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
-            </div>
-            <div class="checkbox-group">
-                <input type="checkbox" id="privacy" name="privacy" required>
-                <label for="privacy">Я согласен с <a href="#">политикой конфиденциальности</a>.</label>
-            </div>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">Создать аккаунт</button>
-            <div style="text-align:center; margin-top:20px; font-size:15px; color: var(--text-muted);">Уже есть аккаунт? <a href="/login">Войти</a></div>
-        </form>
-    </div>
-    """
-    return HTMLResponse(content=render_layout(content, None))
-
-@app.post("/register")
-async def register_user(username: str = Form(...), display_name: str = Form(...), password: str = Form(...), confirm_password: str = Form(...)):
-    if username in users_db:
-        return HTMLResponse(content=render_layout('<div class="auth-container"><div class="auth-form"><div class="error">Пользователь уже существует</div><a href="/register" class="btn-primary" style="margin-top:10px;">Назад</a></div></div>', None))
-    if password != confirm_password:
-        return HTMLResponse(content=render_layout('<div class="auth-container"><div class="auth-form"><div class="error">Пароли не совпадают</div><a href="/register" class="btn-primary" style="margin-top:10px;">Назад</a></div></div>', None))
-    
-    users_db[username] = {
-        "username": username,
-        "password": pwd_context.hash(password),
-        "display_name": display_name,
-        "avatar": None,
-        "saved_posts": []
-    }
-    return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+    return HTMLResponse(content=render_layout(content, user, request, "saved"))
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_page():
+async def login_page(request: Request):
+    lang = get_lang(request)
     content = f"""
     <div class="auth-container">
         <form class="auth-form" action="/login" method="post">
-            <h2>Вход</h2>
-            <div class="input-group"><input type="text" name="username" placeholder="Логин" required></div>
+            <h2>{t('login_register', lang)}</h2>
+            <div class="input-group"><input type="text" name="username" placeholder="{t('username', lang)}" required></div>
+            <div class="input-group"><input type="text" name="display_name" placeholder="{t('display_name', lang)} (New only)"></div>
             <div class="input-group">
-                <input type="password" name="password" placeholder="Пароль" required>
+                <input type="password" name="password" placeholder="{t('password', lang)}" required>
                 <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
             </div>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">Войти</button>
-            <div style="text-align:center; margin-top:20px; font-size:15px; color: var(--text-muted);">Нет аккаунта? <a href="/register">Создать</a></div>
+            <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;">{t('login_hint', lang)}</p>
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login_register', lang)}</button>
         </form>
     </div>
     """
-    return HTMLResponse(content=render_layout(content, None))
+    return HTMLResponse(content=render_layout(content, None, request))
 
 @app.post("/login")
-async def login_user(request: Request, username: str = Form(...), password: str = Form(...)):
+async def login_user(request: Request, username: str = Form(...), password: str = Form(...), display_name: str = Form("")):
+    lang = get_lang(request)
     user = users_db.get(username)
-    if not user or not pwd_context.verify(password, user["password"]):
-        return HTMLResponse(content=render_layout('<div class="auth-container"><div class="auth-form"><div class="error">Неверный логин или пароль</div><a href="/login" class="btn-primary" style="margin-top:10px;">Назад</a></div></div>', None))
+    
+    if user:
+        if not pwd_context.verify(password, user["password"]):
+            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request))
+    else:
+        if not display_name.strip():
+            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request))
+        # Create user
+        users_db[username] = {
+            "username": username,
+            "password": pwd_context.hash(password),
+            "display_name": display_name.strip(),
+            "avatar": None,
+            "saved_posts": []
+        }
 
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
@@ -528,40 +685,40 @@ async def logout(request: Request):
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     user = get_current_user(request)
+    lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     
     content = f"""
     <div style="max-width: 700px; margin: 0 auto; width: 100%;">
-        <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">Настройки</h2>
+        <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">{t('settings', lang)}</h2>
         <div style="background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px;">
-            <h3 style="margin-bottom: 15px; font-weight: 500; font-size: 20px;">Язык интерфейса</h3>
-            <div class="input-group" style="max-width: 350px;">
-                <select style="padding: 12px;">
-                    <option value="ru">Русский (RU)</option>
-                    <option value="en">English (EN)</option>
-                </select>
+            <h3 style="margin-bottom: 15px; font-weight: 500; font-size: 20px;">{t('language', lang) if 'language' in TRANSLATIONS[lang] else 'Language'}</h3>
+            <div style="display:flex; gap:10px;">
+                <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
+                <a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
             </div>
         </div>
     </div>
     """
-    return HTMLResponse(content=render_layout(content, user, "settings"))
+    return HTMLResponse(content=render_layout(content, user, request, "settings"))
 
 @app.get("/write", response_class=HTMLResponse)
 async def create_post_page(request: Request):
     user = get_current_user(request)
+    lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     
     content = f"""
-    <h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">Новый пост</h2>
+    <h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('new_post', lang)}</h2>
     <form action="/write" method="post" enctype="multipart/form-data" class="create-layout">
         
         <!-- Left side: Upload Zone -->
         <div class="dropzone" id="dropzone">
             <div id="dropzone-text">
                 {SVG_IMAGE}
-                <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">Перетащите файлы сюда</div>
-                <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">JPEG, PNG, GIF до 5 штук</div>
-                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">Выбрать файлы</div>
+                <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div>
+                <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div>
+                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">{t('choose_files', lang) if 'choose_files' in TRANSLATIONS[lang] else 'Choose files'}</div>
             </div>
             <div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div>
             <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)">
@@ -570,37 +727,36 @@ async def create_post_page(request: Request):
         <!-- Right side: Post Info -->
         <div class="create-sidebar">
             <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">Название *</label>
-                <input type="text" name="title" placeholder="Как назовёте пост" required style="padding:14px;">
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label>
+                <input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;">
             </div>
             
             <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">Описание</label>
-                <textarea name="content" placeholder="Пара слов о том, что тут, можно с #тегами" style="min-height:180px; resize:vertical; padding:14px;"></textarea>
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
+                <textarea name="content" placeholder="{t('description', lang)}" style="min-height:180px; resize:vertical; padding:14px;"></textarea>
             </div>
 
             <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">Кто увидит</label>
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label>
                 <div style="display:flex; gap:10px;">
-                    <label style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer;">
-                        <input type="radio" name="visibility" value="feed" checked style="display:none;">
-                        Все, в ленте
-                    </label>
-                    <label style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer;">
-                        <input type="radio" name="visibility" value="link" style="display:none;">
-                        По ссылке
-                    </label>
+                    <button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">
+                        {SVG_EYE} {t('in_feed', lang)}
+                    </button>
+                    <button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">
+                        {SVG_LINK} {t('by_link', lang)}
+                    </button>
                 </div>
+                <input type="hidden" name="visibility" id="vis-input" value="feed">
             </div>
 
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px; margin-top:10px;">Опубликовать</button>
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px; margin-top:10px;">{SVG_PLUS} {t('publish', lang)}</button>
         </div>
     </form>
     """
-    return HTMLResponse(content=render_layout(content, user, "feed"))
+    return HTMLResponse(content=render_layout(content, user, request, "feed"))
 
 @app.post("/write")
-async def create_post(request: Request, title: str = Form(...), content: str = Form(...), visibility: str = Form("feed"), images: List[UploadFile] = File(None)):
+async def create_post(request: Request, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), images: List[UploadFile] = File(None)):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
     
@@ -614,7 +770,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         "id": str(uuid.uuid4())[:6],
         "author": user["username"],
         "title": title,
-        "content": content,
+        "content": content, # Defaults to empty string if 422 error would have occurred
         "images": img_b64_list,
         "visibility": visibility,
         "upvotes": 0,
@@ -660,7 +816,6 @@ async def delete_post(post_id: str, request: Request):
     post = next((p for p in posts_db if p['id'] == post_id), None)
     if post and post['author'] == user['username']:
         posts_db = [p for p in posts_db if p['id'] != post_id]
-        # Remove from all users' saved lists
         for u in users_db.values():
             if 'saved_posts' in u and post_id in u['saved_posts']:
                 u['saved_posts'].remove(post_id)
@@ -670,6 +825,7 @@ async def delete_post(post_id: str, request: Request):
 @app.get("/post/{post_id}", response_class=HTMLResponse)
 async def view_post(request: Request, post_id: str):
     user = get_current_user(request)
+    lang = get_lang(request)
     post = next((p for p in posts_db if p['id'] == post_id), None)
     if not post:
         raise HTTPException(404, "Post not found")
@@ -678,26 +834,20 @@ async def view_post(request: Request, post_id: str):
     ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
     score = post['upvotes'] - post['downvotes']
     
-    # Logic for Prev/Next navigation (all posts, even link-only)
     idx = next((i for i, p in enumerate(posts_db) if p['id'] == post_id), -1)
     prev_id = posts_db[idx - 1]['id'] if idx > 0 else ""
     next_id = posts_db[idx + 1]['id'] if idx < len(posts_db) - 1 and idx != -1 else ""
     
-    # Save button state
     is_saved = user and post_id in user.get('saved_posts', [])
     save_icon = SVG_SAVED if is_saved else SVG_SAVE
-    save_action = "Убрать из избранного" if is_saved else "В избранное"
 
-    # Delete button
     delete_btn = f'''
-    <form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('Вы уверены, что хотите удалить пост?');">
+    <form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('{t("delete", lang)}?');">
         <button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button>
     </form>
     ''' if user and user['username'] == post['author'] else ''
 
-    # Media HTML
     if post['images']:
-        # Assign unique classes for JS navigation
         media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:80vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
         if len(post['images']) > 1:
             media_html += f"""
@@ -707,13 +857,8 @@ async def view_post(request: Request, post_id: str):
             </div>
             <script>
                 let currentImg = 0; let imgs = document.querySelectorAll('.carousel-img');
-                function showImg(idx) {{ 
-                    imgs.forEach((img, i) => img.style.display = i === idx ? 'block' : 'none'); 
-                }}
-                function changeImg(dir) {{ 
-                    currentImg = (currentImg + dir + imgs.length) % imgs.length; 
-                    showImg(currentImg); 
-                }}
+                function showImg(idx) {{ imgs.forEach((img, i) => img.style.display = i === idx ? 'block' : 'none'); }}
+                function changeImg(dir) {{ currentImg = (currentImg + dir + imgs.length) % imgs.length; showImg(currentImg); }}
                 document.addEventListener('keydown', function(e) {{
                     if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') return;
                     if (e.key === 'ArrowLeft') {{ e.preventDefault(); changeImg(-1); }}
@@ -726,8 +871,7 @@ async def view_post(request: Request, post_id: str):
 
     content = f"""
     <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
-        <a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} Назад в ленту</a>
-        <span style="color:var(--text-muted); font-size:14px;">Навигация: <kbd style="background:#333; padding:2px 5px; border-radius:4px;">↑</kbd> <kbd style="background:#333; padding:2px 5px; border-radius:4px;">↓</kbd> посты, <kbd style="background:#333; padding:2px 5px; border-radius:4px;">←</kbd> <kbd style="background:#333; padding:2px 5px; border-radius:4px;">→</kbd> фото</span>
+        <a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a>
     </div>
     <div class="post-view">
         <div class="post-media">
@@ -756,37 +900,37 @@ async def view_post(request: Request, post_id: str):
                 </div>
                 
                 <form action="/save/{post['id']}" method="post" style="margin:0;">
-                    <button type="submit" class="action-btn" title="{save_action}">{save_icon}</button>
+                    <button type="submit" class="action-btn" title="{t('save_post', lang)}">{save_icon}</button>
                 </form>
                 
-                <button class="action-btn" onclick="copyLink()" title="Скопировать ссылку">{SVG_LINK}</button>
+                <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
                 
                 {delete_btn}
             </div>
             
             <div class="comments-section" style="flex:1; border-top:1px solid var(--border-color); padding-top:20px; overflow-y:auto;">
-                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">Комментарии ({len(post['comments'])})</h3>
+                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} ({len(post['comments'])})</h3>
                 <div style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;">
-                    <input type="text" placeholder="Напишите комментарий..." style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;">
-                    <button class="btn-primary" style="padding:5px 15px;">Отправить</button>
+                    <input type="text" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;">
+                    <button class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button>
                 </div>
-                <div style="font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">Пока нет комментариев.</div>
+                <div style="font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
             </div>
         </div>
     </div>
     """
-    return HTMLResponse(content=render_layout(content, user, "feed", prev_id=prev_id, next_id=next_id, is_post_view=True))
+    return HTMLResponse(content=render_layout(content, user, request, "feed", prev_id=prev_id, next_id=next_id, is_post_view=True))
 
 @app.get("/@{username}", response_class=HTMLResponse)
 async def view_profile(request: Request, username: str):
     current_user = get_current_user(request)
+    lang = get_lang(request)
     profile_user = users_db.get(username)
     if not profile_user:
         raise HTTPException(404, "User not found")
         
     ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
     
-    # Filter profile posts to only show 'feed' posts (or if it's the owner, show all? Let's show only 'feed' on public profile, but all on own profile)
     if current_user and current_user['username'] == username:
         user_posts = [p for p in posts_db if p['author'] == username]
     else:
@@ -805,9 +949,9 @@ async def view_profile(request: Request, username: str):
         """
         
     if not posts_html:
-        posts_html = '<div style="color:var(--text-muted); font-size:18px;">Пока нет постов.</div>'
+        posts_html = f'<div style="color:var(--text-muted); font-size:18px;">{t("no_posts", lang)}</div>'
 
-    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff;">Редактировать профиль</a>' if current_user and current_user['username'] == username else ''
+    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff;">{SVG_SETTINGS} {t("edit_profile", lang)}</a>' if current_user and current_user['username'] == username else ''
 
     content = f"""
     <div class="profile-header">
@@ -815,43 +959,44 @@ async def view_profile(request: Request, username: str):
         <div class="profile-details">
             <h1>{profile_user['display_name']}</h1>
             <p>@{username}</p>
-            <p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} постов</p>
+            <p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p>
         </div>
         <div style="margin-left:auto;">{edit_btn}</div>
     </div>
     
     <div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;">
-        <a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">Посты</a>
+        <a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a>
     </div>
     
     <div class="feed-grid">
         {posts_html}
     </div>
     """
-    return HTMLResponse(content=render_layout(content, current_user, "profile"))
+    return HTMLResponse(content=render_layout(content, current_user, request, "profile"))
 
 @app.get("/edit_profile", response_class=HTMLResponse)
 async def edit_profile_page(request: Request):
     user = get_current_user(request)
+    lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     
     content = f"""
     <div style="max-width: 600px; margin: 0 auto; background: var(--card-bg); padding: 40px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%;">
-        <h2 style="margin-bottom:30px; font-weight:700; font-size:28px;">Редактор профиля</h2>
+        <h2 style="margin-bottom:30px; font-weight:700; font-size:28px;">{t('edit_profile', lang)}</h2>
         <form action="/edit_profile" method="post" enctype="multipart/form-data">
             <div class="input-group">
-                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">Отображаемое имя</label>
+                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
                 <input type="text" name="display_name" value="{user['display_name']}" required style="padding:14px;">
             </div>
             <div class="input-group">
-                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">Аватарка (JPEG/PNG)</label>
+                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('avatar', lang)} (JPEG/PNG)</label>
                 <input type="file" name="avatar" accept="image/*" style="padding: 12px;">
             </div>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:20px; padding:14px;">Сохранить изменения</button>
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:20px; padding:14px;">{SVG_SETTINGS} {t('save', lang)}</button>
         </form>
     </div>
     """
-    return HTMLResponse(content=render_layout(content, user, "profile"))
+    return HTMLResponse(content=render_layout(content, user, request, "profile"))
 
 @app.post("/edit_profile")
 async def edit_profile(request: Request, display_name: str = Form(...), avatar: UploadFile = File(None)):
