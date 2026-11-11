@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from passlib.context import CryptContext
 import uuid
 import base64
@@ -17,8 +17,38 @@ admin_pwd = pwd_context.hash("admin")
 users_db["admin"] = {"username": "admin", "password": admin_pwd, "display_name": "Administrator", "avatar": None, "saved_posts": []}
 
 TRANSLATIONS = {
-    "en": {"feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login", "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish", "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload", "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.", "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name", "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required for registration", "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts", "search_results": "Search results", "nothing_found": "Nothing found", "no_saved": "You have no saved posts", "wrong_pass": "Wrong password", "need_name": "Display name is required for registration", "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post", "edit_post": "Edit Post", "remove_saved": "Remove from saved", "delete_comment": "Delete comment", "edit": "Edit", "update": "Update", "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist.", "login_to_comment": "Please log in to leave a comment", "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?", "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply"},
-    "ru": {"feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход", "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать", "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки", "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.", "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя", "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации", "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить", "no_posts": "Пока нет постов", "posts": "постов", "search_results": "Результаты поиска", "nothing_found": "Ничего не найдено", "no_saved": "У вас пока нет избранных постов", "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя", "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены", "edit_post": "Редактировать пост", "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий", "edit": "Редактировать", "update": "Обновить", "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует.", "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий", "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?", "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить"}
+    "en": {
+        "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login",
+        "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish",
+        "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
+        "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
+        "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
+        "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required for registration",
+        "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts",
+        "search_results": "Search results", "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
+        "wrong_pass": "Wrong password", "need_name": "Display name is required for registration", "choose_files": "Choose files",
+        "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post", "edit_post": "Edit Post",
+        "remove_saved": "Remove from saved", "delete_comment": "Delete comment", "edit": "Edit", "update": "Update",
+        "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist.", "login_to_comment": "Please log in to leave a comment",
+        "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?",
+        "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply"
+    },
+    "ru": {
+        "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
+        "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать",
+        "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
+        "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
+        "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
+        "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
+        "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить", "no_posts": "Пока нет постов", "posts": "постов",
+        "search_results": "Результаты поиска", "nothing_found": "Ничего не найдено", "no_saved": "У вас пока нет избранных постов",
+        "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя", "choose_files": "Выбрать файлы",
+        "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены", "edit_post": "Редактировать пост",
+        "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий", "edit": "Редактировать", "update": "Обновить",
+        "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует.", "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий",
+        "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?",
+        "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить"
+    }
 }
 
 def get_lang(request: Request):
@@ -41,8 +71,8 @@ SVG_EYE = """<svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fi
 SVG_EYE_OFF = """<svg class="eye-closed" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 SVG_BACK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
 SVG_IMAGE = """<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>"""
-SVG_SAVE = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
-SVG_SAVED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
+SVG_SAVE = """<svg class="icon-save" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
+SVG_SAVED = """<svg class="icon-saved" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_LINK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>"""
 SVG_TRASH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>"""
 SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>"""
@@ -67,6 +97,7 @@ async def get_manifest():
 
 @app.get("/sw.js")
 async def get_sw():
+    from fastapi.responses import Response
     return Response(content="self.addEventListener('install',e=>{self.skipWaiting()});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))});", media_type="application/javascript")
 
 CSS_STYLES = """
@@ -75,7 +106,6 @@ CSS_STYLES = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <style>
 :root{--bg-color:#0a0a0a;--card-bg:#151515;--text-main:#f8fafc;--text-muted:#94a3b8;--accent-color:#3b82f6;--border-color:#262626;--danger-color:#ef4444;}
 ::-webkit-scrollbar{width:8px;height:8px;}
@@ -214,31 +244,321 @@ input:checked+.slider:before{transform:translateX(22px);}
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}.main-content{padding:20px;}.feed-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));}}
 @media(max-width:900px){.app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}.sidebar{display:none;}.main-content{grid-column:1;padding:15px;padding-bottom:80px;}.bottom-nav{display:flex;}.topbar{padding:0 15px;gap:10px;height:60px;}.topbar-left{width:auto;}.logo span{display:none;}.menu-toggle{display:none!important;}.topbar-center{display:none;}.topbar-right .user-menu-container{display:none!important;}.topbar-right{width:auto;}.mobile-only{display:flex!important;}.desktop-only{display:none!important;}.mobile-search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 12px;border-radius:8px;color:#fff;font-size:14px;outline:none;}.post-view{flex-direction:column;padding:0;gap:15px;height:auto;max-height:none;overflow:visible;}.post-details{display:contents;}.post-author{order:1;margin-bottom:0;}.post-media{order:2;width:100%;max-height:50vh;min-height:200px;border-radius:12px;}.post-title{order:3;margin-bottom:0;}.post-desc{order:4;margin-bottom:0;max-height:none;}.actions-row{order:5;margin-bottom:0;padding:0 15px;}.comments-section{order:6;width:100%;border-top:1px solid var(--border-color);padding:15px;overflow:visible;}.create-layout{flex-direction:column;}.dropzone{padding:30px;min-height:250px;}.profile-header{flex-direction:column;text-align:center;gap:15px;}.profile-header .btn-primary{width:100%;margin-top:10px;}.profile-avatar{width:100px;height:100px;}}
 </style>
+"""
+
+JS_SCRIPT = """
 <script>
-var filesList=[];var currentImage=null;var currentZoom=1;
-function applySidebarState(){if(localStorage.getItem('sidebar_collapsed')==='true'){var layout=document.querySelector('.app-layout');if(layout)layout.classList.add('sidebar-collapsed');}else{var layout=document.querySelector('.app-layout');if(layout)layout.classList.remove('sidebar-collapsed');}}
-function toggleSidebar(){var layout=document.querySelector('.app-layout');if(!layout)return;layout.classList.toggle('sidebar-collapsed');var isCollapsed=layout.classList.contains('sidebar-collapsed');localStorage.setItem('sidebar_collapsed',isCollapsed);}
-function toggleDropdown(){if(window.innerWidth<=900){var menu=document.getElementById('mobileProfileMenu');var overlay=document.getElementById('mobileMenuOverlay');if(menu)menu.classList.add('open');if(overlay)overlay.style.display='block';}else{var dropdown=document.getElementById("user-dropdown");if(dropdown)dropdown.style.display=dropdown.style.display==="block"?"none":"block";}}
-function closeMobileMenu(){var menu=document.getElementById('mobileProfileMenu');var overlay=document.getElementById('mobileMenuOverlay');if(menu)menu.classList.remove('open');if(overlay)overlay.style.display='none';}
-function togglePassword(el){var input=el.previousElementSibling;var eyeOpen=el.querySelector('.eye-open');var eyeClosed=el.querySelector('.eye-closed');if(input.type==="password"){input.type="text";eyeOpen.style.display="none";eyeClosed.style.display="block";}else{input.type="password";eyeOpen.style.display="block";eyeClosed.style.display="none";}}
-var searchTimeout;function handleSearch(query){clearTimeout(searchTimeout);var dropdown=document.getElementById('searchDropdown');if(!dropdown)return;if(!query.trim()){dropdown.style.display='none';return;}searchTimeout=setTimeout(async()=>{var res=await fetch('/api/search?q='+encodeURIComponent(query));var data=await res.json();if(data.results&&data.results.length>0){dropdown.innerHTML=data.results.map(p=>'<a href="/'+p.id+'" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">'+p.title+'</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@'+p.author+'</div></a>').join('');dropdown.style.display='block';}else{dropdown.innerHTML='<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">Ничего не найдено / Nothing found</div>';dropdown.style.display='block';}},300);}
-function handleFiles(input){if(!input.files)return;var newFiles=Array.from(input.files);for(var i=0;i<newFiles.length;i++){if(filesList.length<3){filesList.push(newFiles[i]);}else{alert('Максимум 3 файла!');break;}}input.value='';updateInputAndRender();}
-function removeFile(index,event){if(event){event.stopPropagation();event.preventDefault();}filesList.splice(index,1);updateInputAndRender();}
-function updateInputAndRender(){var dt=new DataTransfer();filesList.forEach(f=>dt.items.add(f));var fileInput=document.getElementById('file-input');if(fileInput)fileInput.files=dt.files;var previewContainer=document.getElementById('file-list');if(!previewContainer)return;previewContainer.innerHTML='';if(filesList.length===0){var dropText=document.getElementById('dropzone-text');if(dropText)dropText.style.display='flex';}else{var dropText=document.getElementById('dropzone-text');if(dropText)dropText.style.display='none';filesList.forEach((file,index)=>{var reader=new FileReader();reader.onload=function(e){var div=document.createElement('div');div.className='file-preview';div.onclick=(e)=>e.stopPropagation();div.innerHTML='<img src="'+e.target.result+'"><div style="flex:1;overflow:hidden;"><div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">'+file.name+'</div><div style="font-size:12px;color:var(--text-muted);">'+(file.size/1024).toFixed(1)+' KB</div></div><span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile('+index+', event)">×</span>';previewContainer.appendChild(div);};reader.readAsDataURL(file);});}}
-function setVisibility(val){var input=document.getElementById('vis-input');if(input)input.value=val;var btnFeed=document.getElementById('btn-feed');var btnLink=document.getElementById('btn-link');if(!btnFeed||!btnLink)return;if(val==='feed'){btnFeed.style.borderColor='var(--accent-color)';btnFeed.style.color='var(--accent-color)';btnLink.style.borderColor='var(--border-color)';btnLink.style.color='var(--text-muted)';}else{btnFeed.style.borderColor='var(--border-color)';btnFeed.style.color='var(--text-muted)';btnLink.style.borderColor='var(--accent-color)';btnLink.style.color='var(--accent-color)';}}
-function copyLink(){navigator.clipboard.writeText(window.location.href);alert('Ссылка скопирована!');}
-function openPanorama(src){var img=document.getElementById('panorama-img');var pano=document.getElementById('panorama');if(img)img.src=src;if(pano)pano.style.display='flex';}
-function closePanorama(){var pano=document.getElementById('panorama');if(pano)pano.style.display='none';}
-function loadAvatar(event){var file=event.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(e){var img=new Image();img.onload=function(){currentImage=img;currentZoom=1;var slider=document.getElementById('zoom-slider');if(slider)slider.value=1;drawCropCanvas();var modal=document.getElementById('crop-modal');if(modal)modal.style.display='flex';};img.src=e.target.result;};reader.readAsDataURL(file);}
-function drawCropCanvas(){if(!currentImage)return;var canvas=document.getElementById('crop-canvas');if(!canvas)return;var ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);var scale=Math.max(canvas.width/currentImage.width,canvas.height/currentImage.height)*currentZoom;var x=(canvas.width-currentImage.width*scale)/2;var y=(canvas.height-currentImage.height*scale)/2;ctx.drawImage(currentImage,x,y,currentImage.width*scale,currentImage.height*scale);}
-function applyCrop(){var canvas=document.getElementById('crop-canvas');if(!canvas)return;var dataUrl=canvas.toDataURL('image/jpeg',0.8);var inputB64=document.getElementById('avatar-base64');var preview=document.getElementById('avatar-preview');var modal=document.getElementById('crop-modal');if(inputB64)inputB64.value=dataUrl;if(preview)preview.src=dataUrl;if(modal)modal.style.display='none';}
-async function vote(postId,action){var res=await fetch('/api/vote/'+postId+'/'+action,{method:'POST'});var data=await res.json();if(data.error)return alert(data.error);var count=document.getElementById('vote-count');if(count)count.innerText=data.score;var upBtn=document.getElementById('btn-up');var downBtn=document.getElementById('btn-down');if(upBtn)upBtn.className='vote-btn '+(data.user_vote===1?'active-up':'');if(downBtn)downBtn.className='vote-btn '+(data.user_vote===-1?'active-down':'');}
-async function toggleSave(postId,redirectToSaved=false){var res=await fetch('/api/save/'+postId,{method:'POST'});var data=await res.json();if(data.error)return alert(data.error);if(redirectToSaved){window.location.reload();return;}var btn=document.getElementById('btn-save');if(btn){if(data.saved){btn.innerHTML=document.getElementById('svg-saved').innerHTML;btn.style.color='var(--accent-color)';btn.style.borderColor='var(--accent-color)';}else{btn.innerHTML=document.getElementById('svg-save').innerHTML;btn.style.color='';btn.style.borderColor='';}}}
-async function submitComment(e,postId){e.preventDefault();var input=document.getElementById('comment-input');if(!input)return;var text=input.value.trim();if(!text)return;var formData=new FormData();formData.append('text',text);var res=await fetch('/api/comment/'+postId,{method:'POST',body:formData});var data=await res.json();if(data.error)return alert(data.error);if(data.comment){input.value='';var noMsg=document.getElementById('no-comments-msg');if(noMsg)noMsg.style.display='none';var list=document.getElementById('comments-list');var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;var div=document.createElement('div');div.id='comment-'+data.comment.id;div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';var deleteBtn='';if(data.is_author){deleteBtn='<button onclick="deleteComment(\''+postId+'\', \''+data.comment.id+'\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">Удалить</button>';}div.innerHTML='<div style="display:flex;gap:10px;"><img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><div><div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div><div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div></div></div>'+deleteBtn;if(list)list.appendChild(div);var cCount=document.getElementById('comment-count');if(cCount)cCount.innerText=data.total_comments;}}
-async function deleteComment(postId,commentId){if(!confirm('Удалить комментарий?'))return;var res=await fetch('/api/comment/'+postId+'/'+commentId,{method:'DELETE'});var data=await res.json();if(data.success){var el=document.getElementById('comment-'+commentId);if(el)el.remove();var cCount=document.getElementById('comment-count');if(cCount)cCount.innerText=data.total_comments;if(data.total_comments===0){var noMsg=document.getElementById('no-comments-msg');if(noMsg)noMsg.style.display='block';}}else{alert(data.error||'Error');}}
-document.addEventListener('DOMContentLoaded',function(){applySidebarState();if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));}
-var carouselImgs=document.querySelectorAll('.carousel-img');if(carouselImgs.length>1){var currentImg=0;window.showImg=function(idx){carouselImgs.forEach((img,i)=>img.style.display=i===idx?'block':'none');};window.changeImg=function(dir){currentImg=(currentImg+dir+carouselImgs.length)%carouselImgs.length;window.showImg(currentImg);};document.addEventListener('keydown',function(e){if(e.target.tagName.toLowerCase()==='input'||e.target.tagName.toLowerCase()==='textarea')return;if(e.key==='ArrowLeft'){e.preventDefault();window.changeImg(-1);}if(e.key==='ArrowRight'){e.preventDefault();window.changeImg(1);}});}});
-document.addEventListener('htmx:afterSettle',function(){applySidebarState();});
+var filesList=[];
+var currentImage=null;
+var currentZoom=1;
+
+function applySidebarState(){
+    if(localStorage.getItem('sidebar_collapsed')==='true'){
+        var layout=document.querySelector('.app-layout');
+        if(layout)layout.classList.add('sidebar-collapsed');
+    }else{
+        var layout=document.querySelector('.app-layout');
+        if(layout)layout.classList.remove('sidebar-collapsed');
+    }
+}
+
+function toggleSidebar(){
+    var layout=document.querySelector('.app-layout');
+    if(!layout)return;
+    layout.classList.toggle('sidebar-collapsed');
+    var isCollapsed=layout.classList.contains('sidebar-collapsed');
+    localStorage.setItem('sidebar_collapsed',isCollapsed);
+}
+
+function toggleDropdown(){
+    if(window.innerWidth<=900){
+        var menu=document.getElementById('mobileProfileMenu');
+        var overlay=document.getElementById('mobileMenuOverlay');
+        if(menu)menu.classList.add('open');
+        if(overlay)overlay.style.display='block';
+    }else{
+        var dropdown=document.getElementById("user-dropdown");
+        if(dropdown)dropdown.style.display=dropdown.style.display==="block"?"none":"block";
+    }
+}
+
+function closeMobileMenu(){
+    var menu=document.getElementById('mobileProfileMenu');
+    var overlay=document.getElementById('mobileMenuOverlay');
+    if(menu)menu.classList.remove('open');
+    if(overlay)overlay.style.display='none';
+}
+
+function togglePassword(el){
+    var input=el.previousElementSibling;
+    var eyeOpen=el.querySelector('.eye-open');
+    var eyeClosed=el.querySelector('.eye-closed');
+    if(input.type==="password"){
+        input.type="text";
+        eyeOpen.style.display="none";
+        eyeClosed.style.display="block";
+    }else{
+        input.type="password";
+        eyeOpen.style.display="block";
+        eyeClosed.style.display="none";
+    }
+}
+
+var searchTimeout;
+function handleSearch(query){
+    clearTimeout(searchTimeout);
+    var dropdown=document.getElementById('searchDropdown');
+    if(!dropdown)return;
+    if(!query.trim()){
+        dropdown.style.display='none';
+        return;
+    }
+    searchTimeout=setTimeout(async()=>{
+        var res=await fetch('/api/search?q='+encodeURIComponent(query));
+        var data=await res.json();
+        if(data.results&&data.results.length>0){
+            dropdown.innerHTML=data.results.map(p=>'<a href="/'+p.id+'" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">'+p.title+'</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@'+p.author+'</div></a>').join('');
+            dropdown.style.display='block';
+        }else{
+            dropdown.innerHTML='<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">Ничего не найдено</div>';
+            dropdown.style.display='block';
+        }
+    },300);
+}
+
+function handleFiles(input){
+    if(!input.files)return;
+    var newFiles=Array.from(input.files);
+    for(var i=0;i<newFiles.length;i++){
+        if(filesList.length<3){
+            filesList.push(newFiles[i]);
+        }else{
+            alert('Максимум 3 файла!');
+            break;
+        }
+    }
+    input.value='';
+    updateInputAndRender();
+}
+
+function removeFile(index,event){
+    if(event){event.stopPropagation();event.preventDefault();}
+    filesList.splice(index,1);
+    updateInputAndRender();
+}
+
+function updateInputAndRender(){
+    var dt=new DataTransfer();
+    filesList.forEach(f=>dt.items.add(f));
+    var fileInput=document.getElementById('file-input');
+    if(fileInput)fileInput.files=dt.files;
+    
+    var previewContainer=document.getElementById('file-list');
+    if(!previewContainer)return;
+    previewContainer.innerHTML='';
+    
+    if(filesList.length===0){
+        var dropText=document.getElementById('dropzone-text');
+        if(dropText)dropText.style.display='flex';
+    }else{
+        var dropText=document.getElementById('dropzone-text');
+        if(dropText)dropText.style.display='none';
+        filesList.forEach((file,index)=>{
+            var reader=new FileReader();
+            reader.onload=function(e){
+                var div=document.createElement('div');
+                div.className='file-preview';
+                div.onclick=(e)=>e.stopPropagation();
+                div.innerHTML='<img src="'+e.target.result+'"><div style="flex:1;overflow:hidden;"><div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">'+file.name+'</div><div style="font-size:12px;color:var(--text-muted);">'+(file.size/1024).toFixed(1)+' KB</div></div><span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile('+index+', event)">×</span>';
+                previewContainer.appendChild(div);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+}
+
+function setVisibility(val){
+    var input=document.getElementById('vis-input');
+    if(input)input.value=val;
+    var btnFeed=document.getElementById('btn-feed');
+    var btnLink=document.getElementById('btn-link');
+    if(!btnFeed||!btnLink)return;
+    if(val==='feed'){
+        btnFeed.style.borderColor='var(--accent-color)';
+        btnFeed.style.color='var(--accent-color)';
+        btnLink.style.borderColor='var(--border-color)';
+        btnLink.style.color='var(--text-muted)';
+    }else{
+        btnFeed.style.borderColor='var(--border-color)';
+        btnFeed.style.color='var(--text-muted)';
+        btnLink.style.borderColor='var(--accent-color)';
+        btnLink.style.color='var(--accent-color)';
+    }
+}
+
+function copyLink(){
+    navigator.clipboard.writeText(window.location.href);
+    alert('Ссылка скопирована!');
+}
+
+function openPanorama(src){
+    var img=document.getElementById('panorama-img');
+    var pano=document.getElementById('panorama');
+    if(img)img.src=src;
+    if(pano)pano.style.display='flex';
+}
+
+function closePanorama(){
+    var pano=document.getElementById('panorama');
+    if(pano)pano.style.display='none';
+}
+
+function loadAvatar(event){
+    var file=event.target.files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(e){
+        var img=new Image();
+        img.onload=function(){
+            currentImage=img;
+            currentZoom=1;
+            var slider=document.getElementById('zoom-slider');
+            if(slider)slider.value=1;
+            drawCropCanvas();
+            var modal=document.getElementById('crop-modal');
+            if(modal)modal.style.display='flex';
+        };
+        img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function drawCropCanvas(){
+    if(!currentImage)return;
+    var canvas=document.getElementById('crop-canvas');
+    if(!canvas)return;
+    var ctx=canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    var scale=Math.max(canvas.width/currentImage.width,canvas.height/currentImage.height)*currentZoom;
+    var x=(canvas.width-currentImage.width*scale)/2;
+    var y=(canvas.height-currentImage.height*scale)/2;
+    ctx.drawImage(currentImage,x,y,currentImage.width*scale,currentImage.height*scale);
+}
+
+function applyCrop(){
+    var canvas=document.getElementById('crop-canvas');
+    if(!canvas)return;
+    var dataUrl=canvas.toDataURL('image/jpeg',0.8);
+    var inputB64=document.getElementById('avatar-base64');
+    var preview=document.getElementById('avatar-preview');
+    var modal=document.getElementById('crop-modal');
+    if(inputB64)inputB64.value=dataUrl;
+    if(preview)preview.src=dataUrl;
+    if(modal)modal.style.display='none';
+}
+
+async function vote(postId,action){
+    var res=await fetch('/api/vote/'+postId+'/'+action,{method:'POST'});
+    var data=await res.json();
+    if(data.error)return alert(data.error);
+    var count=document.getElementById('vote-count');
+    if(count)count.innerText=data.score;
+    var upBtn=document.getElementById('btn-up');
+    var downBtn=document.getElementById('btn-down');
+    if(upBtn)upBtn.className='vote-btn '+(data.user_vote===1?'active-up':'');
+    if(downBtn)downBtn.className='vote-btn '+(data.user_vote===-1?'active-down':'');
+}
+
+async function toggleSave(postId,redirectToSaved=false){
+    var res=await fetch('/api/save/'+postId,{method:'POST'});
+    var data=await res.json();
+    if(data.error)return alert(data.error);
+    if(redirectToSaved){
+        window.location.reload();
+        return;
+    }
+    var btn=document.getElementById('btn-save');
+    if(btn){
+        if(data.saved){
+            btn.querySelector('.icon-save').style.display='none';
+            btn.querySelector('.icon-saved').style.display='block';
+            btn.style.color='var(--accent-color)';
+            btn.style.borderColor='var(--accent-color)';
+        }else{
+            btn.querySelector('.icon-save').style.display='block';
+            btn.querySelector('.icon-saved').style.display='none';
+            btn.style.color='';
+            btn.style.borderColor='';
+        }
+    }
+}
+
+async function submitComment(e,postId){
+    e.preventDefault();
+    var input=document.getElementById('comment-input');
+    if(!input)return;
+    var text=input.value.trim();
+    if(!text)return;
+    var formData=new FormData();
+    formData.append('text',text);
+    var res=await fetch('/api/comment/'+postId,{method:'POST',body:formData});
+    var data=await res.json();
+    if(data.error)return alert(data.error);
+    if(data.comment){
+        input.value='';
+        var noMsg=document.getElementById('no-comments-msg');
+        if(noMsg)noMsg.style.display='none';
+        var list=document.getElementById('comments-list');
+        var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;
+        var div=document.createElement('div');
+        div.id='comment-'+data.comment.id;
+        div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
+        var deleteBtn='';
+        if(data.is_author){
+            deleteBtn='<button onclick="deleteComment(\\''+postId+'\\', \\''+data.comment.id+'\\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">Удалить</button>';
+        }
+        div.innerHTML='<div style="display:flex;gap:10px;"><img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><div><div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div><div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div></div></div>'+deleteBtn;
+        if(list)list.appendChild(div);
+        var cCount=document.getElementById('comment-count');
+        if(cCount)cCount.innerText=data.total_comments;
+    }
+}
+
+async function deleteComment(postId,commentId){
+    if(!confirm('Удалить комментарий?'))return;
+    var res=await fetch('/api/comment/'+postId+'/'+commentId,{method:'DELETE'});
+    var data=await res.json();
+    if(data.success){
+        var el=document.getElementById('comment-'+commentId);
+        if(el)el.remove();
+        var cCount=document.getElementById('comment-count');
+        if(cCount)cCount.innerText=data.total_comments;
+        if(data.total_comments===0){
+            var noMsg=document.getElementById('no-comments-msg');
+            if(noMsg)noMsg.style.display='block';
+        }
+    }else{
+        alert(data.error||'Error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+    applySidebarState();
+    if('serviceWorker' in navigator){
+        navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
+    }
+    var carouselImgs=document.querySelectorAll('.carousel-img');
+    if(carouselImgs.length>1){
+        var currentImg=0;
+        window.showImg=function(idx){carouselImgs.forEach((img,i)=>img.style.display=i===idx?'block':'none');};
+        window.changeImg=function(dir){currentImg=(currentImg+dir+carouselImgs.length)%carouselImgs.length;window.showImg(currentImg);};
+        document.addEventListener('keydown',function(e){
+            if(e.target.tagName.toLowerCase()==='input'||e.target.tagName.toLowerCase()==='textarea')return;
+            if(e.key==='ArrowLeft'){e.preventDefault();window.changeImg(-1);}
+            if(e.key==='ArrowRight'){e.preventDefault();window.changeImg(1);}
+        });
+    }
+});
 </script>
 """
 
@@ -263,9 +583,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
     else:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/login" class="{'active' if active_page == 'login' else ''}">{SVG_USER}</a></div>"""
 
-    templates = f"""<div style="display:none;"><template id="svg-save">{SVG_SAVE}</template><template id="svg-saved">{SVG_SAVED}</template></div>"""
-
-    return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>sol-id</title>{CSS_STYLES}</head><body hx-boost="true"><div class="app-layout"><div class="topbar"><div class="topbar-left">{f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}<a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a></div><div class="topbar-center"><div class="search-container"><span class="search-icon">{SVG_SEARCH}</span><input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off"><div id="searchDropdown" class="search-dropdown"></div></div></div><form action="/search" method="get" class="mobile-only" style="flex:1;"><input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}"></form><div class="topbar-right">{nav_right}</div></div>{sidebar_html}<div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">{content_html}</div></div>{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="/logout" class="dropdown-item danger" onclick="return confirm('{t('logout_confirm', lang)}')">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div>{bottom_nav}{templates}</body></html>"""
+    return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>sol-id</title>{CSS_STYLES}</head><body><div class="app-layout"><div class="topbar"><div class="topbar-left">{f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}<a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a></div><div class="topbar-center"><div class="search-container"><span class="search-icon">{SVG_SEARCH}</span><input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off"><div id="searchDropdown" class="search-dropdown"></div></div></div><form action="/search" method="get" class="mobile-only" style="flex:1;"><input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}"></form><div class="topbar-right">{nav_right}</div></div>{sidebar_html}<div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">{content_html}</div></div>{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="/logout" class="dropdown-item danger" onclick="return confirm('{t('logout_confirm', lang)}')">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div>{bottom_nav}{JS_SCRIPT}</body></html>"""
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
