@@ -315,57 +315,66 @@ input:checked+.slider:before{transform:translateX(22px);}
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}}
 
 @media(max-width:900px){
-    .app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}
-    .sidebar{display:none;}
-    .topbar{height:60px;padding:0 15px;gap:10px;}
+    /* Полный переход на flex для надежности */
+    .app-layout{display:flex;flex-direction:column;width:100%;min-height:100vh;overflow-x:hidden;}
+    .topbar{position:fixed;top:0;left:0;width:100%;height:60px;padding:0 15px;gap:10px;z-index:100;}
     .topbar-left{width:auto;}
-    .topbar-center{position:relative; left:auto; transform:none; max-width:100%; flex:1; margin-left:10px;}
+    .topbar-center{position:relative;left:auto;transform:none;max-width:100%;flex:1;margin-left:10px;}
     .topbar-right{width:auto;}
     .logo span{display:none;}
     .menu-toggle{display:none!important;}
     .search-container{max-width:100%;}
     .topbar-right .user-menu-container{display:none!important;}
-    .mobile-only{display:flex!important;}
-    .desktop-only{display:none!important;}
+    .sidebar{display:none;}
     
-    /* Основной контент на мобилке */
-    .main-content{grid-column:1;padding:0;padding-bottom:80px;width:100%;max-width:100%;overflow-x:hidden;}
+    /* Основной контент */
+    .main-content{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;}
     .bottom-nav{display:flex;}
     
+    /* Профиль (полный фикс) */
+    .profile-header{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;}
+    .profile-avatar{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 0 15px 0;}
+    .profile-details{display:flex;flex-direction:column;align-items:center;width:100%;}
+    .profile-details h1{font-size:24px;text-align:center;margin-bottom:5px;word-break:break-word;}
+    .profile-details p{font-size:14px;text-align:center;}
+    .profile-header > div:last-child{position:absolute;top:20px;right:15px;margin:0!important;}
+    
+    /* Табы */
+    .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:15px;}
+    
     /* Карточки постов от края до края (и в ленте, и в профиле) */
-    .feed-grid{display:flex;flex-direction:column;gap:15px;width:100%;margin:0;padding:0;}
-    .feed-card{border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;width:100%;}
-    .feed-card-img-container{height:auto;aspect-ratio:4/3;width:100%;}
+    .feed-grid{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}
+    .feed-card{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}
+    .feed-card-img-container{width:100%;height:auto;aspect-ratio:4/3;}
     .feed-card-info{padding:15px;width:100%;}
+    .feed-card-meta{flex-wrap:wrap;gap:10px;}
     
-    /* Настройки (фикс сжатия) */
-    .editor-card{width:100%!important;max-width:100%!important;padding:15px!important;margin:0!important;border-radius:0;border-left:none;border-right:none;}
-    .tabs{padding:15px;margin-bottom:0;border-bottom:none;}
-    .input-group{width:100%!important;}
-    .btn-primary{width:100%!important;}
+    /* Настройки */
+    .editor-card{width:100%!important;max-width:100%!important;padding:20px 15px!important;margin:0!important;border-radius:0;border-left:none;border-right:none;}
+    .tabs{padding:0 15px;margin-bottom:0;border-bottom:none;}
+    .tab-content{padding:15px;}
     
-    /* Создание поста (фикс сжатия) */
-    .create-layout{flex-direction:column;width:100%!important;gap:15px;padding:15px;}
-    .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:250px!important;}
+    /* Создание поста */
+    .create-layout{flex-direction:column;width:100%!important;padding:15px;gap:15px;}
+    .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
     
     /* Просмотр поста */
-    .post-view{display:flex;flex-direction:column;height:auto;overflow:visible;gap:15px;width:100%;padding:15px;}
+    .post-view{display:flex;flex-direction:column;padding:15px;gap:15px;height:auto;width:100%;}
     .post-media{flex:none;width:100%;height:auto;max-height:60vh;min-height:250px;border-radius:12px;margin-bottom:0;}
     .post-media img{width:100%;max-height:60vh;object-fit:contain;}
     .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;}
-    .actions-row{margin-top:15px;margin-bottom:15px;padding:0;}
-    .comments-section{flex:none;width:100%;padding:20px 0;border-top:1px solid var(--border-color);overflow:visible;}
+    .post-title{font-size:22px;}
+    .actions-row{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;}
+    .comments-section{width:100%;padding:15px 0;border-top:1px solid var(--border-color);flex:none;}
+    
+    /* Утилиты */
     .toast{top:20px;left:50%;right:auto;transform:translateX(-50%);}
     .toast.show{transform:translateX(-50%) translateY(10px);}
-    
-    /* Профиль */
-    .profile-header{flex-direction:column;text-align:center;gap:15px;margin-bottom:20px;padding:30px 15px 0 15px;width:100%;}
-    .profile-avatar{width:100px;height:100px;margin:0 auto;}
-    .profile-details h1{font-size:24px;}
-    .profile-header > div:last-child{position:absolute;top:15px;right:15px;margin:0!important;}
-    .profile-tabs{padding:0 15px;}
-    .auth-form{width:calc(100% - 30px);padding:20px;margin:15px;}
+    .mobile-only{display:flex!important;}
+    .desktop-only{display:none!important;}
+    .auth-container{padding:15px;}
+    .auth-form{width:100%;max-width:100%;padding:20px;}
 }
 </style>
 """
@@ -429,7 +438,7 @@ function handleSearch(query){
     },300);
 }
 
-// Сжатие изображений на клиенте перед отправкой
+// Сжатие изображений на клиенте
 function compressImage(file, maxWidth = 1920, maxHeight = 1920) {
     return new Promise((resolve, reject) => {
         if (!file.type.startsWith('image/')) return resolve(file);
@@ -1068,7 +1077,7 @@ async def view_profile(request: Request, username: str):
             </div>
         </a>"""
         
-    if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
+    if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_posts", lang)}</div>'
     
     edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if current_user and current_user['username'] == username else ''
     
