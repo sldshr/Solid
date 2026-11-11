@@ -26,7 +26,7 @@ users_db["admin"] = {
 }
 
 # ==========================================
-# ЛОКАЛИЗАЦИЯ (i18n)
+# ЛОКАЛИЗАЦИЯ (i18n) - ИСПРАВЛЕНЫ ВСЕ КЛЮЧИ
 # ==========================================
 TRANSLATIONS = {
     "en": {
@@ -40,7 +40,11 @@ TRANSLATIONS = {
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile",
         "display_name": "Display Name", "avatar": "Avatar", "save": "Save",
         "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
-        "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete"
+        "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete",
+        "no_posts": "No posts yet", "posts": "posts", "search_results": "Search results",
+        "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
+        "wrong_pass": "Wrong password", "need_name": "Display name is required for registration",
+        "choose_files": "Choose files"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
@@ -53,7 +57,11 @@ TRANSLATIONS = {
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль",
         "display_name": "Отображаемое имя", "avatar": "Аватарка", "save": "Сохранить",
         "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
-        "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить"
+        "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить",
+        "no_posts": "Пока нет постов", "posts": "постов", "search_results": "Результаты поиска",
+        "nothing_found": "Ничего не найдено", "no_saved": "У вас пока нет избранных постов",
+        "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя",
+        "choose_files": "Выбрать файлы"
     }
 }
 
@@ -65,7 +73,7 @@ def t(key, lang):
     return TRANSLATIONS[lang].get(key, key)
 
 # ==========================================
-# SVG ИКОНКИ
+# SVG ИКОНКИ (Синяя тема)
 # ==========================================
 SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#3b82f6"/></svg>"""
 SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%233b82f6%22/></svg>"
@@ -77,7 +85,6 @@ SVG_PLUS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke
 SVG_USER = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
 SVG_SETTINGS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>"""
 SVG_LOGOUT = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>"""
-SVG_COMMENT = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_EYE = """<svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
 SVG_EYE_OFF = """<svg class="eye-closed" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 SVG_BACK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
@@ -127,13 +134,17 @@ CSS_STYLES = """
     
     /* Topbar */
     .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; gap: 20px; }
+    
+    .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; }
     .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
     
-    /* Search Bar Desktop */
-    .search-container { flex: 1; max-width: 500px; position: relative; }
+    .topbar-center { flex: 1; display: flex; justify-content: center; }
+    .search-container { width: 100%; max-width: 500px; position: relative; }
     .search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px 15px 10px 40px; border-radius: 8px; color: #fff; font-size: 15px; outline: none; }
     .search-input:focus { border-color: var(--accent-color); }
     .search-icon { position: absolute; left: 12px; top: 10px; color: var(--text-muted); }
+    
+    .topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 15px; width: 260px; flex-shrink: 0; }
     
     .btn-primary { background-color: var(--accent-color); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; }
     .btn-primary:hover { opacity: 0.9; }
@@ -239,15 +250,24 @@ CSS_STYLES = """
         .bottom-nav { display: flex; }
         
         /* Topbar adjustments */
-        .topbar { padding: 0 15px; }
-        .logo span { display: none; } /* Hide text on mobile */
-        .search-container { display: none; } /* Hide desktop search */
-        .desktop-nav { display: none; } /* Hide desktop login buttons */
+        .topbar { padding: 0 15px; gap: 10px; }
+        .topbar-left { width: auto; }
+        .logo span { display: none; }
+        .topbar-center { display: none; }
+        .topbar-right { width: auto; }
+        
+        .mobile-search-btn { display: flex !important; }
+        .desktop-only { display: none !important; }
         
         .post-view { flex-direction: column; padding: 15px; }
         .create-layout { flex-direction: column; }
         .profile-header { flex-direction: column; text-align: center; gap: 15px; }
         .profile-header .btn-primary { width: 100%; }
+    }
+    
+    @media (min-width: 901px) {
+        .mobile-search-btn { display: none !important; }
+        .mobile-only { display: none !important; }
     }
 </style>
 <script>
@@ -372,52 +392,43 @@ CSS_STYLES = """
 """
 
 # ==========================================
-# LAYOUT
+# LAYOUT (ИСПРАВЛЕНА ШАПКА)
 # ==========================================
 def render_layout(content_html, user, request: Request, active_page="feed", prev_id=None, next_id=None, is_post_view=False):
     lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
     current_lang_str = "RU" if lang == "ru" else "EN"
     
-    # Language switch URL
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
 
-    # Nav Links
+    # Right side controls
     if user:
-        nav_html = f"""
-        <div style="display:flex; align-items:center; gap:15px;">
-            <a href="/write" class="btn-primary">{SVG_PLUS} <span style="display:none; @media(min-width: 900px){display:inline}">{t('new_post', lang)}</span></a>
-            <div class="user-menu-container">
-                <div class="user-menu-btn" onclick="toggleDropdown()">
-                    <img src="{avatar_url}" class="user-avatar-small">
-                    <span style="font-weight:500; font-size:15px; display:none; @media(min-width: 900px){display:inline}">{user['display_name']}</span>
-                </div>
-                <div id="user-dropdown" class="dropdown-menu">
-                    <div class="dropdown-header">
-                        <img src="{avatar_url}">
-                        <div>
-                            <span class="name">{user['display_name']}</span>
-                            <span class="login">@{user['username']}</span>
-                        </div>
+        nav_right = f"""
+        <a href="/write" class="btn-primary desktop-only">{SVG_PLUS} <span>{t('new_post', lang)}</span></a>
+        <div class="user-menu-container">
+            <div class="user-menu-btn" onclick="toggleDropdown()">
+                <img src="{avatar_url}" class="user-avatar-small">
+                <span style="font-weight:500; font-size:15px;" class="desktop-only">{user['display_name']}</span>
+            </div>
+            <div id="user-dropdown" class="dropdown-menu">
+                <div class="dropdown-header">
+                    <img src="{avatar_url}">
+                    <div>
+                        <span class="name">{user['display_name']}</span>
+                        <span class="login">@{user['username']}</span>
                     </div>
-                    <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
-                    <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
-                    <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
                 </div>
+                <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
+                <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
+                <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
             </div>
         </div>
         """
     else:
-        nav_html = f"""
-        <div style="display:flex; align-items:center; gap:15px;" class="desktop-nav">
-            <a href="{switch_lang_url}" style="color:var(--text-muted); display:flex; align-items:center; gap:5px; font-weight:bold;">{SVG_LANG} {current_lang_str}</a>
-            <a href="/login" class="btn-primary">{SVG_USER} {t('login_register', lang)}</a>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;" class="mobile-nav">
-            <a href="{switch_lang_url}" style="color:var(--text-muted); font-weight:bold; padding:5px;">{current_lang_str}</a>
-            <a href="/login" style="color:var(--text-main); font-weight:500;">{SVG_USER}</a>
-        </div>
+        nav_right = f"""
+        <a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} {current_lang_str}</a>
+        <a href="/login" class="btn-primary">{SVG_USER} <span class="desktop-only">{t('login_register', lang)}</span></a>
         """
 
     sidebar_html = ""
@@ -430,19 +441,14 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
         </div>
         """
 
-    # Keyboard navigation script
     keyboard_js = ""
     if is_post_view:
         keyboard_js = f"""
         <script>
             document.addEventListener('keydown', function(e) {{
                 if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') return;
-                
-                if (e.key === 'ArrowUp' && '{prev_id}') {{
-                    e.preventDefault(); window.location.href = '/post/{prev_id}';
-                }} else if (e.key === 'ArrowDown' && '{next_id}') {{
-                    e.preventDefault(); window.location.href = '/post/{next_id}';
-                }}
+                if (e.key === 'ArrowUp' && '{prev_id}') {{ e.preventDefault(); window.location.href = '/post/{prev_id}'; }} 
+                else if (e.key === 'ArrowDown' && '{next_id}') {{ e.preventDefault(); window.location.href = '/post/{next_id}'; }}
             }});
         </script>
         """
@@ -470,21 +476,30 @@ def render_layout(content_html, user, request: Request, active_page="feed", prev
 
         <div class="app-layout">
             <div class="topbar">
-                <a href="/" class="logo">{SVG_LOGO} <span>sol.id</span></a>
+                <!-- Left: Logo & Mobile Search -->
+                <div class="topbar-left">
+                    <a href="/" class="logo">{SVG_LOGO} <span>sol.id</span></a>
+                    <button class="action-btn mobile-search-btn" onclick="openMobileSearch()" style="border:none; background:none; color:var(--text-main); padding:0;">
+                        {SVG_SEARCH}
+                    </button>
+                </div>
                 
-                <!-- Desktop Search -->
-                <form action="/search" method="get" class="search-container">
-                    {SVG_SEARCH}
-                    <input type="text" name="q" class="search-input" placeholder="{t('search_placeholder', lang)}" value="{request.query_params.get('q', '')}">
-                </form>
+                <!-- Center: Desktop Search -->
+                <div class="topbar-center">
+                    <form action="/search" method="get" class="search-container">
+                        <span class="search-icon">{SVG_SEARCH}</span>
+                        <input type="text" name="q" class="search-input" placeholder="{t('search_placeholder', lang)}" value="{request.query_params.get('q', '')}">
+                    </form>
+                </div>
                 
-                <!-- Mobile Search Icon -->
-                <button class="action-btn" onclick="openMobileSearch()" style="display:none; border:none; background:none; color:var(--text-main);" id="mobileSearchBtn">{SVG_SEARCH}</button>
-                <style>@media (max-width: 900px) {{ #mobileSearchBtn {{ display: block !important; }} }}</style>
-                
-                {nav_html}
+                <!-- Right: Controls -->
+                <div class="topbar-right">
+                    {nav_right}
+                </div>
             </div>
+            
             {sidebar_html}
+            
             <div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">
                 {content_html}
             </div>
@@ -562,7 +577,6 @@ async def search_posts(request: Request, q: str = ""):
     if not q_lower:
         results = []
     else:
-        # "Powerful search engine" - checks title and content, case-insensitive
         results = [
             p for p in posts_db 
             if p.get('visibility') == 'feed' and (
@@ -659,7 +673,7 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     else:
         if not display_name.strip():
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request))
-        # Create user
+        
         users_db[username] = {
             "username": username,
             "password": pwd_context.hash(password),
@@ -692,7 +706,7 @@ async def settings_page(request: Request):
     <div style="max-width: 700px; margin: 0 auto; width: 100%;">
         <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">{t('settings', lang)}</h2>
         <div style="background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color); margin-bottom: 20px;">
-            <h3 style="margin-bottom: 15px; font-weight: 500; font-size: 20px;">{t('language', lang) if 'language' in TRANSLATIONS[lang] else 'Language'}</h3>
+            <h3 style="margin-bottom: 15px; font-weight: 500; font-size: 20px;">Language / Язык</h3>
             <div style="display:flex; gap:10px;">
                 <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
                 <a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
@@ -712,19 +726,17 @@ async def create_post_page(request: Request):
     <h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('new_post', lang)}</h2>
     <form action="/write" method="post" enctype="multipart/form-data" class="create-layout">
         
-        <!-- Left side: Upload Zone -->
         <div class="dropzone" id="dropzone">
             <div id="dropzone-text">
                 {SVG_IMAGE}
                 <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div>
                 <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div>
-                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">{t('choose_files', lang) if 'choose_files' in TRANSLATIONS[lang] else 'Choose files'}</div>
+                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">{t('choose_files', lang)}</div>
             </div>
             <div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div>
             <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)">
         </div>
 
-        <!-- Right side: Post Info -->
         <div class="create-sidebar">
             <div class="input-group">
                 <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label>
@@ -770,7 +782,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         "id": str(uuid.uuid4())[:6],
         "author": user["username"],
         "title": title,
-        "content": content, # Defaults to empty string if 422 error would have occurred
+        "content": content,
         "images": img_b64_list,
         "visibility": visibility,
         "upvotes": 0,
