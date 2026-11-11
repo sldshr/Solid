@@ -1,930 +1,420 @@
-# main.py
-# Запуск:  pip install fastapi uvicorn python-multipart
-#          uvicorn main:app --reload
-# Открой:  http://127.0.0.1:8000
-
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from passlib.context import CryptContext
 import uuid
 from datetime import datetime
-from typing import List
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel
+app = FastAPI(title="sol.id clone")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# ==========================================
+# БАЗА ДАННЫХ В ОПЕРАТИВНОЙ ПАМЯТИ
+# ==========================================
+users_db = {
+    "admin": {"password": pwd_context.hash("admin"), "avatar": "👽", "name": "Admin"},
+    "guest": {"password": pwd_context.hash("guest"), "avatar": "👾", "name": "Guest"}
+}
 
-app = FastAPI(title="Tenor Articles")
+# Сессии (токен -> username)
+sessions = {}
 
-# ---------- ХРАНИЛИЩЕ В ОПЕРАТИВКЕ ----------
-ARTICLES: dict = {}          # id -> статья
-IMAGES: dict = {}            # id -> (bytes, mime)
-
-
-# ---------- МОДЕЛИ ----------
-class Block(BaseModel):
-    type: str                # 'p' | 'h3' | 'h4' | 'quote' | 'img' | 'hr'
-    content: str = ""
-    caption: str = ""
-
-
-class ArticleIn(BaseModel):
-    title: str
-    author: str = ""
-    blocks: List[Block] = []
-
-
-def _blk(b: Block) -> dict:
-    try:
-        return b.model_dump()
-    except AttributeError:
-        return b.dict()
-
-
-# ---------- API ----------
-@app.post("/api/articles")
-async def create_article(a: ArticleIn):
-    aid = uuid.uuid4().hex[:10]
-    now = datetime.utcnow().isoformat()
-    ARTICLES[aid] = {
-        "id": aid,
-        "title": a.title,
-        "author": a.author,
-        "blocks": [_blk(b) for b in a.blocks],
-        "created_at": now,
-        "updated_at": now,
+# Посты (сгенерированы на основе скриншота)
+posts_db = [
+    {
+        "id": "1", "author": "MIRRONAKE", "avatar": "😡",
+        "title": "ОБНОВЛЕНИЕ: РЕДИЗАЙН САЙТА И ПЛАТНЫЕ ПРЕДЛОЖКИ",
+        "content": "Сайт переехал на новый дизайн. Переделали почти всё...",
+        "image_css": "background: linear-gradient(135deg, #1e1e1e, #2a2a2a);", # Заглушка вместо картинки
+        "likes": 118, "comments": 97, "views": "3k", "time": "4 дня назад", "tag": "Текст"
+    },
+    {
+        "id": "2", "author": "warshavskaya", "avatar": "👩",
+        "title": "чаттерино W",
+        "content": "#эдит на выходных внезапно пришла идея сделать чт...",
+        "image_css": "background: linear-gradient(135deg, #4b0082, #8a2be2);",
+        "likes": 14, "comments": 8, "views": "131", "time": "вчера в 21:54", "tag": "Видео"
+    },
+    {
+        "id": "3", "author": "JP_1337_322", "avatar": "🕵️",
+        "title": "Легендарные файлы #526",
+        "content": "France meme's",
+        "image_css": "background: url('https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=400&auto=format&fit=crop') center/cover;",
+        "likes": 11, "comments": 0, "views": "100", "time": "вчера в 21:39", "tag": "Видео"
+    },
+    {
+        "id": "4", "author": "vandal_k", "avatar": "🐶",
+        "title": "как будет играть в гта 6",
+        "content": "Ну и графика конечно...",
+        "image_css": "background: linear-gradient(135deg, #333, #555);",
+        "likes": 42, "comments": 12, "views": "1.2k", "time": "2 часа назад", "tag": "Видео"
+    },
+    {
+        "id": "5", "author": "abc_894", "avatar": "🚔",
+        "title": "С праздником, дорогие сотрудники",
+        "content": "10 НОЯБРЯ. ДЕНЬ СОТРУДНИКА ОРГАНОВ ВНУТРЕННИХ ДЕЛ РОССИЙСКОЙ ФЕДЕРАЦИИ",
+        "image_css": "background: linear-gradient(135deg, #0033cc, #ffffff, #cc0000);",
+        "likes": 5, "comments": 1, "views": "500", "time": "3 часа назад", "tag": "Текст"
+    },
+    {
+        "id": "6", "author": "Monyxoff", "avatar": "💻",
+        "title": "Новый игровой компьютер",
+        "content": "Потянет даже ГТА 6",
+        "image_css": "background: linear-gradient(135deg, #ff00cc, #333399);",
+        "likes": 88, "comments": 24, "views": "2.5k", "time": "10 минут назад", "tag": "Видео"
     }
-    return ARTICLES[aid]
+]
 
+# ==========================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ==========================================
+def get_current_user(request: Request):
+    session_token = request.cookies.get("session_token")
+    if session_token and session_token in sessions:
+        return sessions[session_token]
+    return None
 
-@app.put("/api/articles/{aid}")
-async def update_article(aid: str, a: ArticleIn):
-    if aid not in ARTICLES:
-        raise HTTPException(404, "not found")
-    ARTICLES[aid].update(
-        {
-            "title": a.title,
-            "author": a.author,
-            "blocks": [_blk(b) for b in a.blocks],
-            "updated_at": datetime.utcnow().isoformat(),
-        }
-    )
-    return ARTICLES[aid]
-
-
-@app.get("/api/articles")
-async def list_articles():
-    return list(ARTICLES.values())
-
-
-@app.get("/api/articles/{aid}")
-async def get_article(aid: str):
-    if aid not in ARTICLES:
-        raise HTTPException(404, "not found")
-    return ARTICLES[aid]
-
-
-@app.delete("/api/articles/{aid}")
-async def delete_article(aid: str):
-    ARTICLES.pop(aid, None)
-    return {"ok": True}
-
-
-@app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "empty file")
-    if len(data) > 12 * 1024 * 1024:
-        raise HTTPException(413, "too large (max 12MB)")
-    iid = uuid.uuid4().hex[:12]
-    IMAGES[iid] = (data, file.content_type or "application/octet-stream")
-    return {"id": iid, "url": f"/images/{iid}"}
-
-
-@app.get("/images/{iid}")
-async def get_image(iid: str):
-    if iid not in IMAGES:
-        raise HTTPException(404)
-    data, mime = IMAGES[iid]
-    return Response(content=data, media_type=mime)
-
-
-# ---------- ФРОНТЕНД ----------
-HTML = r"""<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Статьи · Tenor</title>
+# ==========================================
+# HTML ШАБЛОНЫ (ВСТРОЕННЫЕ)
+# ==========================================
+CSS_STYLES = """
 <style>
-:root{
-  --bg:#0a0e14;
-  --bg-2:#0f141b;
-  --surface:#151b24;
-  --surface-2:#1c2331;
-  --hover:#232b3a;
-  --border:#232c3b;
-  --text:#eaf0fa;
-  --text-2:#8a97aa;
-  --text-3:#4a5567;
-  --accent:#2e8bff;
-  --accent-2:#4a9cff;
-  --accent-dim:rgba(46,139,255,0.15);
-  --danger:#ff4d5e;
-  --shadow:0 4px 24px rgba(0,0,0,0.4);
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  background:#0a0e14;
-  background-image:
-    radial-gradient(circle at 15% 0%, #14213a 0%, transparent 45%),
-    radial-gradient(circle at 90% 100%, #101c33 0%, transparent 40%);
-  background-attachment:fixed;
-  color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',Roboto,sans-serif;
-  -webkit-font-smoothing:antialiased;
-  min-height:100vh;
-}
-a{color:inherit;text-decoration:none}
-button{font-family:inherit}
-
-/* ---------- HEADER ---------- */
-.header{
-  position:sticky;top:0;z-index:100;
-  height:60px;padding:0 28px;
-  display:flex;align-items:center;justify-content:space-between;
-  background:rgba(10,14,20,0.82);
-  -webkit-backdrop-filter:blur(16px);
-  backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--border);
-}
-.logo{
-  display:flex;align-items:center;gap:10px;
-  font-weight:700;font-size:19px;letter-spacing:-0.4px;
-}
-.logo svg{filter:drop-shadow(0 0 10px rgba(46,139,255,0.5))}
-.header-actions{display:flex;gap:10px;align-items:center}
-
-/* ---------- BUTTONS ---------- */
-.btn{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:9px 18px;border-radius:999px;
-  font-size:14px;font-weight:600;
-  cursor:pointer;border:none;
-  transition:all .15s ease;white-space:nowrap;
-  line-height:1.2;
-}
-.btn-primary{
-  background:linear-gradient(135deg,#3d94ff,#1e6fdb);
-  color:#fff;
-  box-shadow:0 2px 14px rgba(46,139,255,0.35);
-}
-.btn-primary:hover{
-  background:linear-gradient(135deg,#5aa5ff,#2a7be8);
-  box-shadow:0 4px 20px rgba(46,139,255,0.5);
-  transform:translateY(-1px);
-}
-.btn-ghost{
-  background:transparent;color:var(--text-2);
-  border:1px solid var(--border);
-}
-.btn-ghost:hover{background:var(--surface);color:var(--text);border-color:#33405a}
-.btn-danger{
-  background:transparent;color:var(--danger);
-  border:1px solid rgba(255,77,94,0.25);
-}
-.btn-danger:hover{background:rgba(255,77,94,0.1);border-color:var(--danger)}
-.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
-
-/* ---------- CONTAINER / HOME ---------- */
-.container{max-width:1280px;margin:0 auto;padding:32px 28px 80px}
-.page-header{margin-bottom:28px}
-.page-title{
-  font-size:32px;font-weight:800;letter-spacing:-0.6px;
-  background:linear-gradient(135deg,#eaf0fa 20%,#8ab8ff);
-  -webkit-background-clip:text;background-clip:text;
-  -webkit-text-fill-color:transparent;
-}
-.page-sub{color:var(--text-2);font-size:14px;margin-top:6px}
-
-.articles-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
-  gap:20px;
-}
-.card{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:14px;overflow:hidden;
-  cursor:pointer;transition:all .2s ease;
-  display:flex;flex-direction:column;
-}
-.card:hover{
-  transform:translateY(-3px);
-  border-color:rgba(46,139,255,0.5);
-  box-shadow:0 10px 32px rgba(46,139,255,0.14);
-}
-.card-thumb{
-  aspect-ratio:16/9;
-  background:linear-gradient(135deg,#17243d,#0e1828);
-  display:flex;align-items:center;justify-content:center;
-  font-size:56px;font-weight:800;color:rgba(46,139,255,0.35);
-  overflow:hidden;
-}
-.card-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.card-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;flex:1}
-.card-title{
-  font-weight:700;font-size:16px;line-height:1.35;color:var(--text);
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden;
-}
-.card-meta{
-  display:flex;align-items:center;gap:6px;
-  font-size:13px;color:var(--text-2);margin-top:auto;
-}
-.card-author{color:var(--accent-2);font-weight:600}
-
-.empty-state{text-align:center;padding:80px 20px;color:var(--text-2)}
-.empty-state svg{color:var(--accent);opacity:.5;margin-bottom:20px}
-.empty-state h2{color:var(--text);margin-bottom:8px;font-size:22px}
-.empty-state p{margin-bottom:24px}
-
-/* ---------- VIEW ---------- */
-.view-wrap{max-width:800px;margin:0 auto;padding:24px 28px 80px}
-.view-actions{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;gap:10px;flex-wrap:wrap}
-.view-actions .right{display:flex;gap:10px}
-.article-title{
-  font-size:44px;font-weight:800;letter-spacing:-1.2px;line-height:1.15;
-  margin-bottom:16px;
-  background:linear-gradient(135deg,#f0f4fa 30%,#a6ccff);
-  -webkit-background-clip:text;background-clip:text;
-  -webkit-text-fill-color:transparent;
-}
-.article-author{color:var(--accent-2);font-weight:600;font-size:15px}
-.article-date{color:var(--text-2);font-size:13px;margin-top:4px;margin-bottom:36px}
-.article-body{font-size:17px;line-height:1.75;color:#cdd7e5}
-.article-body h3{
-  font-size:27px;font-weight:700;margin:40px 0 14px;color:var(--text);
-  letter-spacing:-0.4px;line-height:1.25;
-}
-.article-body h4{
-  font-size:21px;font-weight:700;margin:30px 0 12px;color:var(--text);
-  line-height:1.35;
-}
-.article-body p{margin:0 0 18px}
-.article-body blockquote{
-  border-left:3px solid var(--accent);
-  padding:8px 0 8px 20px;margin:24px 0;
-  color:#b8c4d6;font-style:italic;font-size:18px;
-}
-.article-body img{max-width:100%;border-radius:12px;margin:20px 0;display:block}
-.article-body figure{margin:28px 0}
-.article-body figcaption{color:var(--text-2);font-size:14px;text-align:center;margin-top:10px}
-.article-body hr{border:none;border-top:1px solid var(--border);margin:36px 0}
-
-/* ---------- EDITOR ---------- */
-.editor-wrap{max-width:800px;margin:0 auto;padding:0 28px 80px}
-.editor-toolbar{
-  position:sticky;top:72px;z-index:50;
-  display:flex;gap:6px;align-items:center;
-  padding:8px;margin-bottom:20px;
-  background:rgba(21,27,36,0.92);
-  -webkit-backdrop-filter:blur(16px);
-  backdrop-filter:blur(16px);
-  border:1px solid var(--border);
-  border-radius:14px;
-  box-shadow:0 6px 28px rgba(0,0,0,0.45);
-  width:fit-content;
-  margin-left:auto;margin-right:auto;
-  overflow-x:auto;
-  scrollbar-width:none;
-}
-.editor-toolbar::-webkit-scrollbar{display:none}
-.tool-btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  min-width:38px;height:38px;padding:0 10px;
-  background:var(--surface-2);
-  border:1px solid transparent;
-  border-radius:9px;
-  color:#b5c2d4;cursor:pointer;
-  font-size:13px;font-weight:700;
-  transition:all .15s ease;
-  flex-shrink:0;
-}
-.tool-btn:hover{background:var(--accent-dim);color:var(--accent-2);border-color:rgba(46,139,255,.35)}
-.tool-btn svg{width:18px;height:18px}
-
-.title-input{
-  width:100%;background:transparent;border:none;
-  font-size:46px;font-weight:800;letter-spacing:-1.2px;
-  color:var(--text);padding:24px 0 8px;
-  outline:none;line-height:1.15;
-}
-.title-input::placeholder{color:var(--text-3)}
-.author-input{
-  width:100%;background:transparent;border:none;
-  font-size:15px;color:var(--accent-2);
-  padding:4px 0 24px;outline:none;font-weight:600;
-}
-.author-input::placeholder{color:var(--text-3);font-weight:400}
-
-.blocks{min-height:320px;padding:8px 0}
-.block{position:relative;padding:4px 0;transition:background .1s}
-.block-content{
-  outline:none;min-height:1.7em;
-  padding:8px 44px 8px 0;
-  font-size:17px;line-height:1.75;color:#cdd7e5;
-  word-wrap:break-word;
-}
-.block-content:empty::before{
-  content:attr(data-placeholder);
-  color:var(--text-3);
-  pointer-events:none;
-}
-.block[data-type="h3"] .block-content{
-  font-size:27px;font-weight:700;color:var(--text);
-  line-height:1.25;letter-spacing:-0.4px;
-  margin-top:24px;padding-top:8px;
-}
-.block[data-type="h4"] .block-content{
-  font-size:21px;font-weight:700;color:var(--text);
-  line-height:1.35;margin-top:14px;
-}
-.block[data-type="quote"] .block-content{
-  border-left:3px solid var(--accent);
-  padding-left:20px;color:#b8c4d6;
-  font-style:italic;font-size:18px;
-}
-.block[data-type="hr"]{padding:18px 0}
-.block[data-type="hr"] hr{
-  border:none;border-top:1px solid #2a3545;
-}
-.block-img{
-  max-width:100%;border-radius:12px;display:block;margin:8px 0;
-}
-.block-caption{
-  font-size:14px;color:var(--text-2);
-  text-align:center;padding:8px 40px 8px 0;outline:none;
-}
-.block-caption:empty::before{
-  content:attr(data-placeholder);color:var(--text-3);
-}
-.block-remove{
-  position:absolute;right:0;top:8px;
-  width:30px;height:30px;border-radius:8px;
-  background:transparent;border:1px solid transparent;
-  color:var(--text-3);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  opacity:0;transition:all .15s ease;
-}
-.block:hover .block-remove{opacity:1}
-.block-remove:hover{
-  background:rgba(255,77,94,.12);color:var(--danger);
-  border-color:rgba(255,77,94,.3);
-}
-.block[data-type="hr"] .block-remove{top:14px}
-
-.editor-footer{
-  display:flex;justify-content:flex-end;gap:12px;
-  padding-top:32px;margin-top:24px;
-  border-top:1px solid var(--border);
-}
-
-.spinner{
-  width:16px;height:16px;border-radius:50%;
-  border:2px solid rgba(255,255,255,.35);
-  border-top-color:#fff;
-  animation:spin .7s linear infinite;
-  display:inline-block;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-@media (max-width:640px){
-  .header{padding:0 16px}
-  .container{padding:20px 16px 60px}
-  .view-wrap{padding:16px 16px 60px}
-  .editor-wrap{padding:0 16px 60px}
-  .title-input{font-size:34px}
-  .article-title{font-size:32px}
-  .article-body{font-size:16px}
-  .page-title{font-size:26px}
-}
+    :root {
+        --bg-color: #141414;
+        --card-bg: #1e1e1e;
+        --text-main: #e0e0e0;
+        --text-muted: #888;
+        --accent-color: #8cc84b;
+        --border-color: #333;
+    }
+    body {
+        background-color: var(--bg-color);
+        color: var(--text-main);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+    /* Topbar */
+    .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--border-color);
+        background-color: var(--bg-color);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+    .logo { font-size: 24px; font-weight: bold; color: var(--accent-color); text-decoration: none; display: flex; align-items: center; gap: 10px;}
+    .search-bar {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 8px 15px;
+        color: white;
+        width: 400px;
+        outline: none;
+    }
+    .btn-green {
+        background-color: var(--accent-color);
+        color: #000;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .btn-green:hover { opacity: 0.8; }
+    .user-profile { display: flex; align-items: center; gap: 15px; }
+    
+    /* Main Layout */
+    .container { display: flex; flex: 1; }
+    .sidebar {
+        width: 200px;
+        padding: 20px 10px;
+        border-right: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    .sidebar a {
+        color: var(--text-muted);
+        text-decoration: none;
+        padding: 10px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .sidebar a:hover, .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
+    
+    /* Feed */
+    .feed {
+        flex: 1;
+        padding: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        align-content: start;
+    }
+    .card {
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--border-color);
+        transition: transform 0.2s;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .card-img { height: 180px; position: relative; }
+    .card-tag {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    .card-content { padding: 15px; display: flex; flex-direction: column; flex: 1; }
+    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 14px; color: var(--text-muted);}
+    .card-title { font-size: 16px; font-weight: bold; margin: 0 0 10px 0; line-height: 1.3; }
+    .card-text { font-size: 14px; color: var(--text-muted); margin-bottom: 15px; flex: 1; }
+    .card-footer { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 10px; }
+    
+    /* Auth Forms */
+    .auth-form {
+        background-color: var(--card-bg);
+        padding: 30px;
+        border-radius: 12px;
+        width: 300px;
+        margin: 50px auto;
+        border: 1px solid var(--border-color);
+    }
+    .auth-form h2 { margin-top: 0; text-align: center; color: var(--accent-color); }
+    .auth-form input {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 15px;
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: white;
+        box-sizing: border-box;
+    }
+    .auth-form button { width: 100%; }
+    .auth-links { text-align: center; margin-top: 15px; font-size: 14px; }
+    .auth-links a { color: var(--accent-color); text-decoration: none; }
+    .error { color: #ff5555; text-align: center; margin-bottom: 10px; font-size: 14px; }
 </style>
-</head>
-<body>
-
-<header class="header">
-  <a href="#/" class="logo">
-    <svg width="30" height="30" viewBox="0 0 24 24">
-      <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#4a9cff"/>
-          <stop offset="100%" stop-color="#1e6fdb"/>
-        </linearGradient>
-      </defs>
-      <rect x="2" y="5" width="20" height="14" rx="4" fill="url(#lg)"/>
-      <path d="M10 9l5.5 3-5.5 3V9z" fill="#fff"/>
-    </svg>
-    <span>Статьи</span>
-  </a>
-  <div class="header-actions">
-    <a href="#/editor" class="btn btn-primary">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
-        <path d="M12 5v14M5 12h14"/>
-      </svg>
-      Создать
-    </a>
-  </div>
-</header>
-
-<div id="app"></div>
-
-<script>
-/* =========================================================
-   UTILS
-========================================================= */
-const app = document.getElementById('app');
-
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
-
-function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long', year:'numeric' });
-}
-
-function plural(n, one, few, many) {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-  return many;
-}
-
-async function api(path, opts) {
-  const res = await fetch(path, opts);
-  if (!res.ok) throw new Error(await res.text() || res.statusText);
-  return res.json();
-}
-
-/* =========================================================
-   HOME
-========================================================= */
-async function showHome() {
-  let articles = [];
-  try {
-    articles = await api('/api/articles');
-  } catch (e) {
-    app.innerHTML = '<div class="container"><div class="empty-state"><h2>Ошибка загрузки</h2></div></div>';
-    return;
-  }
-  articles.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-
-  let html = `
-    <div class="container">
-      <div class="page-header">
-        <h1 class="page-title">Все статьи</h1>
-        <div class="page-sub">${articles.length} ${plural(articles.length,'статья','статьи','статей')}</div>
-      </div>`;
-
-  if (articles.length === 0) {
-    html += `
-      <div class="empty-state">
-        <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>
-        </svg>
-        <h2>Пока нет статей</h2>
-        <p>Создайте первую статью — это займёт минуту</p>
-        <a href="#/editor" class="btn btn-primary">Создать статью</a>
-      </div>`;
-  } else {
-    html += '<div class="articles-grid">';
-    for (const a of articles) {
-      const thumbImg = (a.blocks || []).find(b => b.type === 'img');
-      const thumbInner = thumbImg
-        ? `<img src="${escapeHtml(thumbImg.content)}" alt="">`
-        : escapeHtml((a.title || '?').trim().charAt(0).toUpperCase());
-      html += `
-        <div class="card" data-id="${a.id}">
-          <div class="card-thumb">${thumbInner}</div>
-          <div class="card-body">
-            <div class="card-title">${escapeHtml(a.title)}</div>
-            <div class="card-meta">
-              ${a.author ? `<span class="card-author">${escapeHtml(a.author)}</span><span>·</span>` : ''}
-              <span>${formatDate(a.created_at)}</span>
-            </div>
-          </div>
-        </div>`;
-    }
-    html += '</div>';
-  }
-  html += '</div>';
-  app.innerHTML = html;
-
-  document.querySelectorAll('.card').forEach(el => {
-    el.onclick = () => { location.hash = '#/view/' + el.dataset.id; };
-  });
-}
-
-/* =========================================================
-   VIEW
-========================================================= */
-async function showView(id) {
-  let a;
-  try {
-    a = await api('/api/articles/' + id);
-  } catch (e) {
-    app.innerHTML = `
-      <div class="view-wrap">
-        <div class="empty-state">
-          <h2>Статья не найдена</h2>
-          <p>Возможно, её удалили</p>
-          <a href="#/" class="btn btn-primary">На главную</a>
-        </div>
-      </div>`;
-    return;
-  }
-
-  const edited = a.updated_at && a.updated_at !== a.created_at;
-  let body = '';
-  for (const b of a.blocks || []) {
-    if (b.type === 'h3') body += `<h3>${b.content}</h3>`;
-    else if (b.type === 'h4') body += `<h4>${b.content}</h4>`;
-    else if (b.type === 'p') body += `<p>${b.content}</p>`;
-    else if (b.type === 'quote') body += `<blockquote>${b.content}</blockquote>`;
-    else if (b.type === 'hr') body += `<hr>`;
-    else if (b.type === 'img') {
-      body += `<figure>
-        <img src="${escapeHtml(b.content)}" alt="">
-        ${b.caption ? `<figcaption>${escapeHtml(b.caption)}</figcaption>` : ''}
-      </figure>`;
-    }
-  }
-
-  app.innerHTML = `
-    <div class="view-wrap">
-      <div class="view-actions">
-        <a href="#/" class="btn btn-ghost">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Назад
-        </a>
-        <div class="right">
-          <a href="#/editor/${a.id}" class="btn btn-ghost">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/>
-            </svg>
-            Редактировать
-          </a>
-          <button class="btn btn-danger" id="del-btn">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
-            </svg>
-            Удалить
-          </button>
-        </div>
-      </div>
-      <article>
-        <h1 class="article-title">${escapeHtml(a.title)}</h1>
-        ${a.author ? `<div class="article-author">${escapeHtml(a.author)}</div>` : ''}
-        <div class="article-date">
-          ${formatDate(a.created_at)}
-          ${edited ? ' · обновлено ' + formatDate(a.updated_at) : ''}
-        </div>
-        <div class="article-body">${body || '<p style="color:var(--text-2)"><em>Статья пустая</em></p>'}</div>
-      </article>
-    </div>`;
-
-  document.getElementById('del-btn').onclick = async () => {
-    if (!confirm('Удалить эту статью?')) return;
-    try { await api('/api/articles/' + a.id, { method: 'DELETE' }); } catch (e) {}
-    location.hash = '#/';
-  };
-}
-
-/* =========================================================
-   EDITOR
-========================================================= */
-async function showEditor(id) {
-  let article = null;
-  if (id) {
-    try { article = await api('/api/articles/' + id); }
-    catch (e) { location.hash = '#/'; return; }
-  }
-
-  app.innerHTML = `
-    <div class="editor-wrap">
-      <div class="editor-toolbar" id="toolbar">
-        <button class="tool-btn" type="button" data-type="h3" title="Заголовок">H3</button>
-        <button class="tool-btn" type="button" data-type="h4" title="Подзаголовок">H4</button>
-        <button class="tool-btn" type="button" data-type="p" title="Текст">¶</button>
-        <button class="tool-btn" type="button" data-type="quote" title="Цитата">❝</button>
-        <button class="tool-btn" type="button" data-type="hr" title="Разделитель">—</button>
-        <button class="tool-btn" type="button" data-type="img" title="Изображение">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <circle cx="9" cy="9" r="1.5"/>
-            <path d="M21 15l-5-5L5 21"/>
-          </svg>
-        </button>
-      </div>
-
-      <input class="title-input" id="title-input" placeholder="Заголовок" value="${article ? escapeHtml(article.title) : ''}">
-      <input class="author-input" id="author-input" placeholder="Автор" value="${article && article.author ? escapeHtml(article.author) : ''}">
-
-      <div class="blocks" id="blocks"></div>
-
-      <div class="editor-footer">
-        <a href="${article ? '#/view/' + article.id : '#/'}" class="btn btn-ghost">Отмена</a>
-        <button class="btn btn-primary" id="save-btn" type="button">
-          ${article ? 'Сохранить' : 'Опубликовать'}
-        </button>
-      </div>
-    </div>`;
-
-  // populate blocks
-  const blocksContainer = document.getElementById('blocks');
-  if (article && article.blocks && article.blocks.length) {
-    article.blocks.forEach(b => blocksContainer.appendChild(createBlockEl(b)));
-  } else {
-    blocksContainer.appendChild(createBlockEl({ type:'p', content:'', caption:'' }));
-  }
-
-  // toolbar
-  document.querySelectorAll('.tool-btn').forEach(btn => {
-    btn.onclick = () => handleToolClick(btn.dataset.type);
-  });
-
-  // title/author Enter -> focus first block
-  ['title-input','author-input'].forEach(inpId => {
-    document.getElementById(inpId).addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const first = blocksContainer.querySelector('[contenteditable]');
-        if (first) first.focus();
-      }
-    });
-  });
-
-  // save
-  const saveBtn = document.getElementById('save-btn');
-  saveBtn.onclick = async () => {
-    const title = document.getElementById('title-input').value.trim();
-    if (!title) {
-      document.getElementById('title-input').focus();
-      return;
-    }
-    const author = document.getElementById('author-input').value.trim();
-    const blocks = [];
-    blocksContainer.querySelectorAll('.block').forEach(el => {
-      const type = el.dataset.type;
-      if (type === 'hr') {
-        blocks.push({ type:'hr', content:'', caption:'' });
-      } else if (type === 'img') {
-        const img = el.querySelector('img');
-        const cap = el.querySelector('.block-caption');
-        blocks.push({ type:'img', content: img.getAttribute('src') || '', caption: (cap.textContent || '').trim() });
-      } else {
-        const ce = el.querySelector('.block-content');
-        if (!ce) return;
-        const text = (ce.textContent || '').trim();
-        if (text || ce.innerHTML.trim()) {
-          blocks.push({ type, content: ce.innerHTML, caption:'' });
-        }
-      }
-    });
-
-    saveBtn.disabled = true;
-    const orig = saveBtn.innerHTML;
-    saveBtn.innerHTML = '<span class="spinner"></span> Сохранение';
-    try {
-      const payload = { title, author, blocks };
-      const opts = {
-        method: id ? 'PUT' : 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      };
-      const saved = await api(id ? '/api/articles/' + id : '/api/articles', opts);
-      location.hash = '#/view/' + saved.id;
-    } catch (err) {
-      alert('Ошибка сохранения: ' + err.message);
-      saveBtn.disabled = false;
-      saveBtn.innerHTML = orig;
-    }
-  };
-
-  if (!id) setTimeout(() => document.getElementById('title-input').focus(), 30);
-}
-
-/* =========================================================
-   BLOCK HELPERS
-========================================================= */
-const PLACEHOLDERS = {
-  h3:'Подзаголовок',
-  h4:'Меньший подзаголовок',
-  p:'Текст…',
-  quote:'Цитата'
-};
-
-const REMOVE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
-
-function createBlockEl(data) {
-  const el = document.createElement('div');
-  el.className = 'block';
-  el.dataset.type = data.type;
-
-  if (data.type === 'img') {
-    el.innerHTML = `
-      <img src="${escapeHtml(data.content || '')}" class="block-img" alt="">
-      <div class="block-caption" contenteditable="true" data-placeholder="Подпись к изображению">${escapeHtml(data.caption || '')}</div>
-      <button class="block-remove" type="button" title="Удалить">${REMOVE_SVG}</button>`;
-  } else if (data.type === 'hr') {
-    el.innerHTML = `
-      <hr>
-      <button class="block-remove" type="button" title="Удалить">${REMOVE_SVG}</button>`;
-  } else {
-    const ph = PLACEHOLDERS[data.type] || 'Текст…';
-    el.innerHTML = `
-      <div class="block-content" contenteditable="true" data-placeholder="${ph}">${data.content || ''}</div>
-      <button class="block-remove" type="button" title="Удалить">${REMOVE_SVG}</button>`;
-  }
-
-  el.querySelector('.block-remove').onclick = () => {
-    el.remove();
-    ensureAtLeastOneBlock();
-  };
-
-  const ce = el.querySelector('[contenteditable]');
-  if (ce) {
-    ce.addEventListener('keydown', e => onBlockKeydown(e, el));
-    ce.addEventListener('paste', e => {
-      e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-      document.execCommand('insertText', false, text);
-    });
-  }
-
-  return el;
-}
-
-function insertBlock(data) {
-  const container = document.getElementById('blocks');
-  if (!container) return;
-  const focused = document.activeElement ? document.activeElement.closest('.block') : null;
-  const el = createBlockEl(data);
-  if (focused && focused.parentElement === container) {
-    focused.after(el);
-  } else {
-    container.appendChild(el);
-  }
-  const ce = el.querySelector('[contenteditable]');
-  if (ce) {
-    ce.focus();
-    const r = document.createRange();
-    r.selectNodeContents(ce);
-    r.collapse(false);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(r);
-  }
-}
-
-function ensureAtLeastOneBlock() {
-  const container = document.getElementById('blocks');
-  if (!container) return;
-  if (!container.querySelector('.block')) {
-    container.appendChild(createBlockEl({ type:'p', content:'', caption:'' }));
-  }
-}
-
-function onBlockKeydown(e, blockEl) {
-  const ce = e.target.closest('[contenteditable]');
-  if (!ce) return;
-
-  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-    e.preventDefault();
-    const sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-
-    // split: extract content after caret
-    const afterRange = document.createRange();
-    afterRange.setStart(range.endContainer, range.endOffset);
-    afterRange.setEnd(ce, ce.childNodes.length);
-    const fragment = afterRange.extractContents();
-
-    const newEl = createBlockEl({ type:'p', content:'', caption:'' });
-    const newCe = newEl.querySelector('[contenteditable]');
-    newCe.appendChild(fragment);
-    blockEl.after(newEl);
-
-    const r = document.createRange();
-    r.setStart(newCe, 0);
-    r.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(r);
-    return;
-  }
-
-  if (e.key === 'Backspace') {
-    const hasContent = (ce.textContent || '').trim().length > 0;
-    if (!hasContent) {
-      const sel = window.getSelection();
-      if (sel.rangeCount > 0 && sel.getRangeAt(0).collapsed) {
-        e.preventDefault();
-        const prev = blockEl.previousElementSibling;
-        blockEl.remove();
-        if (prev) {
-          const prevCe = prev.querySelector('[contenteditable]');
-          if (prevCe) {
-            prevCe.focus();
-            const r = document.createRange();
-            r.selectNodeContents(prevCe);
-            r.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(r);
-          }
-        }
-        ensureAtLeastOneBlock();
-      }
-    }
-  }
-}
-
-/* =========================================================
-   TOOLBAR ACTIONS
-========================================================= */
-function handleToolClick(type) {
-  if (type === 'img') {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async () => {
-      const file = input.files && input.files[0];
-      if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        alert('Можно загружать только изображения');
-        return;
-      }
-      const fd = new FormData();
-      fd.append('file', file);
-      try {
-        const res = await fetch('/api/upload', { method:'POST', body: fd });
-        if (!res.ok) throw new Error('upload failed');
-        const data = await res.json();
-        insertBlock({ type:'img', content: data.url, caption:'' });
-      } catch (err) {
-        alert('Не удалось загрузить изображение');
-      }
-    };
-    input.click();
-    return;
-  }
-  insertBlock({ type, content:'', caption:'' });
-}
-
-/* =========================================================
-   ROUTER
-========================================================= */
-function router() {
-  window.scrollTo(0, 0);
-  const path = (location.hash || '#/').slice(1) || '/';
-  const parts = path.split('/').filter(Boolean);
-
-  if (parts[0] === 'editor') {
-    showEditor(parts[1]);
-  } else if (parts[0] === 'view') {
-    showView(parts[1]);
-  } else {
-    showHome();
-  }
-}
-
-window.addEventListener('hashchange', router);
-window.addEventListener('DOMContentLoaded', () => {
-  if (!location.hash) location.hash = '#/';
-  else router();
-});
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  if (!location.hash) location.hash = '#/';
-  else router();
-}
-</script>
-</body>
-</html>
 """
 
+def render_layout(content_html, user):
+    user_html = ""
+    if user:
+        user_html = f"""
+        <div class="user-profile">
+            <a href="/post" class="btn-green">+ Новый пост</a>
+            <span>{user['avatar']} {user['name']}</span>
+            <a href="/logout" style="color:var(--text-muted); text-decoration:none; font-size:14px;">Выйти</a>
+        </div>
+        """
+    else:
+        user_html = f"""
+        <div class="user-profile">
+            <a href="/login" style="color:white; text-decoration:none;">Вход</a>
+            <a href="/register" class="btn-green">Регистрация</a>
+        </div>
+        """
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>sol.id</title>
+        {CSS_STYLES}
+    </head>
+    <body>
+        <div class="topbar">
+            <a href="/" class="logo">👽 sol.id</a>
+            <input type="text" class="search-bar" placeholder="Поиск">
+            {user_html}
+        </div>
+        <div class="container">
+            <div class="sidebar">
+                <a href="/" class="active">🏠 Лента</a>
+                <a href="#">📺 Подписки</a>
+                <a href="#">🎮 Игры</a>
+                <a href="#">📱 Приложения</a>
+            </div>
+            <div class="feed">
+                {content_html}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+# ==========================================
+# МАРШРУТЫ
+# ==========================================
 
 @app.get("/", response_class=HTMLResponse)
-async def index():
-    return HTML
+async def read_feed(request: Request):
+    user = get_current_user(request)
+    username = user["name"] if user else None
+    
+    cards_html = ""
+    for post in posts_db:
+        cards_html += f"""
+        <div class="card">
+            <div class="card-img" style="{post['image_css']}">
+                <span class="card-tag">▶ {post['tag']}</span>
+            </div>
+            <div class="card-content">
+                <div class="card-header">
+                    <span>{post['avatar']}</span>
+                    <span>{post['author']}</span>
+                </div>
+                <h3 class="card-title">{post['title']}</h3>
+                <p class="card-text">{post['content']}</p>
+                <div class="card-footer">
+                    <span>👁 {post['views']} ♡ {post['likes']} 💬 {post['comments']}</span>
+                    <span>{post['time']}</span>
+                </div>
+            </div>
+        </div>
+        """
+    
+    return render_layout(cards_html, user)
 
+@app.get("/register", response_class=HTMLResponse)
+async def register_page():
+    return render_layout("""
+        <form class="auth-form" action="/register" method="post">
+            <h2>Регистрация на sol.id</h2>
+            <input type="text" name="username" placeholder="Логин" required>
+            <input type="password" name="password" placeholder="Пароль" required>
+            <button type="submit" class="btn-green">Создать аккаунт</button>
+            <div class="auth-links">
+                Уже есть аккаунт? <a href="/login">Войти</a>
+            </div>
+        </form>
+    """, None)
+
+@app.post("/register")
+async def register_user(username: str = Form(...), password: str = Form(...)):
+    if username in users_db:
+        return render_layout("""
+            <form class="auth-form" action="/register" method="post">
+                <h2>Регистрация на sol.id</h2>
+                <div class="error">Пользователь уже существует</div>
+                <input type="text" name="username" placeholder="Логин" required>
+                <input type="password" name="password" placeholder="Пароль" required>
+                <button type="submit" class="btn-green">Создать аккаунт</button>
+            </form>
+        """, None)
+    
+    users_db[username] = {
+        "password": pwd_context.hash(password),
+        "avatar": "👤",
+        "name": username
+    }
+    return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return render_layout("""
+        <form class="auth-form" action="/login" method="post">
+            <h2>Вход в sol.id</h2>
+            <input type="text" name="username" placeholder="Логин" required>
+            <input type="password" name="password" placeholder="Пароль" required>
+            <button type="submit" class="btn-green">Войти</button>
+            <div class="auth-links">
+                Нет аккаунта? <a href="/register">Зарегистрироваться</a>
+            </div>
+        </form>
+    """, None)
+
+@app.post("/login")
+async def login_user(request: Request, username: str = Form(...), password: str = Form(...)):
+    user = users_db.get(username)
+    if not user or not pwd_context.verify(password, user["password"]):
+        return render_layout("""
+            <form class="auth-form" action="/login" method="post">
+                <h2>Вход в sol.id</h2>
+                <div class="error">Неверный логин или пароль</div>
+                <input type="text" name="username" placeholder="Логин" required>
+                <input type="password" name="password" placeholder="Пароль" required>
+                <button type="submit" class="btn-green">Войти</button>
+            </form>
+        """, None)
+
+    # Создаем сессию
+    session_token = str(uuid.uuid4())
+    sessions[session_token] = username
+    
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    response.set_cookie(key="session_token", value=session_token, httponly=True)
+    return response
+
+@app.get("/logout")
+async def logout(request: Request):
+    session_token = request.cookies.get("session_token")
+    if session_token in sessions:
+        del sessions[session_token]
+    
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    response.delete_cookie("session_token")
+    return response
+
+@app.get("/post", response_class=HTMLResponse)
+async def create_post_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+        
+    return render_layout("""
+        <form class="auth-form" action="/post" method="post" style="width: 400px;">
+            <h2>Новый пост</h2>
+            <input type="text" name="title" placeholder="Заголовок" required>
+            <input type="text" name="content" placeholder="Текст поста" required>
+            <select name="tag" style="width: 100%; padding: 10px; margin-bottom: 15px; background: var(--bg-color); color: white; border: 1px solid var(--border-color); border-radius: 6px;">
+                <option value="Текст">Текст</option>
+                <option value="Видео">Видео</option>
+                <option value="Картинка">Картинка</option>
+            </select>
+            <button type="submit" class="btn-green">Опубликовать</button>
+        </form>
+    """, user)
+
+@app.post("/post")
+async def create_post(request: Request, title: str = Form(...), content: str = Form(...), tag: str = Form(...)):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    new_post = {
+        "id": str(len(posts_db) + 1),
+        "author": user["name"],
+        "avatar": user["avatar"],
+        "title": title,
+        "content": content,
+        "image_css": "background: linear-gradient(135deg, #222, #444);", # Рандомная заглушка
+        "likes": 0, "comments": 0, "views": "0", "time": "Только что", "tag": tag
+    }
+    # Добавляем в начало списка
+    posts_db.insert(0, new_post)
+    return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
