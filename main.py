@@ -46,7 +46,7 @@ TRANSLATIONS = {
         "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post",
         "edit_post": "Edit Post", "remove_saved": "Remove from saved", "delete_comment": "Delete comment",
         "edit": "Edit", "update": "Update", "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist.",
-        "login_to_comment": "Please log in to leave a comment"
+        "login_to_comment": "Please log in to leave a comment", "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
@@ -66,7 +66,7 @@ TRANSLATIONS = {
         "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены",
         "edit_post": "Редактировать пост", "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий",
         "edit": "Редактировать", "update": "Обновить", "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует.",
-        "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий"
+        "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий", "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?"
     }
 }
 
@@ -138,7 +138,6 @@ async def get_sw():
         self.skipWaiting();
     });
     self.addEventListener('fetch', (e) => {
-        // Cache-first strategy for static assets could go here
         e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     });
     """
@@ -185,8 +184,10 @@ CSS_STYLES = """
     .logo span { transition: opacity 0.2s; }
     .app-layout.sidebar-collapsed .logo span { opacity: 0; width: 0; display: none; }
     
-    .menu-toggle { cursor: pointer; padding: 5px; color: var(--text-muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
+    /* Perfectly aligned hamburger */
+    .menu-toggle { cursor: pointer; padding: 8px; color: var(--text-muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; margin: 0; }
     .menu-toggle:hover { background: var(--card-bg); color: var(--text-main); }
+    .menu-toggle svg { display: block; }
     
     .topbar-center { flex: 1; display: flex; justify-content: center; position: relative; }
     .search-container { width: 100%; max-width: 500px; position: relative; }
@@ -206,12 +207,15 @@ CSS_STYLES = """
     
     /* User Dropdown */
     .user-menu-container { position: relative; }
-    .user-menu-btn { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; }
-    .user-menu-btn:hover { background: var(--card-bg); border-color: var(--border-color); }
-    .user-avatar-small { width: 36px; height: 36px; border-radius: 50% !important; object-fit: cover; background: #333; }
-    .dropdown-menu { display: none; position: absolute; right: 0; top: 55px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 200; overflow: hidden; }
+    .user-menu-btn { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 4px; border-radius: 50%; border: none; }
+    .user-menu-btn:hover { background: var(--card-bg); }
+    
+    /* Rounded Avatars */
+    .user-avatar-small { width: 36px; height: 36px; border-radius: 50% !important; object-fit: cover; background: #333; display: block; }
+    
+    .dropdown-menu { display: none; position: absolute; right: 0; top: 50px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 200; overflow: hidden; }
     .dropdown-header { padding: 15px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color); }
-    .dropdown-header img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+    .dropdown-header img { width: 44px; height: 44px; border-radius: 50% !important; object-fit: cover; }
     .dropdown-header div { display: flex; flex-direction: column; }
     .dropdown-header .name { font-weight: 700; font-size: 15px; }
     .dropdown-header .login { font-size: 13px; color: var(--text-muted); }
@@ -251,22 +255,23 @@ CSS_STYLES = """
     .profile-details h1 { font-size: 32px; margin-bottom: 5px; font-weight: 700; }
     .profile-details p { color: var(--text-muted); font-size: 16px; }
     
-    /* Post View - SCROLLABLE COMMENTS */
+    /* Post View - NO FRAME, SCROLLABLE COMMENTS */
     .post-view { 
-        display: flex; gap: 25px; background: var(--card-bg); border-radius: 16px; padding: 25px; border: 1px solid var(--border-color); 
-        height: calc(100vh - 150px); /* Fixed height to force inner scroll */
+        display: flex; gap: 25px; 
+        height: calc(100vh - 130px); /* Fill available height */
         overflow: hidden;
+        background: transparent;
     }
     .post-media { flex: 2; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: zoom-in; height: 100%; }
     .post-media img { max-width: 100%; max-height: 100%; object-fit: contain; }
     
-    .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; height: 100%; }
+    .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; height: 100%; background: var(--card-bg); border-radius: 16px; padding: 25px; }
     
     .post-top-info { flex-shrink: 0; }
     .post-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
     .post-author img { width: 48px; height: 48px; border-radius: 50% !important; }
     .post-title { font-size: 26px; font-weight: 700; margin-bottom: 15px; }
-    .post-desc { color: #ccc; font-size: 16px; margin-bottom: 25px; white-space: pre-wrap; line-height: 1.5; max-height: 200px; overflow-y: auto; }
+    .post-desc { color: #ccc; font-size: 16px; margin-bottom: 25px; white-space: pre-wrap; line-height: 1.5; max-height: 150px; overflow-y: auto; }
     
     /* Actions Row */
     .actions-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; flex-shrink: 0; }
@@ -347,6 +352,11 @@ CSS_STYLES = """
     .mobile-profile-menu .dropdown-item { padding: 12px 10px; border-radius: 8px; }
     .mobile-menu-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
 
+    /* Crop Modal */
+    .crop-container { background: var(--card-bg); padding: 20px; border-radius: 16px; display: flex; flex-direction: column; gap: 15px; align-items: center; border: 1px solid var(--border-color); }
+    .crop-canvas { border-radius: 50%; border: 2px solid var(--accent-color); background: #000; }
+    .crop-controls { display: flex; flex-direction: column; width: 100%; gap: 10px; }
+
     /* Helpers */
     .mobile-only { display: none !important; }
     .desktop-only { display: flex !important; }
@@ -377,16 +387,16 @@ CSS_STYLES = """
         
         .mobile-search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
 
-        /* Reordering Post View on Mobile */
-        .post-view { flex-direction: column; padding: 15px; gap: 15px; height: auto; max-height: none; }
-        .post-details { display: contents; } /* Flattens children into .post-view */
+        /* Reordering Post View on Mobile - No strict height */
+        .post-view { flex-direction: column; padding: 0; gap: 15px; height: auto; max-height: none; overflow: visible; }
+        .post-details { display: contents; }
         
         .post-author { order: 1; margin-bottom: 0; }
-        .post-media { order: 2; width: 100%; max-height: 50vh; min-height: 200px; }
+        .post-media { order: 2; width: 100%; max-height: 50vh; min-height: 200px; border-radius: 12px; }
         .post-title { order: 3; margin-bottom: 0; }
         .post-desc { order: 4; margin-bottom: 0; max-height: none; }
-        .actions-row { order: 5; margin-bottom: 0; }
-        .comments-section { order: 6; width: 100%; border-top: 1px solid var(--border-color); padding-top: 15px; }
+        .actions-row { order: 5; margin-bottom: 0; padding: 0 15px; }
+        .comments-section { order: 6; width: 100%; border-top: 1px solid var(--border-color); padding: 15px; overflow: visible; }
 
         .create-layout { flex-direction: column; }
         .dropzone { padding: 30px; min-height: 250px; }
@@ -398,6 +408,14 @@ CSS_STYLES = """
 </style>
 <script>
     // --- SIDEBAR STATE PERSISTENCE ---
+    function applySidebarState() {
+        if(localStorage.getItem('sidebar_collapsed') === 'true') {
+            document.querySelector('.app-layout').classList.add('sidebar-collapsed');
+        } else {
+            document.querySelector('.app-layout').classList.remove('sidebar-collapsed');
+        }
+    }
+    
     function toggleSidebar() {
         const layout = document.querySelector('.app-layout');
         layout.classList.toggle('sidebar-collapsed');
@@ -405,18 +423,15 @@ CSS_STYLES = """
         localStorage.setItem('sidebar_collapsed', isCollapsed);
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        if(localStorage.getItem('sidebar_collapsed') === 'true') {
-            document.querySelector('.app-layout').classList.add('sidebar-collapsed');
-        }
-        
-        // Register PWA
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed'));
-        }
-    });
+    document.addEventListener('DOMContentLoaded', applySidebarState);
+    document.body.addEventListener('htmx:afterSettle', applySidebarState);
 
-    // Dropdown Menu Desktop
+    // Register PWA
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed'));
+    }
+
+    // Dropdown Menu
     function toggleDropdown() {
         if(window.innerWidth <= 900) {
             document.getElementById('mobileProfileMenu').classList.add('open');
@@ -474,7 +489,7 @@ CSS_STYLES = """
             const data = await res.json();
             if (data.results && data.results.length > 0) {
                 dropdown.innerHTML = data.results.map(p => `
-                    <a href="/post/${p.id}" class="search-dropdown-item">
+                    <a href="/${p.id}" class="search-dropdown-item">
                         <div style="font-weight:700; font-size:14px;">${p.title}</div>
                         <div style="color:var(--text-muted); font-size:12px; margin-left:auto;">@${p.author}</div>
                     </a>
@@ -487,9 +502,8 @@ CSS_STYLES = """
         }, 300);
     }
 
-    // --- FILE UPLOAD FIX ---
+    // --- FILE UPLOAD ---
     let filesList = [];
-    
     function handleFiles(input) {
         if (!input.files) return;
         const newFiles = Array.from(input.files);
@@ -506,10 +520,7 @@ CSS_STYLES = """
     }
 
     function removeFile(index, event) {
-        if(event) {
-            event.stopPropagation(); 
-            event.preventDefault();
-        }
+        if(event) { event.stopPropagation(); event.preventDefault(); }
         filesList.splice(index, 1);
         updateInputAndRender();
     }
@@ -599,6 +610,52 @@ CSS_STYLES = """
     }
     function closePanorama() {
         document.getElementById('panorama').style.display = 'none';
+    }
+
+    // --- PROFILE CROP LOGIC ---
+    let currentImage = null;
+    let currentZoom = 1;
+    
+    function loadAvatar(event) {
+        let file = event.target.files[0];
+        if(!file) return;
+        
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            let img = new Image();
+            img.onload = function() {
+                currentImage = img;
+                currentZoom = 1;
+                document.getElementById('zoom-slider').value = 1;
+                drawCropCanvas();
+                document.getElementById('crop-modal').style.display = 'flex';
+            }
+            img.src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+    }
+
+    function drawCropCanvas() {
+        if(!currentImage) return;
+        const canvas = document.getElementById('crop-canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        let scale = Math.max(canvas.width / currentImage.width, canvas.height / currentImage.height) * currentZoom;
+        let x = (canvas.width - currentImage.width * scale) / 2;
+        let y = (canvas.height - currentImage.height * scale) / 2;
+        
+        ctx.drawImage(currentImage, x, y, currentImage.width * scale, currentImage.height * scale);
+    }
+
+    function applyCrop() {
+        const canvas = document.getElementById('crop-canvas');
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        
+        document.getElementById('avatar-base64').value = dataUrl;
+        document.getElementById('avatar-preview').src = dataUrl;
+        document.getElementById('avatar-preview').style.display = 'block';
+        document.getElementById('crop-modal').style.display = 'none';
     }
 
     // AJAX Functions
@@ -730,7 +787,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
                 </div>
                 <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
                 <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
-                <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
+                <a href="/logout" class="dropdown-item danger" onclick="return confirm('{t('logout_confirm', lang)}')">{SVG_LOGOUT} {t('logout', lang)}</a>
             </div>
         </div>
         """
@@ -758,7 +815,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
             <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a>
             <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a>
             <a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a>
-            <a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a>
+            <a href="javascript:void(0)" onclick="toggleDropdown()" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a>
         </div>
         """
     else:
@@ -782,7 +839,6 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
         <div class="app-layout">
             <div class="topbar">
                 <div class="topbar-left">
-                    <!-- HIDE HAMBURGER IF NOT LOGGED IN -->
                     {f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}
                     <a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a>
                 </div>
@@ -825,7 +881,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
             </div>
             <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
             <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
-            <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
+            <a href="/logout" class="dropdown-item danger" onclick="return confirm('{t('logout_confirm', lang)}')">{SVG_LOGOUT} {t('logout', lang)}</a>
         </div>
         ''' if user else ''}
         
@@ -925,7 +981,7 @@ async def search_posts(request: Request, q: str = ""):
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             cards += f"""
-            <a href="/post/{post['id']}" class="feed-card">
+            <a href="/{post['id']}" class="feed-card">
                 <div class="feed-card-img-container">{img_html}</div>
                 <div class="feed-card-info">
                     <div class="feed-card-title">{post['title']}</div>
@@ -954,7 +1010,7 @@ async def read_feed(request: Request):
             score = len(post['votes']['up']) - len(post['votes']['down'])
             
             cards += f"""
-            <a href="/post/{post['id']}" class="feed-card">
+            <a href="/{post['id']}" class="feed-card">
                 <div class="feed-card-img-container">{img_html}</div>
                 <div class="feed-card-info">
                     <div class="feed-card-title">{post['title']}</div>
@@ -990,7 +1046,7 @@ async def saved_posts(request: Request):
             cards += f"""
             <div class="feed-card">
                 <button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button>
-                <a href="/post/{post['id']}" style="display:flex; flex-direction:column; flex:1;">
+                <a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;">
                     <div class="feed-card-img-container">{img_html}</div>
                     <div class="feed-card-info">
                         <div class="feed-card-title">{post['title']}</div>
@@ -1107,7 +1163,7 @@ async def create_post_page(request: Request):
             
             <div class="input-group">
                 <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
-                <textarea name="content" placeholder="{t('description', lang)}" style="min-height:120px; padding:14px;"></textarea>
+                <textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea>
             </div>
 
             <div class="input-group">
@@ -1160,7 +1216,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         "allow_comments": allow_comments
     }
     posts_db.insert(0, new_post)
-    return RedirectResponse(url=f"/post/{new_post['id']}", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=f"/{new_post['id']}", status_code=status.HTTP_302_FOUND)
 
 # --- API Endpoints for AJAX ---
 @app.post("/api/vote/{post_id}/{action}")
@@ -1269,7 +1325,121 @@ async def delete_post(post_id: str, request: Request):
                 
     return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
-@app.get("/post/{post_id}", response_class=HTMLResponse)
+@app.get("/@{username}", response_class=HTMLResponse)
+async def view_profile(request: Request, username: str):
+    current_user = get_current_user(request)
+    lang = get_lang(request)
+    profile_user = users_db.get(username)
+    if not profile_user:
+        raise HTTPException(404, "User not found")
+        
+    ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
+    
+    if current_user and current_user['username'] == username:
+        user_posts = [p for p in posts_db if p['author'] == username]
+    else:
+        user_posts = [p for p in posts_db if p['author'] == username and p.get('visibility') == 'feed']
+        
+    posts_html = ""
+    for post in user_posts:
+        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+        posts_html += f"""
+        <a href="/{post['id']}" class="feed-card">
+            <div class="feed-card-img-container">{img_html}</div>
+            <div class="feed-card-info">
+                <div class="feed-card-title">{post['title']}</div>
+            </div>
+        </a>
+        """
+        
+    if not posts_html:
+        posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
+
+    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff; display:flex; gap:8px;">{SVG_SETTINGS} {t("edit_profile", lang)}</a>' if current_user and current_user['username'] == username else ''
+
+    content = f"""
+    <div class="profile-header">
+        <img src="{ava}" class="profile-avatar">
+        <div class="profile-details">
+            <h1>{profile_user['display_name']}</h1>
+            <p>@{username}</p>
+            <p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p>
+        </div>
+        <div style="margin-left:auto;">{edit_btn}</div>
+    </div>
+    
+    <div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;">
+        <a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a>
+    </div>
+    
+    <div class="feed-grid">
+        {posts_html}
+    </div>
+    """
+    return HTMLResponse(content=render_layout(content, current_user, request, "profile"))
+
+@app.get("/edit_profile", response_class=HTMLResponse)
+async def edit_profile_page(request: Request):
+    user = get_current_user(request)
+    lang = get_lang(request)
+    if not user: return RedirectResponse(url="/login")
+    
+    content = f"""
+    <div style="max-width: 600px; margin: 0 auto; background: var(--card-bg); padding: 40px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%;">
+        <h2 style="margin-bottom:30px; font-weight:700; font-size:28px;">{t('edit_profile', lang)}</h2>
+        <form action="/edit_profile" method="post" enctype="multipart/form-data">
+            <div class="input-group">
+                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
+                <input type="text" name="display_name" value="{user['display_name']}" required style="padding:14px;">
+            </div>
+            
+            <div class="input-group">
+                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('avatar', lang)} (JPEG/PNG)</label>
+                <input type="file" name="avatar" accept="image/*" onchange="loadAvatar(event)" style="padding: 12px;">
+                <input type="hidden" name="avatar_base64" id="avatar-base64">
+                <img id="avatar-preview" src="" style="display:none; width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-top: 10px;">
+            </div>
+            
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:20px; padding:14px;">{SVG_SETTINGS} {t('save', lang)}</button>
+        </form>
+    </div>
+    
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="overlay">
+        <div class="crop-container" onclick="event.stopPropagation()">
+            <h3 style="font-weight:700;">Настройка аватарки</h3>
+            <canvas id="crop-canvas" width="250" height="250" class="crop-canvas"></canvas>
+            <div class="crop-controls">
+                <label style="font-size:14px; color:var(--text-muted);">Приближение</label>
+                <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" oninput="currentZoom = parseFloat(this.value); drawCropCanvas();" style="width:100%;">
+            </div>
+            <div style="display:flex; gap:10px; width:100%;">
+                <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center;">Отмена</button>
+                <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">Применить</button>
+            </div>
+        </div>
+    </div>
+    """
+    return HTMLResponse(content=render_layout(content, user, request, "profile"))
+
+@app.post("/edit_profile")
+async def edit_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None)):
+    user = get_current_user(request)
+    if not user: raise HTTPException(401)
+    
+    users_db[user['username']]['display_name'] = display_name
+    
+    if avatar_base64:
+        users_db[user['username']]['avatar'] = avatar_base64
+    elif avatar and avatar.filename:
+        users_db[user['username']]['avatar'] = await image_to_base64(avatar)
+        
+    return RedirectResponse(url=f"/@{user['username']}", status_code=status.HTTP_302_FOUND)
+
+# ==========================================
+# ДИНАМИЧЕСКИЕ МАРШРУТЫ (ПОСТЫ) - В САМОМ КОНЦЕ
+# ==========================================
+@app.get("/{post_id}", response_class=HTMLResponse)
 async def view_post(request: Request, post_id: str):
     user = get_current_user(request)
     lang = get_lang(request)
@@ -1290,7 +1460,7 @@ async def view_post(request: Request, post_id: str):
     save_icon = SVG_SAVED if is_saved else SVG_SAVE
 
     delete_btn = f'''
-    <form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('{t("delete", lang)}?');">
+    <form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="return confirm('{t("delete_confirm", lang)}');">
         <button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button>
     </form>
     ''' if user and user['username'] == post['author'] else ''
@@ -1401,95 +1571,6 @@ async def view_post(request: Request, post_id: str):
     </div>
     """
     return HTMLResponse(content=render_layout(content, user, request, "feed"))
-
-@app.get("/@{username}", response_class=HTMLResponse)
-async def view_profile(request: Request, username: str):
-    current_user = get_current_user(request)
-    lang = get_lang(request)
-    profile_user = users_db.get(username)
-    if not profile_user:
-        raise HTTPException(404, "User not found")
-        
-    ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
-    
-    if current_user and current_user['username'] == username:
-        user_posts = [p for p in posts_db if p['author'] == username]
-    else:
-        user_posts = [p for p in posts_db if p['author'] == username and p.get('visibility') == 'feed']
-        
-    posts_html = ""
-    for post in user_posts:
-        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-        posts_html += f"""
-        <a href="/post/{post['id']}" class="feed-card">
-            <div class="feed-card-img-container">{img_html}</div>
-            <div class="feed-card-info">
-                <div class="feed-card-title">{post['title']}</div>
-            </div>
-        </a>
-        """
-        
-    if not posts_html:
-        posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
-
-    edit_btn = f'<a href="/edit_profile" class="btn-primary" style="background:#333; color:#fff; display:flex; gap:8px;">{SVG_SETTINGS} {t("edit_profile", lang)}</a>' if current_user and current_user['username'] == username else ''
-
-    content = f"""
-    <div class="profile-header">
-        <img src="{ava}" class="profile-avatar">
-        <div class="profile-details">
-            <h1>{profile_user['display_name']}</h1>
-            <p>@{username}</p>
-            <p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p>
-        </div>
-        <div style="margin-left:auto;">{edit_btn}</div>
-    </div>
-    
-    <div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;">
-        <a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a>
-    </div>
-    
-    <div class="feed-grid">
-        {posts_html}
-    </div>
-    """
-    return HTMLResponse(content=render_layout(content, current_user, request, "profile"))
-
-@app.get("/edit_profile", response_class=HTMLResponse)
-async def edit_profile_page(request: Request):
-    user = get_current_user(request)
-    lang = get_lang(request)
-    if not user: return RedirectResponse(url="/login")
-    
-    content = f"""
-    <div style="max-width: 600px; margin: 0 auto; background: var(--card-bg); padding: 40px; border-radius: 16px; border: 1px solid var(--border-color); width: 100%;">
-        <h2 style="margin-bottom:30px; font-weight:700; font-size:28px;">{t('edit_profile', lang)}</h2>
-        <form action="/edit_profile" method="post" enctype="multipart/form-data">
-            <div class="input-group">
-                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
-                <input type="text" name="display_name" value="{user['display_name']}" required style="padding:14px;">
-            </div>
-            <div class="input-group">
-                <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('avatar', lang)} (JPEG/PNG)</label>
-                <input type="file" name="avatar" accept="image/*" style="padding: 12px;">
-            </div>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:20px; padding:14px;">{SVG_SETTINGS} {t('save', lang)}</button>
-        </form>
-    </div>
-    """
-    return HTMLResponse(content=render_layout(content, user, request, "profile"))
-
-@app.post("/edit_profile")
-async def edit_profile(request: Request, display_name: str = Form(...), avatar: UploadFile = File(None)):
-    user = get_current_user(request)
-    if not user: raise HTTPException(401)
-    
-    users_db[user['username']]['display_name'] = display_name
-    
-    if avatar and avatar.filename:
-        users_db[user['username']]['avatar'] = await image_to_base64(avatar)
-        
-    return RedirectResponse(url=f"/@{user['username']}", status_code=status.HTTP_302_FOUND)
 
 if __name__ == "__main__":
     import uvicorn
