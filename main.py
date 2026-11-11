@@ -2,67 +2,40 @@ from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from passlib.context import CryptContext
 import uuid
-from datetime import datetime
 
 app = FastAPI(title="sol.id clone")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ИСПРАВЛЕНИЕ ОШИБКИ: Используем pbkdf2_sha256 вместо bcrypt, чтобы избежать ошибки 72 байт
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # ==========================================
 # БАЗА ДАННЫХ В ОПЕРАТИВНОЙ ПАМЯТИ
 # ==========================================
+# Фейковые посты убраны
+posts_db = []
+
+# Добавлен дефолтный пользователь для теста (логин: admin, пароль: admin)
 users_db = {
-    "admin": {"password": pwd_context.hash("admin"), "avatar": "👽", "name": "Admin"},
-    "guest": {"password": pwd_context.hash("guest"), "avatar": "👾", "name": "Guest"}
+    "admin": {"password": pwd_context.hash("admin"), "name": "Admin"}
 }
 
 # Сессии (токен -> username)
 sessions = {}
 
-# Посты (сгенерированы на основе скриншота)
-posts_db = [
-    {
-        "id": "1", "author": "MIRRONAKE", "avatar": "😡",
-        "title": "ОБНОВЛЕНИЕ: РЕДИЗАЙН САЙТА И ПЛАТНЫЕ ПРЕДЛОЖКИ",
-        "content": "Сайт переехал на новый дизайн. Переделали почти всё...",
-        "image_css": "background: linear-gradient(135deg, #1e1e1e, #2a2a2a);", # Заглушка вместо картинки
-        "likes": 118, "comments": 97, "views": "3k", "time": "4 дня назад", "tag": "Текст"
-    },
-    {
-        "id": "2", "author": "warshavskaya", "avatar": "👩",
-        "title": "чаттерино W",
-        "content": "#эдит на выходных внезапно пришла идея сделать чт...",
-        "image_css": "background: linear-gradient(135deg, #4b0082, #8a2be2);",
-        "likes": 14, "comments": 8, "views": "131", "time": "вчера в 21:54", "tag": "Видео"
-    },
-    {
-        "id": "3", "author": "JP_1337_322", "avatar": "🕵️",
-        "title": "Легендарные файлы #526",
-        "content": "France meme's",
-        "image_css": "background: url('https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=400&auto=format&fit=crop') center/cover;",
-        "likes": 11, "comments": 0, "views": "100", "time": "вчера в 21:39", "tag": "Видео"
-    },
-    {
-        "id": "4", "author": "vandal_k", "avatar": "🐶",
-        "title": "как будет играть в гта 6",
-        "content": "Ну и графика конечно...",
-        "image_css": "background: linear-gradient(135deg, #333, #555);",
-        "likes": 42, "comments": 12, "views": "1.2k", "time": "2 часа назад", "tag": "Видео"
-    },
-    {
-        "id": "5", "author": "abc_894", "avatar": "🚔",
-        "title": "С праздником, дорогие сотрудники",
-        "content": "10 НОЯБРЯ. ДЕНЬ СОТРУДНИКА ОРГАНОВ ВНУТРЕННИХ ДЕЛ РОССИЙСКОЙ ФЕДЕРАЦИИ",
-        "image_css": "background: linear-gradient(135deg, #0033cc, #ffffff, #cc0000);",
-        "likes": 5, "comments": 1, "views": "500", "time": "3 часа назад", "tag": "Текст"
-    },
-    {
-        "id": "6", "author": "Monyxoff", "avatar": "💻",
-        "title": "Новый игровой компьютер",
-        "content": "Потянет даже ГТА 6",
-        "image_css": "background: linear-gradient(135deg, #ff00cc, #333399);",
-        "likes": 88, "comments": 24, "views": "2.5k", "time": "10 минут назад", "tag": "Видео"
-    }
-]
+# ==========================================
+# SVG ИКОНКИ (Вместо эмодзи)
+# ==========================================
+SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM11 7H13V13H11V7ZM11 15H13V17H11V15Z" fill="#3b82f6"/></svg>"""
+SVG_AVATAR = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="#a1a1aa"/></svg>"""
+
+SVG_FEED = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
+SVG_SUBS = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>"""
+SVG_GAMES = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"></line><line x1="8" y1="10" x2="8" y2="14"></line><line x1="15" y1="13" x2="15.01" y2="13"></line><line x1="18" y1="11" x2="18.01" y2="11"></line><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>"""
+SVG_APPS = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect></svg>"""
+SVG_PLUS = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
+SVG_BELL = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>"""
+SVG_USER = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
+SVG_SEARCH = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>"""
 
 # ==========================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -74,17 +47,17 @@ def get_current_user(request: Request):
     return None
 
 # ==========================================
-# HTML ШАБЛОНЫ (ВСТРОЕННЫЕ)
+# HTML ШАБЛОНЫ И CSS
 # ==========================================
 CSS_STYLES = """
 <style>
     :root {
-        --bg-color: #141414;
-        --card-bg: #1e1e1e;
-        --text-main: #e0e0e0;
+        --bg-color: #0f0f0f;
+        --card-bg: #1c1c1c;
+        --text-main: #f3f3f3;
         --text-muted: #888;
-        --accent-color: #8cc84b;
-        --border-color: #333;
+        --accent-color: #3b82f6; /* Синий цвет вместо зеленого */
+        --border-color: #2a2a2a;
     }
     body {
         background-color: var(--bg-color);
@@ -95,6 +68,7 @@ CSS_STYLES = """
         display: flex;
         flex-direction: column;
         min-height: 100vh;
+        padding-bottom: 60px; /* Место для мобильной навигации */
     }
     /* Topbar */
     .topbar {
@@ -108,59 +82,97 @@ CSS_STYLES = """
         top: 0;
         z-index: 100;
     }
-    .logo { font-size: 24px; font-weight: bold; color: var(--accent-color); text-decoration: none; display: flex; align-items: center; gap: 10px;}
-    .search-bar {
+    .logo { font-size: 22px; font-weight: bold; color: var(--text-main); text-decoration: none; display: flex; align-items: center; gap: 8px;}
+    .search-container {
+        display: flex;
+        align-items: center;
         background-color: var(--card-bg);
         border: 1px solid var(--border-color);
         border-radius: 8px;
-        padding: 8px 15px;
-        color: white;
-        width: 400px;
-        outline: none;
+        padding: 0 10px;
+        width: 300px;
     }
-    .btn-green {
+    .search-container svg { color: var(--text-muted); }
+    .search-bar {
+        background-color: transparent;
+        border: none;
+        padding: 8px 10px;
+        color: white;
+        outline: none;
+        width: 100%;
+    }
+    .btn-primary {
         background-color: var(--accent-color);
-        color: #000;
+        color: #fff;
         border: none;
         padding: 8px 16px;
         border-radius: 8px;
         font-weight: bold;
         cursor: pointer;
         text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
-    .btn-green:hover { opacity: 0.8; }
-    .user-profile { display: flex; align-items: center; gap: 15px; }
+    .btn-primary:hover { opacity: 0.8; }
     
     /* Main Layout */
     .container { display: flex; flex: 1; }
+    
+    /* Sidebar (Desktop) */
     .sidebar {
-        width: 200px;
+        width: 220px;
         padding: 20px 10px;
         border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
-        gap: 15px;
+        gap: 5px;
+        position: sticky;
+        top: 60px;
+        height: calc(100vh - 60px);
     }
     .sidebar a {
         color: var(--text-muted);
         text-decoration: none;
-        padding: 10px;
+        padding: 12px 15px;
         border-radius: 8px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
+        font-size: 15px;
+        font-weight: 500;
     }
     .sidebar a:hover, .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
+    .sidebar a.active svg { color: var(--accent-color); }
     
     /* Feed */
     .feed {
         flex: 1;
         padding: 20px;
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 20px;
-        align-content: start;
+        max-width: 800px; /* Ограничиваем ширину на больших экранах */
+        margin: 0 auto;
     }
+    .feed-header {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 10px;
+    }
+    .feed-header a { color: var(--text-muted); text-decoration: none; font-size: 16px; font-weight: 500; }
+    .feed-header a.active { color: var(--text-main); border-bottom: 2px solid var(--accent-color); padding-bottom: 9px; }
+    
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: var(--text-muted);
+        background: var(--card-bg);
+        border-radius: 12px;
+        border: 1px dashed var(--border-color);
+    }
+    .empty-state h3 { color: var(--text-main); margin-bottom: 10px; }
+
+    /* Cards (для будущих постов) */
     .card {
         background-color: var(--card-bg);
         border-radius: 12px;
@@ -168,39 +180,28 @@ CSS_STYLES = """
         display: flex;
         flex-direction: column;
         border: 1px solid var(--border-color);
-        transition: transform 0.2s;
+        margin-bottom: 15px;
     }
-    .card:hover { transform: translateY(-2px); }
-    .card-img { height: 180px; position: relative; }
-    .card-tag {
-        position: absolute;
-        bottom: 10px;
-        right: 10px;
-        background: rgba(0,0,0,0.7);
-        color: white;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-    }
-    .card-content { padding: 15px; display: flex; flex-direction: column; flex: 1; }
+    .card-content { padding: 15px; }
     .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 14px; color: var(--text-muted);}
-    .card-title { font-size: 16px; font-weight: bold; margin: 0 0 10px 0; line-height: 1.3; }
-    .card-text { font-size: 14px; color: var(--text-muted); margin-bottom: 15px; flex: 1; }
-    .card-footer { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 10px; }
+    .card-title { font-size: 16px; font-weight: bold; margin: 0 0 10px 0; }
+    .card-text { font-size: 14px; color: var(--text-muted); }
     
     /* Auth Forms */
     .auth-form {
         background-color: var(--card-bg);
         padding: 30px;
         border-radius: 12px;
-        width: 300px;
-        margin: 50px auto;
+        width: 100%;
+        max-width: 350px;
+        margin: 40px auto;
         border: 1px solid var(--border-color);
+        box-sizing: border-box;
     }
-    .auth-form h2 { margin-top: 0; text-align: center; color: var(--accent-color); }
+    .auth-form h2 { margin-top: 0; text-align: center; color: var(--text-main); }
     .auth-form input {
         width: 100%;
-        padding: 10px;
+        padding: 12px;
         margin-bottom: 15px;
         background-color: var(--bg-color);
         border: 1px solid var(--border-color);
@@ -208,28 +209,78 @@ CSS_STYLES = """
         color: white;
         box-sizing: border-box;
     }
-    .auth-form button { width: 100%; }
-    .auth-links { text-align: center; margin-top: 15px; font-size: 14px; }
+    .auth-form button { width: 100%; justify-content: center; }
+    .auth-links { text-align: center; margin-top: 15px; font-size: 14px; color: var(--text-muted); }
     .auth-links a { color: var(--accent-color); text-decoration: none; }
-    .error { color: #ff5555; text-align: center; margin-bottom: 10px; font-size: 14px; }
+    .error { color: #ff5555; text-align: center; margin-bottom: 15px; font-size: 14px; }
+
+    /* Bottom Navigation (Mobile) */
+    .bottom-nav {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: var(--bg-color);
+        border-top: 1px solid var(--border-color);
+        justify-content: space-around;
+        align-items: center;
+        padding: 10px 0;
+        z-index: 100;
+    }
+    .bottom-nav a {
+        color: var(--text-muted);
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 10px;
+        gap: 4px;
+    }
+    .bottom-nav a.active { color: var(--accent-color); }
+    .bottom-nav .plus-btn {
+        background-color: var(--accent-color);
+        color: white;
+        padding: 10px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: translateY(-10px); /* Приподнимаем кнопку */
+        box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4);
+    }
+    .bottom-nav .plus-btn svg { width: 28px; height: 28px; }
+    
+    /* Media Queries (Телефоны) */
+    @media (max-width: 768px) {
+        .sidebar { display: none; }
+        .bottom-nav { display: flex; }
+        .search-container { display: none; /* Скрываем поиск на мобилках */ }
+        .topbar { padding: 10px 15px; }
+        .feed { padding: 15px; }
+        .auth-form { margin: 20px auto; }
+        .desktop-btn { display: none; } /* Скрываем кнопку "Новый пост" в топбаре */
+    }
 </style>
 """
 
-def render_layout(content_html, user):
+def render_layout(content_html, user, active_page="feed"):
     user_html = ""
     if user:
         user_html = f"""
-        <div class="user-profile">
-            <a href="/post" class="btn-green">+ Новый пост</a>
-            <span>{user['avatar']} {user['name']}</span>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <a href="/post" class="btn-primary desktop-btn">{SVG_PLUS} Новый пост</a>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                {SVG_AVATAR} <span>{user['name']}</span>
+            </div>
             <a href="/logout" style="color:var(--text-muted); text-decoration:none; font-size:14px;">Выйти</a>
         </div>
         """
     else:
         user_html = f"""
-        <div class="user-profile">
-            <a href="/login" style="color:white; text-decoration:none;">Вход</a>
-            <a href="/register" class="btn-green">Регистрация</a>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <a href="/login" style="color:var(--text-main); text-decoration:none; font-weight: 500;">Вход</a>
+            <a href="/register" class="btn-primary">Регистрация</a>
         </div>
         """
 
@@ -238,26 +289,39 @@ def render_layout(content_html, user):
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>sol.id</title>
         {CSS_STYLES}
     </head>
     <body>
         <div class="topbar">
-            <a href="/" class="logo">👽 sol.id</a>
-            <input type="text" class="search-bar" placeholder="Поиск">
+            <a href="/" class="logo">{SVG_LOGO} sol.id</a>
+            <div class="search-container">
+                {SVG_SEARCH}
+                <input type="text" class="search-bar" placeholder="Поиск">
+            </div>
             {user_html}
         </div>
+        
         <div class="container">
             <div class="sidebar">
-                <a href="/" class="active">🏠 Лента</a>
-                <a href="#">📺 Подписки</a>
-                <a href="#">🎮 Игры</a>
-                <a href="#">📱 Приложения</a>
+                <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} Лента</a>
+                <a href="#">{SVG_SUBS} Подписки</a>
+                <a href="#">{SVG_GAMES} Игры</a>
+                <a href="#">{SVG_APPS} Приложения</a>
             </div>
             <div class="feed">
                 {content_html}
             </div>
+        </div>
+
+        <!-- Мобильная навигация -->
+        <div class="bottom-nav">
+            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} Лента</a>
+            <a href="#">{SVG_SUBS} Подписки</a>
+            <a href="/post" class="plus-btn">{SVG_PLUS}</a>
+            <a href="#">{SVG_BELL} Уведомления</a>
+            <a href="/login" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} Профиль</a>
         </div>
     </body>
     </html>
@@ -270,31 +334,43 @@ def render_layout(content_html, user):
 @app.get("/", response_class=HTMLResponse)
 async def read_feed(request: Request):
     user = get_current_user(request)
-    username = user["name"] if user else None
     
-    cards_html = ""
-    for post in posts_db:
-        cards_html += f"""
-        <div class="card">
-            <div class="card-img" style="{post['image_css']}">
-                <span class="card-tag">▶ {post['tag']}</span>
-            </div>
-            <div class="card-content">
-                <div class="card-header">
-                    <span>{post['avatar']}</span>
-                    <span>{post['author']}</span>
-                </div>
-                <h3 class="card-title">{post['title']}</h3>
-                <p class="card-text">{post['content']}</p>
-                <div class="card-footer">
-                    <span>👁 {post['views']} ♡ {post['likes']} 💬 {post['comments']}</span>
-                    <span>{post['time']}</span>
-                </div>
-            </div>
+    # Хедер ленты (Все / Подписки)
+    feed_header = f"""
+    <div class="feed-header">
+        <a href="/" class="active">Все</a>
+        <a href="#">Подписки</a>
+    </div>
+    """
+    
+    if not posts_db:
+        # Пустое состояние, если нет постов
+        content_html = feed_header + """
+        <div class="empty-state">
+            <h3>Здесь пока пусто</h3>
+            <p>Станьте первым, кто опубликует пост на sol.id!</p>
         </div>
         """
+    else:
+        # Рендер постов (когда они появятся)
+        cards_html = ""
+        for post in posts_db:
+            cards_html += f"""
+            <div class="card">
+                <div class="card-content">
+                    <div class="card-header">
+                        {SVG_AVATAR}
+                        <span>{post['author']}</span>
+                        <span style="margin-left: auto;">{post['time']}</span>
+                    </div>
+                    <h3 class="card-title">{post['title']}</h3>
+                    <p class="card-text">{post['content']}</p>
+                </div>
+            </div>
+            """
+        content_html = feed_header + cards_html
     
-    return render_layout(cards_html, user)
+    return render_layout(content_html, user)
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page():
@@ -303,12 +379,12 @@ async def register_page():
             <h2>Регистрация на sol.id</h2>
             <input type="text" name="username" placeholder="Логин" required>
             <input type="password" name="password" placeholder="Пароль" required>
-            <button type="submit" class="btn-green">Создать аккаунт</button>
+            <button type="submit" class="btn-primary">Создать аккаунт</button>
             <div class="auth-links">
                 Уже есть аккаунт? <a href="/login">Войти</a>
             </div>
         </form>
-    """, None)
+    """, None, "profile")
 
 @app.post("/register")
 async def register_user(username: str = Form(...), password: str = Form(...)):
@@ -319,13 +395,13 @@ async def register_user(username: str = Form(...), password: str = Form(...)):
                 <div class="error">Пользователь уже существует</div>
                 <input type="text" name="username" placeholder="Логин" required>
                 <input type="password" name="password" placeholder="Пароль" required>
-                <button type="submit" class="btn-green">Создать аккаунт</button>
+                <button type="submit" class="btn-primary">Создать аккаунт</button>
             </form>
-        """, None)
+        """, None, "profile")
     
+    # Хешируем пароль безопасным алгоритмом pbkdf2_sha256
     users_db[username] = {
         "password": pwd_context.hash(password),
-        "avatar": "👤",
         "name": username
     }
     return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
@@ -337,12 +413,12 @@ async def login_page(request: Request):
             <h2>Вход в sol.id</h2>
             <input type="text" name="username" placeholder="Логин" required>
             <input type="password" name="password" placeholder="Пароль" required>
-            <button type="submit" class="btn-green">Войти</button>
+            <button type="submit" class="btn-primary">Войти</button>
             <div class="auth-links">
                 Нет аккаунта? <a href="/register">Зарегистрироваться</a>
             </div>
         </form>
-    """, None)
+    """, None, "profile")
 
 @app.post("/login")
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -354,11 +430,10 @@ async def login_user(request: Request, username: str = Form(...), password: str 
                 <div class="error">Неверный логин или пароль</div>
                 <input type="text" name="username" placeholder="Логин" required>
                 <input type="password" name="password" placeholder="Пароль" required>
-                <button type="submit" class="btn-green">Войти</button>
+                <button type="submit" class="btn-primary">Войти</button>
             </form>
-        """, None)
+        """, None, "profile")
 
-    # Создаем сессию
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
     
@@ -383,21 +458,16 @@ async def create_post_page(request: Request):
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
         
     return render_layout("""
-        <form class="auth-form" action="/post" method="post" style="width: 400px;">
+        <form class="auth-form" action="/post" method="post">
             <h2>Новый пост</h2>
             <input type="text" name="title" placeholder="Заголовок" required>
             <input type="text" name="content" placeholder="Текст поста" required>
-            <select name="tag" style="width: 100%; padding: 10px; margin-bottom: 15px; background: var(--bg-color); color: white; border: 1px solid var(--border-color); border-radius: 6px;">
-                <option value="Текст">Текст</option>
-                <option value="Видео">Видео</option>
-                <option value="Картинка">Картинка</option>
-            </select>
-            <button type="submit" class="btn-green">Опубликовать</button>
+            <button type="submit" class="btn-primary">Опубликовать</button>
         </form>
-    """, user)
+    """, user, "profile")
 
 @app.post("/post")
-async def create_post(request: Request, title: str = Form(...), content: str = Form(...), tag: str = Form(...)):
+async def create_post(request: Request, title: str = Form(...), content: str = Form(...)):
     user = get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -405,11 +475,9 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     new_post = {
         "id": str(len(posts_db) + 1),
         "author": user["name"],
-        "avatar": user["avatar"],
         "title": title,
         "content": content,
-        "image_css": "background: linear-gradient(135deg, #222, #444);", # Рандомная заглушка
-        "likes": 0, "comments": 0, "views": "0", "time": "Только что", "tag": tag
+        "time": "Только что"
     }
     # Добавляем в начало списка
     posts_db.insert(0, new_post)
