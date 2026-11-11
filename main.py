@@ -77,7 +77,9 @@ SVG_SETTINGS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" st
 SVG_LOGOUT = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>"""
 SVG_EYE = """<svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
 SVG_EYE_OFF = """<svg class="eye-closed" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
-SVG_BACK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
+SVG_BACK = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
+SVG_LEFT = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>"""
+SVG_RIGHT = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>"""
 SVG_IMAGE = """<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>"""
 SVG_SAVE = """<svg class="icon-save" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_SAVED = """<svg class="icon-saved" width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
@@ -220,8 +222,12 @@ a{color:var(--accent-color);text-decoration:none;}
 
 /* Пост */
 .post-view{display:flex;gap:25px;overflow:hidden;background:transparent;align-items:flex-start;width:100%;}
-.post-media{flex:2;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:300px;}
-.post-media img{max-width:100%;max-height:75vh;object-fit:contain;}
+.post-media{flex:2;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
+.post-media img{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}
+.carousel-nav-btn{position:absolute;top:40%;transform:translateY(-50%);background:rgba(0,0,0,0.6);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
+.carousel-nav-btn:hover{background:rgba(0,0,0,0.9);}
+.carousel-nav-btn.left{left:15px;}
+.carousel-nav-btn.right{right:15px;}
 .post-details{flex:1;min-width:320px;display:flex;flex-direction:column;padding:0;}
 .post-top-info{flex-shrink:0;}
 .post-author{display:flex;align-items:center;gap:12px;margin-bottom:15px;}
@@ -315,7 +321,6 @@ input:checked+.slider:before{transform:translateX(22px);}
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}}
 
 @media(max-width:900px){
-    /* Полный переход на flex для надежности */
     .app-layout{display:flex;flex-direction:column;width:100%;min-height:100vh;overflow-x:hidden;}
     .topbar{position:fixed;top:0;left:0;width:100%;height:60px;padding:0 15px;gap:10px;z-index:100;}
     .topbar-left{width:auto;}
@@ -327,48 +332,40 @@ input:checked+.slider:before{transform:translateX(22px);}
     .topbar-right .user-menu-container{display:none!important;}
     .sidebar{display:none;}
     
-    /* Основной контент */
     .main-content{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;}
     .bottom-nav{display:flex;}
     
-    /* Профиль (полный фикс) */
     .profile-header{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;}
     .profile-avatar{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 0 15px 0;}
     .profile-details{display:flex;flex-direction:column;align-items:center;width:100%;}
     .profile-details h1{font-size:24px;text-align:center;margin-bottom:5px;word-break:break-word;}
     .profile-details p{font-size:14px;text-align:center;}
     .profile-header > div:last-child{position:absolute;top:20px;right:15px;margin:0!important;}
-    
-    /* Табы */
     .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:15px;}
     
-    /* Карточки постов от края до края (и в ленте, и в профиле) */
     .feed-grid{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}
     .feed-card{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}
     .feed-card-img-container{width:100%;height:auto;aspect-ratio:4/3;}
     .feed-card-info{padding:15px;width:100%;}
     .feed-card-meta{flex-wrap:wrap;gap:10px;}
     
-    /* Настройки */
     .editor-card{width:100%!important;max-width:100%!important;padding:20px 15px!important;margin:0!important;border-radius:0;border-left:none;border-right:none;}
     .tabs{padding:0 15px;margin-bottom:0;border-bottom:none;}
     .tab-content{padding:15px;}
     
-    /* Создание поста */
     .create-layout{flex-direction:column;width:100%!important;padding:15px;gap:15px;}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
     
-    /* Просмотр поста */
+    /* Просмотр поста (фикс мобилки) */
     .post-view{display:flex;flex-direction:column;padding:15px;gap:15px;height:auto;width:100%;}
-    .post-media{flex:none;width:100%;height:auto;max-height:60vh;min-height:250px;border-radius:12px;margin-bottom:0;}
-    .post-media img{width:100%;max-height:60vh;object-fit:contain;}
+    .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:12px;margin-bottom:0;}
+    .carousel-nav-btn{top:45%;width:36px;height:36px;}
     .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;}
     .post-title{font-size:22px;}
     .actions-row{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;}
     .comments-section{width:100%;padding:15px 0;border-top:1px solid var(--border-color);flex:none;}
     
-    /* Утилиты */
     .toast{top:20px;left:50%;right:auto;transform:translateX(-50%);}
     .toast.show{transform:translateX(-50%) translateY(10px);}
     .mobile-only{display:flex!important;}
@@ -509,7 +506,7 @@ function updateInputAndRender(){
     }
 }
 
-// ИСПРАВЛЕННАЯ ВСТАВКА ИЗ БУФЕРА (берет только ПЕРВУЮ картинку)
+// ИСПРАВЛЕННАЯ ВСТАВКА ИЗ БУФЕРА
 document.addEventListener('paste', async function(e) {
     if (!document.getElementById('file-input')) return; 
 
@@ -519,7 +516,7 @@ document.addEventListener('paste', async function(e) {
     for (var index = 0; index < items.length; index++) {
         if (items[index].kind === 'file' && items[index].type.includes('image/')) {
             imageFile = items[index].getAsFile();
-            break; // Берем только первую картинку!
+            break;
         }
     }
 
@@ -1102,13 +1099,24 @@ async def view_post(request: Request, post_id: str):
     save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
     save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
     
-    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0; display:flex; height:40px;" onsubmit="confirmDeletePost(event, this);"><button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
+    # Кнопка удаления (для шапки)
+    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="confirmDeletePost(event, this);"><button type="submit" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center;">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
     
+    # Верхняя панель (назад и удалить)
+    top_bar = f"""<div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+        <a href="/" style="display:flex; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>
+        {delete_btn}
+    </div>"""
+
     if post['images']:
-        media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
-        if len(post['images']) > 1:
-            media_html += f"""<div style="position:absolute; bottom:20px; left:0; width:100%; display:flex; justify-content:center; gap:15px;"><button class="btn-primary" style="padding:8px 16px; background:rgba(0,0,0,0.7); color:#fff; border:none;" onclick="changeImg(-1)">&lt;</button><button class="btn-primary" style="padding:8px 16px; background:rgba(0,0,0,0.7); color:#fff; border:none;" onclick="changeImg(1)">&gt;</button></div>"""
-    else: media_html = f'<div style="color:#555;">{SVG_IMAGE}</div>'
+        imgs = "".join([f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
+        nav_btns = f'<div class="carousel-nav-btn left" onclick="changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
+        media_html = f"""<div class="post-media" style="position:relative;">
+            {imgs}
+            {nav_btns}
+        </div>"""
+    else: 
+        media_html = f'<div class="post-media" style="display:flex; align-items:center; justify-content:center; color:#555; aspect-ratio:4/3;">{SVG_IMAGE}</div>'
     
     if post.get('allow_comments', True):
         if user: comments_input_html = f"""<form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;"><input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;"><button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button></form>"""
@@ -1123,7 +1131,39 @@ async def view_post(request: Request, post_id: str):
     
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
     date_str = post.get('created_at', '')
-    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])} • {date_str}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div>"""
+    
+    content = f"""{top_bar}
+    <div class="post-view">
+        {media_html}
+        <div class="post-details">
+            <div class="post-top-info">
+                <div class="post-author">
+                    <a href="/@{post['author']}"><img src="{ava}"></a>
+                    <div>
+                        <a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a>
+                        <div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])} • {date_str}</div>
+                    </div>
+                </div>
+                <div class="post-title selectable">{html.escape(post['title'])}</div>
+                <div class="post-desc selectable">{html.escape(post['content'])}</div>
+                <div class="actions-row">
+                    <div class="vote-controls">
+                        <button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button>
+                        <span class="vote-count" id="vote-count">{score}</span>
+                        <button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button>
+                    </div>
+                    <button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button>
+                    <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
+                </div>
+            </div>
+            <div class="comments-section">
+                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>
+                {comments_input_html}
+                <div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
+                <div id="comments-list">{comments_list_html}</div>
+            </div>
+        </div>
+    </div>"""
     return HTMLResponse(content=render_layout(content, user, request, "feed", html.escape(post['title'])))
 
 if __name__ == "__main__":
