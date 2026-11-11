@@ -6,6 +6,7 @@ import base64
 import html
 import json
 from typing import List
+from datetime import datetime
 
 app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -21,7 +22,7 @@ TRANSLATIONS = {
     "en": {
         "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login",
         "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish",
-        "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload, or paste from clipboard",
+        "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files or paste (Ctrl+V)",
         "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
         "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
@@ -40,7 +41,7 @@ TRANSLATIONS = {
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
         "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать",
-        "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки, или вставьте из буфера",
+        "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы или вставьте (Ctrl+V)",
         "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
         "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
@@ -88,6 +89,7 @@ SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke
 SVG_CAMERA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>"""
 SVG_CHECK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 SVG_LOCK = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>"""
+SVG_CALENDAR = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>"""
 
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
@@ -157,7 +159,7 @@ a{color:var(--accent-color);text-decoration:none;}
 .app-layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}
 .app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}
 
-/* Верхняя панель (ФИКСИРОВАННАЯ, НЕЗАВИСИМАЯ ОТ САЙДБАРА) */
+/* Верхняя панель */
 .topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}
 .topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;}
 .logo{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}
@@ -227,7 +229,7 @@ a{color:var(--accent-color);text-decoration:none;}
 .post-title{font-size:26px;font-weight:700;margin-bottom:10px;}
 .post-desc{color:#ccc;font-size:16px;margin-bottom:15px;white-space:pre-wrap;line-height:1.5;}
 
-/* Кнопки (чуть ниже, ровные) */
+/* Кнопки */
 .actions-row{display:flex;align-items:center;gap:10px;margin-top:10px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}
 .vote-controls{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;}
 .vote-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s;height:100%;}
@@ -243,33 +245,19 @@ form .action-btn{height:100%;width:100%;}
 .comments-section{flex:1;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}
 
 /* Лента */
-.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
-.feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;}
-.feed-card:hover{border-color:#333;}
-.feed-card-img-container{width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;}
+.feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;transition:border-color .2s;}
+.feed-card:hover{border-color:#444;}
+.feed-card-img-container{width:100%;height:240px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
 .feed-card-img-container img{width:100%;height:100%;object-fit:cover;}
-.feed-card-info{padding:15px;flex:1;display:flex;flex-direction:column;}
-.feed-card-title{font-weight:700;font-size:18px;margin-bottom:10px;line-height:1.3;}
-.feed-card-author{font-size:14px;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-top:auto;}
+.feed-card-info{padding:15px;flex:1;display:flex;flex-direction:column;gap:10px;}
+.feed-card-title{font-weight:700;font-size:18px;line-height:1.3;}
+.feed-card-meta{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--text-muted);margin-top:auto;}
+.feed-card-author{display:flex;align-items:center;gap:8px;}
+.post-date{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);}
 .feed-card-remove-btn{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);border:none;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;}
 .feed-card-remove-btn:hover{background:var(--danger-color);}
-
-/* Бейдж для скрытых постов (по ссылке) */
-.post-badge {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    background: rgba(0,0,0,0.75);
-    color: var(--accent-color);
-    padding: 6px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-    border: 1px solid var(--accent-color);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-}
+.post-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.75);color:var(--accent-color);padding:6px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:10;border:1px solid var(--accent-color);box-shadow:0 2px 5px rgba(0,0,0,0.5);}
 
 /* Создание поста */
 .create-layout{display:flex;gap:30px;width:100%;}
@@ -285,7 +273,7 @@ form .action-btn{height:100%;width:100%;}
 input:checked+.slider{background-color:var(--accent-color);}
 input:checked+.slider:before{transform:translateX(22px);}
 
-/* Оверлеи (Panorama) */
+/* Оверлеи */
 .overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;}
 .overlay img{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);}
 .close-overlay{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10000;line-height:1;}
@@ -338,28 +326,40 @@ input:checked+.slider:before{transform:translateX(22px);}
     .topbar-right .user-menu-container{display:none!important;}
     .mobile-only{display:flex!important;}
     .desktop-only{display:none!important;}
-    .main-content{grid-column:1;padding:15px;padding-bottom:80px;}
+    
+    /* Основной контент на мобилке */
+    .main-content{grid-column:1;padding:10px;padding-bottom:80px;}
     .bottom-nav{display:flex;}
     
-    /* Фикс мобильного отображения поста */
+    /* Полноэкранные карточки постов (от края до края) */
+    .feed-grid { grid-template-columns: 1fr; gap: 15px; }
+    .feed-card { border-radius: 0; border-left: none; border-right: none; border-top: none; border-bottom: 1px solid var(--border-color); background: transparent; }
+    .feed-card-img-container { height: auto; aspect-ratio: 4/3; }
+    .feed-card-info { padding: 15px 10px; }
+    
     .post-view { display: flex; flex-direction: column; height: auto; overflow: visible; gap: 15px; }
     .post-media { flex: none; width: 100%; height: auto; max-height: 60vh; min-height: 250px; border-radius: 12px; margin-bottom: 0; }
     .post-media img { width: 100%; max-height: 60vh; object-fit: contain; }
     .post-details { flex: none; width: 100%; min-width: 0; display: flex; flex-direction: column; }
-    .post-top-info { width: 100%; }
     .actions-row { margin-top: 15px; margin-bottom: 15px; padding: 0; }
     .comments-section { flex: none; width: 100%; padding: 20px 0; border-top: 1px solid var(--border-color); overflow: visible; }
     .toast { top: 20px; left: 50%; right: auto; transform: translateX(-50%); }
     .toast.show { transform: translateX(-50%) translateY(10px); }
     
-    .create-layout{flex-direction:column;}
-    .dropzone{padding:30px;min-height:200px;}
+    /* Фикс UI создания поста и настроек (по скриншотам) */
+    .create-layout { flex-direction: column; width: 100%; gap: 15px; }
+    .dropzone { width: 100%; max-width: 100%; padding: 30px 15px; min-height: 250px; }
+    .create-sidebar { width: 100%; max-width: 100%; padding: 20px; }
+    
+    .editor-card { width: 100%; padding: 20px; }
+    .input-group { width: 100%; }
+    .btn-primary { width: 100%; }
     
     /* Фикс кнопки редактирования профиля на телефоне */
-    .profile-header{flex-direction:column;text-align:center;gap:15px;margin-bottom:20px;}
-    .profile-avatar{width:100px;height:100px;}
-    .profile-details h1{font-size:24px;}
-    .profile-header > div:last-child{position:absolute;top:0;right:0;margin:0!important;}
+    .profile-header { flex-direction: column; text-align: center; gap: 15px; margin-bottom: 20px; }
+    .profile-avatar { width: 100px; height: 100px; }
+    .profile-details h1 { font-size: 24px; }
+    .profile-header > div:last-child { position: absolute; top: 0; right: 0; margin: 0!important; }
 }
 </style>
 """
@@ -423,12 +423,47 @@ function handleSearch(query){
     },300);
 }
 
-function handleFiles(input){
+// Сжатие изображений на клиенте перед отправкой
+function compressImage(file, maxWidth = 1920, maxHeight = 1920) {
+    return new Promise((resolve, reject) => {
+        if (!file.type.startsWith('image/')) return resolve(file);
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > maxWidth) { height = Math.round(height * maxWidth / width); width = maxWidth; }
+                if (height > maxHeight) { width = Math.round(width * maxHeight / height); height = maxHeight; }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(blob => {
+                    const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg', lastModified: Date.now() });
+                    resolve(newFile);
+                }, 'image/jpeg', 0.85);
+            };
+            img.onerror = error => reject(error);
+        };
+        reader.onerror = error => reject(error);
+    });
+}
+
+async function handleFiles(input){
     if(!input.files)return;
     var newFiles=Array.from(input.files);
     for(var i=0;i<newFiles.length;i++){
-        if(filesList.length<3) filesList.push(newFiles[i]);
-        else { showToast(window.TRANSLATIONS.max_files); break; }
+        if(filesList.length<3) {
+            var compressed = await compressImage(newFiles[i]);
+            filesList.push(compressed);
+        } else { 
+            showToast(window.TRANSLATIONS.max_files); 
+            break; 
+        }
     }
     input.value=''; updateInputAndRender();
 }
@@ -459,31 +494,36 @@ function updateInputAndRender(){
     }
 }
 
-// ВСТАВКА ИЗ БУФЕРА (Ctrl+V / Долгое нажатие на мобилке)
-document.addEventListener('paste', function(e) {
-    // Работает только если мы на странице создания поста
+// ВСТАВКА ИЗ БУФЕРА (Исправлено от дублирования)
+document.addEventListener('paste', async function(e) {
     if (!document.getElementById('file-input')) return; 
 
     var items = (e.clipboardData || e.originalEvent.clipboardData).items;
-    var hasImage = false;
+    var filesToPaste = [];
+    
+    // Строго фильтруем только реальные файлы-картинки
+    for (var index in items) {
+        var item = items[index];
+        if (item.kind === 'file' && item.type.includes('image/')) {
+            var blob = item.getAsFile();
+            if (blob) {
+                filesToPaste.push(new File([blob], "pasted_" + Date.now() + ".png", { type: blob.type }));
+            }
+        }
+    }
 
-    for (var i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-            hasImage = true;
-            var blob = items[i].getAsFile();
-            var file = new File([blob], "pasted_image_" + Date.now() + ".png", { type: blob.type });
-            
+    // Добавляем только по одному (или сколько поместится), чтобы избежать спама
+    if (filesToPaste.length > 0) {
+        e.preventDefault();
+        for (var i = 0; i < filesToPaste.length; i++) {
             if (filesList.length < 3) {
-                filesList.push(file);
+                var compressed = await compressImage(filesToPaste[i]);
+                filesList.push(compressed);
             } else {
                 showToast(window.TRANSLATIONS.max_files);
                 break;
             }
         }
-    }
-
-    if (hasImage) {
-        e.preventDefault(); // Предотвращаем стандартную вставку (чтобы не ломалось)
         updateInputAndRender();
     }
 });
@@ -745,7 +785,8 @@ async def search_posts(request: Request, q: str = ""):
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div></div></a>"""
+            date_str = post.get('created_at', '')
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a>"""
         content = f'<h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
 
@@ -763,7 +804,8 @@ async def read_feed(request: Request):
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             score = len(post['votes']['up']) - len(post['votes']['down'])
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}<span style="margin-left:auto; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span></div></div></a>"""
+            date_str = post.get('created_at', '')
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date">{SVG_CALENDAR} {date_str}</div><div style="display:flex;align-items:center;gap:4px;">{SVG_UP} {score}</div></div></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('feed', lang)))
 
@@ -782,7 +824,8 @@ async def saved_posts(request: Request):
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div></div></a></div>"""
+            date_str = post.get('created_at', '')
+            cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a></div>"""
         content = f'<h2 style="margin-bottom:25px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "saved", t('saved', lang)))
 
@@ -825,7 +868,6 @@ async def settings_page(request: Request):
     if not user: return RedirectResponse(url="/login")
     avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
     
-    # Проверка параметра updated для показа уведомления
     updated = request.query_params.get("updated")
     toast_script = f"<script>setTimeout(()=>showToast('{t('profile_updated', lang)}'), 100);</script>" if updated else ""
 
@@ -838,7 +880,7 @@ async def settings_page(request: Request):
         </div>
         <div id="tab-profile" class="tab-content" style="display:block;">
             <div class="editor-card">
-                <form action="/settings/profile" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" style="display:flex; flex-direction:column; gap:15px;">
+                <form action="/settings/profile" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" style="display:flex; flex-direction:column; gap:15px; width: 100%;">
                     <div style="text-align:center;">
                         <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
                             <img id="avatar-preview" src="{avatar_url}">
@@ -852,7 +894,7 @@ async def settings_page(request: Request):
                         <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
                         <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required style="padding:14px;">
                     </div>
-                    <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px; margin-top:5px;">{SVG_SETTINGS} {t('save', lang)}</button>
+                    <button type="submit" class="btn-primary" style="justify-content:center; padding:14px; margin-top:5px;">{SVG_SETTINGS} {t('save', lang)}</button>
                 </form>
             </div>
         </div>
@@ -909,7 +951,18 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         for img in images[:3]:
             b64 = await image_to_base64(img)
             if b64: img_b64_list.append(b64)
-    new_post = {"id": str(uuid.uuid4())[:6], "author": user["username"], "title": title, "content": content, "images": img_b64_list, "visibility": visibility, "votes": {"up": [], "down": []}, "comments": [], "allow_comments": allow_comments}
+    new_post = {
+        "id": str(uuid.uuid4())[:6], 
+        "author": user["username"], 
+        "title": title, 
+        "content": content, 
+        "images": img_b64_list, 
+        "visibility": visibility, 
+        "votes": {"up": [], "down": []}, 
+        "comments": [], 
+        "allow_comments": allow_comments,
+        "created_at": datetime.now().strftime("%d.%m.%Y %H:%M")
+    }
     posts_db.insert(0, new_post)
     return RedirectResponse(url=f"/{new_post['id']}", status_code=status.HTTP_302_FOUND)
 
@@ -997,7 +1050,6 @@ async def view_profile(request: Request, username: str):
     if not profile_user: raise HTTPException(404, "User not found")
     ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
     
-    # Показываем ВСЕ посты, если это сам пользователь, иначе только те, что в ленте
     if current_user and current_user['username'] == username: 
         user_posts = [p for p in posts_db if p['author'] == username]
     else: 
@@ -1006,14 +1058,15 @@ async def view_profile(request: Request, username: str):
     posts_html = ""
     for post in user_posts:
         img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-        
-        # Добавляем бейдж, если пост скрыт (по ссылке)
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
+        date_str = post.get('created_at', '')
         
         posts_html += f"""<a href="/{post['id']}" class="feed-card">
             {badge}
             <div class="feed-card-img-container">{img_html}</div>
-            <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div></div>
+            <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div>
+            <div class="feed-card-meta"><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
+            </div>
         </a>"""
         
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
@@ -1061,7 +1114,8 @@ async def view_post(request: Request, post_id: str):
         comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div><div style="font-size:14px; margin-top:2px;">{c['text']}</div></div></div>{del_btn}</div>"""
     
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
-    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div>"""
+    date_str = post.get('created_at', '')
+    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])} • {date_str}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "feed", html.escape(post['title'])))
 
 if __name__ == "__main__":
