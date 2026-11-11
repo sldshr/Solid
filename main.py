@@ -46,7 +46,8 @@ TRANSLATIONS = {
         "wrong_pass": "Wrong password", "need_name": "Display name is required for registration",
         "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post",
         "edit_post": "Edit Post", "remove_saved": "Remove from saved", "delete_comment": "Delete comment",
-        "edit": "Edit", "update": "Update", "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist."
+        "edit": "Edit", "update": "Update", "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist.",
+        "login_to_comment": "Please log in to leave a comment"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
@@ -65,7 +66,8 @@ TRANSLATIONS = {
         "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя",
         "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены",
         "edit_post": "Редактировать пост", "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий",
-        "edit": "Редактировать", "update": "Обновить", "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует."
+        "edit": "Редактировать", "update": "Обновить", "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует.",
+        "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий"
     }
 }
 
@@ -147,11 +149,14 @@ CSS_STYLES = """
     
     /* Topbar */
     .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; gap: 20px; }
-    .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; transition: width 0.3s; }
+    .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; transition: width 0.3s; overflow: hidden; }
     .app-layout.sidebar-collapsed .topbar-left { width: 80px; }
     
-    .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
-    .menu-toggle { cursor: pointer; padding: 5px; color: var(--text-muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+    .logo span { transition: opacity 0.2s; }
+    .app-layout.sidebar-collapsed .logo span { opacity: 0; width: 0; display: none; }
+    
+    .menu-toggle { cursor: pointer; padding: 5px; color: var(--text-muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
     .menu-toggle:hover { background: var(--card-bg); color: var(--text-main); }
     
     .topbar-center { flex: 1; display: flex; justify-content: center; position: relative; }
@@ -187,14 +192,14 @@ CSS_STYLES = """
     
     /* Sidebar */
     .sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-color); padding: 20px 15px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; transition: padding 0.3s; }
-    .sidebar a { color: var(--text-muted); padding: 12px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; font-size: 16px; font-weight: 500; transition: all 0.2s; }
+    .sidebar a { color: var(--text-muted); padding: 12px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; font-size: 16px; font-weight: 500; transition: all 0.2s; white-space: nowrap; overflow: hidden; }
     .sidebar a:hover:not(.active), .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
     .sidebar a.active svg { color: var(--accent-color); }
     .sidebar a.active { pointer-events: none; }
     
     .app-layout.sidebar-collapsed .sidebar { padding: 20px 10px; align-items: center; }
     .app-layout.sidebar-collapsed .sidebar a { justify-content: center; padding: 15px 0; width: 100%; }
-    .app-layout.sidebar-collapsed .sidebar span { display: none; }
+    .app-layout.sidebar-collapsed .sidebar a span { display: none; }
     .app-layout.sidebar-collapsed .sidebar svg { margin: 0; }
     
     /* Main Content */
@@ -253,9 +258,9 @@ CSS_STYLES = """
     
     /* Create Post */
     .create-layout { display: flex; gap: 30px; max-width: 1100px; margin: 0 auto; width: 100%; }
-    .dropzone { flex: 2; border: 2px dashed var(--border-color); border-radius: 16px; padding: 50px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px; transition: border-color 0.2s; }
+    .dropzone { flex: 2; border: 2px dashed var(--border-color); border-radius: 16px; padding: 50px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px; transition: border-color 0.2s; cursor: pointer; }
     .dropzone.dragover { border-color: var(--accent-color); background: rgba(59, 130, 246, 0.05); }
-    .file-preview { display: flex; align-items: center; gap: 15px; background: var(--bg-color); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 15px; width: 100%; text-align: left; }
+    .file-preview { display: flex; align-items: center; gap: 15px; background: var(--bg-color); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 15px; width: 100%; text-align: left; cursor: default; }
     .file-preview img { width: 50px; height: 50px; object-fit: cover; border-radius: 6px; }
     .create-sidebar { flex: 1; background: var(--card-bg); padding: 30px; border-radius: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
 
@@ -273,11 +278,10 @@ CSS_STYLES = """
     .close-overlay { position: absolute; top: 20px; right: 30px; font-size: 40px; color: #fff; cursor: pointer; background: none; border: none; }
 
     /* Mobile Nav */
-    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 10px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 10px); }
-    .bottom-nav a { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); gap: 4px; width: 60px; text-decoration: none; }
+    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 12px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 12px); }
+    .bottom-nav a { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); width: 60px; text-decoration: none; }
     .bottom-nav a.active { color: var(--accent-color); pointer-events: none; }
-    .bottom-nav a span { display: none; } /* Hide text */
-    .bottom-nav a svg { width: 26px; height: 26px; }
+    .bottom-nav a svg { width: 32px; height: 32px; } /* Increased size */
     
     /* Mobile Profile Menu */
     .mobile-profile-menu { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card-bg); z-index: 1000; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; transform: translateY(100%); transition: transform 0.3s ease-in-out; flex-direction: column; gap: 15px; padding-bottom: env(safe-area-inset-bottom, 20px); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
@@ -308,7 +312,7 @@ CSS_STYLES = """
         .topbar { padding: 0 15px; gap: 10px; height: 60px; }
         .topbar-left { width: auto; }
         .logo span { display: none; }
-        .menu-toggle { display: none !important; } /* Hide on mobile */
+        .menu-toggle { display: none !important; }
         .topbar-center { display: none; } 
         .topbar-right { width: auto; }
         
@@ -317,8 +321,17 @@ CSS_STYLES = """
         
         .mobile-search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
 
+        /* Reordering Post View on Mobile */
         .post-view { flex-direction: column; padding: 15px; gap: 15px; }
-        .post-media { min-height: 250px; max-height: 50vh; }
+        .post-details { display: contents; } /* Flattens children into .post-view */
+        
+        .post-author { order: 1; margin-bottom: 0; }
+        .post-media { order: 2; width: 100%; max-height: 50vh; min-height: 200px; }
+        .post-title { order: 3; margin-bottom: 0; }
+        .post-desc { order: 4; margin-bottom: 0; }
+        .actions-row { order: 5; margin-bottom: 0; }
+        .comments-section { order: 6; width: 100%; border-top: 1px solid var(--border-color); padding-top: 15px; }
+
         .create-layout { flex-direction: column; }
         .dropzone { padding: 30px; min-height: 250px; }
         
@@ -404,9 +417,13 @@ CSS_STYLES = """
         }, 300);
     }
 
-    // Multiple File Upload Logic (FIXED)
+    // --- FILE UPLOAD FIX ---
     let filesList = [];
+    
     function handleFiles(input) {
+        // Prevent double triggering if it's not the file input
+        if (!input.files) return;
+
         const newFiles = Array.from(input.files);
         for (let file of newFiles) {
             if (filesList.length < 3) {
@@ -416,11 +433,17 @@ CSS_STYLES = """
                 break;
             }
         }
+        
+        // Reset the input so the same file can be selected again if removed
+        input.value = ''; 
         updateInputAndRender();
-        input.value = ''; // Reset to allow selecting same file again if removed
     }
 
-    function removeFile(index) {
+    function removeFile(index, event) {
+        if(event) {
+            event.stopPropagation(); // Prevent clicking the dropzone
+            event.preventDefault();
+        }
         filesList.splice(index, 1);
         updateInputAndRender();
     }
@@ -436,23 +459,25 @@ CSS_STYLES = """
         previewContainer.innerHTML = '';
         
         if (filesList.length === 0) {
-            document.getElementById('dropzone-text').style.display = 'flex';
-            document.getElementById('dropzone-text').style.flexDirection = 'column';
-            document.getElementById('dropzone-text').style.alignItems = 'center';
+            const dropText = document.getElementById('dropzone-text');
+            if(dropText) dropText.style.display = 'flex';
         } else {
-            document.getElementById('dropzone-text').style.display = 'none';
+            const dropText = document.getElementById('dropzone-text');
+            if(dropText) dropText.style.display = 'none';
+            
             filesList.forEach((file, index) => {
                 let reader = new FileReader();
                 reader.onload = function(e) {
                     let div = document.createElement('div');
                     div.className = 'file-preview';
+                    div.onclick = (e) => e.stopPropagation(); // Don't trigger file dialog
                     div.innerHTML = `
                         <img src="${e.target.result}">
                         <div style="flex:1; overflow:hidden;">
                             <div style="font-size:14px; color:#fff; font-weight:500; text-overflow:ellipsis; white-space:nowrap; overflow:hidden;">${file.name}</div>
                             <div style="font-size:12px; color:var(--text-muted);">${(file.size/1024).toFixed(1)} KB</div>
                         </div>
-                        <span style="cursor:pointer; color:var(--text-muted); font-size:24px; padding:0 10px;" onclick="removeFile(${index})">×</span>
+                        <span style="cursor:pointer; color:var(--text-muted); font-size:24px; padding:0 10px;" onclick="removeFile(${index}, event)">×</span>
                     `;
                     previewContainer.appendChild(div);
                 }
@@ -998,15 +1023,16 @@ async def create_post_page(request: Request):
     <h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('new_post', lang)}</h2>
     <form action="/write" method="post" enctype="multipart/form-data" class="create-layout">
         
-        <div class="dropzone" id="dropzone">
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
             <div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">
                 {SVG_IMAGE}
                 <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div>
                 <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div>
-                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">{t('choose_files', lang)}</div>
+                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div>
             </div>
             <div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div>
-            <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)">
+            <!-- Hidden file input -->
+            <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()">
         </div>
 
         <div class="create-sidebar">
@@ -1071,98 +1097,6 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     }
     posts_db.insert(0, new_post)
     return RedirectResponse(url=f"/post/{new_post['id']}", status_code=status.HTTP_302_FOUND)
-
-@app.get("/edit_post/{post_id}", response_class=HTMLResponse)
-async def edit_post_page(request: Request, post_id: str):
-    user = get_current_user(request)
-    lang = get_lang(request)
-    if not user: return RedirectResponse(url="/login")
-    
-    post = next((p for p in posts_db if p['id'] == post_id), None)
-    if not post or post['author'] != user['username']:
-        raise HTTPException(403, "Access denied")
-        
-    vis_feed_style = "border-color:var(--accent-color); color:var(--accent-color);" if post['visibility'] == 'feed' else "border-color:var(--border-color); color:var(--text-muted);"
-    vis_link_style = "border-color:var(--accent-color); color:var(--accent-color);" if post['visibility'] == 'link' else "border-color:var(--border-color); color:var(--text-muted);"
-    
-    checked = "checked" if post.get('allow_comments', True) else ""
-    
-    content = f"""
-    <h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('edit_post', lang)}</h2>
-    <form action="/edit_post/{post_id}" method="post" enctype="multipart/form-data" class="create-layout">
-        
-        <div class="dropzone" id="dropzone">
-            <div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">
-                {SVG_IMAGE}
-                <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div>
-                <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div>
-                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">{t('choose_files', lang)}</div>
-                <p style="margin-top:10px; font-size:12px; color:var(--accent-color);">Оставьте пустым, чтобы сохранить текущие фото</p>
-            </div>
-            <div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div>
-            <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)">
-        </div>
-
-        <div class="create-sidebar">
-            <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label>
-                <input type="text" name="title" value="{post['title']}" required style="padding:14px;">
-            </div>
-            
-            <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
-                <textarea name="content" style="min-height:120px; padding:14px;">{post['content']}</textarea>
-            </div>
-
-            <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label>
-                <div style="display:flex; gap:10px;">
-                    <button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; {vis_feed_style} cursor:pointer; font-family:inherit; font-size:15px; border:1px solid;">
-                        {SVG_EYE} {t('in_feed', lang)}
-                    </button>
-                    <button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; {vis_link_style} cursor:pointer; font-family:inherit; font-size:15px; border:1px solid;">
-                        {SVG_LINK} {t('by_link', lang)}
-                    </button>
-                </div>
-                <input type="hidden" name="visibility" id="vis-input" value="{post['visibility']}">
-            </div>
-
-            <div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label>
-                <label class="switch">
-                    <input type="checkbox" name="allow_comments" {checked}>
-                    <span class="slider"></span>
-                </label>
-            </div>
-
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_SETTINGS} {t('update', lang)}</button>
-        </div>
-    </form>
-    """
-    return HTMLResponse(content=render_layout(content, user, request, "write"))
-
-@app.post("/edit_post/{post_id}")
-async def update_post(request: Request, post_id: str, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
-    user = get_current_user(request)
-    if not user: raise HTTPException(401)
-    
-    post = next((p for p in posts_db if p['id'] == post_id), None)
-    if not post or post['author'] != user['username']:
-        raise HTTPException(403, "Access denied")
-        
-    post['title'] = title
-    post['content'] = content
-    post['visibility'] = visibility
-    post['allow_comments'] = allow_comments
-    
-    if images and images[0].filename:
-        img_b64_list = []
-        for img in images[:3]:
-            b64 = await image_to_base64(img)
-            if b64: img_b64_list.append(b64)
-        post['images'] = img_b64_list
-        
-    return RedirectResponse(url=f"/post/{post_id}", status_code=status.HTTP_302_FOUND)
 
 # --- API Endpoints for AJAX ---
 @app.post("/api/vote/{post_id}/{action}")
@@ -1296,10 +1230,6 @@ async def view_post(request: Request, post_id: str):
         <button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button>
     </form>
     ''' if user and user['username'] == post['author'] else ''
-    
-    edit_btn = f'''
-    <a href="/edit_post/{post_id}" class="action-btn">{SVG_SETTINGS}</a>
-    ''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
         media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:70vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
@@ -1324,12 +1254,19 @@ async def view_post(request: Request, post_id: str):
         media_html = f'<div style="color:#555;">{SVG_IMAGE}</div>'
 
     if post.get('allow_comments', True):
-        comments_input_html = f"""
-        <form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;">
-            <input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;">
-            <button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button>
-        </form>
-        """
+        if user:
+            comments_input_html = f"""
+            <form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;">
+                <input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;">
+                <button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button>
+            </form>
+            """
+        else:
+            comments_input_html = f"""
+            <div style="background:var(--bg-color); padding:15px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); text-align:center;">
+                <a href="/login" class="btn-primary" style="display:inline-flex;">{SVG_USER} {t('login_to_comment', lang)}</a>
+            </div>
+            """
     else:
         comments_input_html = f'<div style="background:rgba(239,68,68,0.1); color:var(--danger-color); padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; font-weight:500;">{t("comments_disabled", lang)}</div>'
 
@@ -1383,7 +1320,6 @@ async def view_post(request: Request, post_id: str):
                 
                 <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
                 
-                {edit_btn}
                 {delete_btn}
             </div>
             
