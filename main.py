@@ -46,7 +46,8 @@ TRANSLATIONS = {
         "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post",
         "edit_post": "Edit Post", "remove_saved": "Remove from saved", "delete_comment": "Delete comment",
         "edit": "Edit", "update": "Update", "404_title": "Page Not Found", "404_desc": "The page you are looking for does not exist.",
-        "login_to_comment": "Please log in to leave a comment", "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?"
+        "login_to_comment": "Please log in to leave a comment", "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?",
+        "crop_avatar": "Crop Avatar", "zoom": "Zoom"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
@@ -66,7 +67,8 @@ TRANSLATIONS = {
         "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены",
         "edit_post": "Редактировать пост", "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий",
         "edit": "Редактировать", "update": "Обновить", "404_title": "Страница не найдена", "404_desc": "Страница, которую вы ищете, не существует.",
-        "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий", "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?"
+        "login_to_comment": "Пожалуйста, войдите, чтобы оставить комментарий", "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?",
+        "crop_avatar": "Настройка аватарки", "zoom": "Приближение"
     }
 }
 
@@ -134,12 +136,8 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    self.addEventListener('install', (e) => {
-        self.skipWaiting();
-    });
-    self.addEventListener('fetch', (e) => {
-        e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-    });
+    self.addEventListener('install', (e) => { self.skipWaiting(); });
+    self.addEventListener('fetch', (e) => { e.respondWith(fetch(e.request).catch(() => caches.match(e.request))); });
     """
     return Response(content=sw_code, media_type="application/javascript")
 
@@ -180,7 +178,8 @@ CSS_STYLES = """
     .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; transition: width 0.3s; overflow: hidden; }
     .app-layout.sidebar-collapsed .topbar-left { width: 80px; }
     
-    .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+    .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; white-space: nowrap; flex-shrink: 0; }
+    .logo svg { flex-shrink: 0; }
     .logo span { transition: opacity 0.2s; }
     .app-layout.sidebar-collapsed .logo span { opacity: 0; width: 0; display: none; }
     
@@ -207,11 +206,12 @@ CSS_STYLES = """
     
     /* User Dropdown */
     .user-menu-container { position: relative; }
-    .user-menu-btn { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 4px; border-radius: 50%; border: none; }
+    .user-menu-btn { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 4px; border-radius: 50%; border: none; outline: none; }
+    .user-menu-btn:focus { outline: none; box-shadow: none; }
     .user-menu-btn:hover { background: var(--card-bg); }
     
     /* Rounded Avatars */
-    .user-avatar-small { width: 36px; height: 36px; border-radius: 50% !important; object-fit: cover; background: #333; display: block; }
+    .user-avatar-small { width: 36px; height: 36px; border-radius: 50% !important; object-fit: cover; background: #333; display: block; border: none; outline: none; }
     
     .dropdown-menu { display: none; position: absolute; right: 0; top: 50px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 200; overflow: hidden; }
     .dropdown-header { padding: 15px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color); }
@@ -251,7 +251,7 @@ CSS_STYLES = """
     
     /* Profile */
     .profile-header { margin-bottom: 30px; display: flex; align-items: center; gap: 25px; }
-    .profile-avatar { width: 140px; height: 140px; border-radius: 50% !important; border: 4px solid var(--card-bg); object-fit: cover; background: #333; }
+    .profile-avatar { width: 140px; height: 140px; border-radius: 50% !important; border: none; outline: none; box-shadow: none; object-fit: cover; background: #333; }
     .profile-details h1 { font-size: 32px; margin-bottom: 5px; font-weight: 700; }
     .profile-details p { color: var(--text-muted); font-size: 16px; }
     
@@ -265,7 +265,7 @@ CSS_STYLES = """
     .post-media { flex: 2; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; cursor: zoom-in; height: 100%; }
     .post-media img { max-width: 100%; max-height: 100%; object-fit: contain; }
     
-    .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; height: 100%; background: var(--card-bg); border-radius: 16px; padding: 25px; }
+    .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; height: 100%; background: transparent; padding: 0; }
     
     .post-top-info { flex-shrink: 0; }
     .post-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
@@ -342,7 +342,7 @@ CSS_STYLES = """
     .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 12px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 12px); }
     .bottom-nav a { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); width: 60px; text-decoration: none; }
     .bottom-nav a.active { color: var(--accent-color); pointer-events: none; }
-    .bottom-nav a svg { width: 32px; height: 32px; }
+    .bottom-nav a svg { width: 32px; height: 32px; margin-top: -8px; } /* Raised icons */
     
     /* Mobile Profile Menu */
     .mobile-profile-menu { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card-bg); z-index: 1000; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; transform: translateY(100%); transition: transform 0.3s ease-in-out; flex-direction: column; gap: 15px; padding-bottom: env(safe-area-inset-bottom, 20px); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
@@ -380,6 +380,9 @@ CSS_STYLES = """
         .logo span { display: none; }
         .menu-toggle { display: none !important; }
         .topbar-center { display: none; } 
+        
+        /* HIDE AVATAR IN TOPBAR */
+        .topbar-right .user-menu-container { display: none !important; } 
         .topbar-right { width: auto; }
         
         .mobile-only { display: flex !important; }
@@ -431,7 +434,7 @@ CSS_STYLES = """
         navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed'));
     }
 
-    // Dropdown Menu
+    // Dropdown Menu (Desktop and Mobile)
     function toggleDropdown() {
         if(window.innerWidth <= 900) {
             document.getElementById('mobileProfileMenu').classList.add('open');
@@ -1162,7 +1165,7 @@ async def create_post_page(request: Request):
             </div>
             
             <div class="input-group">
-                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label>
                 <textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea>
             </div>
 
@@ -1397,7 +1400,7 @@ async def edit_profile_page(request: Request):
                 <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('avatar', lang)} (JPEG/PNG)</label>
                 <input type="file" name="avatar" accept="image/*" onchange="loadAvatar(event)" style="padding: 12px;">
                 <input type="hidden" name="avatar_base64" id="avatar-base64">
-                <img id="avatar-preview" src="" style="display:none; width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-top: 10px;">
+                <img id="avatar-preview" src="" style="display:none; width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-top: 10px; border: none; outline: none;">
             </div>
             
             <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:20px; padding:14px;">{SVG_SETTINGS} {t('save', lang)}</button>
@@ -1407,15 +1410,15 @@ async def edit_profile_page(request: Request):
     <!-- Crop Modal -->
     <div id="crop-modal" class="overlay">
         <div class="crop-container" onclick="event.stopPropagation()">
-            <h3 style="font-weight:700;">Настройка аватарки</h3>
+            <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
             <canvas id="crop-canvas" width="250" height="250" class="crop-canvas"></canvas>
             <div class="crop-controls">
-                <label style="font-size:14px; color:var(--text-muted);">Приближение</label>
+                <label style="font-size:14px; color:var(--text-muted);">{t('zoom', lang)}</label>
                 <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" oninput="currentZoom = parseFloat(this.value); drawCropCanvas();" style="width:100%;">
             </div>
             <div style="display:flex; gap:10px; width:100%;">
-                <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center;">Отмена</button>
-                <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">Применить</button>
+                <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center;">{t('back', lang)}</button>
+                <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">{t('save', lang)}</button>
             </div>
         </div>
     </div>
