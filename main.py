@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
-APP_VERSION = "0.27"
+APP_VERSION = "0.28"
 SERVER_START_DT = datetime.now(timezone.utc)
 SERVER_START_DATE = SERVER_START_DT.strftime("%d.%m.%y")
 CONTACT_EMAILS = ["sldshr.confirmation@gmail.com", "sldshr.confirm@yandex.ru"]
@@ -278,17 +278,45 @@ async def ws_endpoint(websocket: WebSocket):
 
 @app.get("/manifest.json")
 async def manifest():
-    return JSONResponse(
-        {"name": "Solid", "short_name": "Solid", "start_url": "/",
-         "display": "standalone", "background_color": "#000000", "theme_color": "#000000",
-         "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+", "sizes": "192x192", "type": "image/svg+xml"}]},
-        headers={"Cache-Control": "public, max-age=86400"})
+    return JSONResponse({
+        "name": "Solid",
+        "short_name": "Solid",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#000000",
+        "theme_color": "#000000",
+        "orientation": "portrait",
+        "categories": ["social", "utilities"],
+        "icons": [
+            {
+                "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xIDExczQtOCAxMS04IDExIDggMTEgOC00IDgtMTEgOC0xMS04LTExLTh6Ij48L3BhdGg+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMSIgcj0iMyI+PC9jaXJjbGU+PC9zdmc+",
+                "sizes": "192x192",
+                "type": "image/svg+xml",
+                "purpose": "any maskable"
+            }
+        ],
+        "shortcuts": [
+            {
+                "name": "Новый пост",
+                "url": "/cabinet/new",
+                "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PGxpbmUgeDE9IjEyIiB5MT0iOCIgeDI9IjEyIiB5Mj0iMTYiLz48bGluZSB4MT0iOCIgeTE9IjEyIiB4Mj0iMTYiIHkyPSIxMiIvPjwvc3ZnPg==", "sizes": "192x192"}]
+            },
+            {
+                "name": "Настройки",
+                "url": "/settings",
+                "icons": [{"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiLz48cGF0aCBkPSJNMTkuNCAxNWExLjY1IDEuNjUgMCAwIDAgLjMzIDEuODJsLjA2LjA2YTIgMiAwIDEgMS0yLjgzIDIuODNsLS4wNi0uMDZhMS42NSAxLjY1IDAgMCAwLTEuODItLjMzIDEuNjUgMS42NSAwIDAgMC0xIDEuNTFWMjFhMiAyIDAgMSAxLTQgMHYtLjA5QTEuNjUgMS42NSAwIDAgMCA5IDE5LjRhMS42NSAxLjY1IDAgMCAwLTEuODIuMzNsLS4wNi4wNmEyIDIgMCAxIDEtMi44My0yLjgzbC4wNi0uMDZhMS42NSAxLjY1IDAgMCAwIC4zMy0xLjgyIDEuNjUgMS42NSAwIDAgMC0xLjUxLTFIM2EyIDIgMCAxIDEgMC00aC4wOUExLjY1IDEuNjUgMCAwIDAgNC42IDlhMS42NSAxLjY1IDAgMCAwLS4zMy0xLjgybC0uMDYtLjA2YTIgMiAwIDEgMSAyLjgzLTIuODNsLjA2LjA2YTEuNjUgMS42NSAwIDAgMCAxLjgyLjMzSDlhMS42NSAxLjY1IDAgMCAwIDEtMS41MVYzYTIgMiAwIDEgMSA0IDB2LjA5YTEuNjUgMS42NSAwIDAgMCAxIDEuNTEgMS42NSAxLjY1IDAgMCAwIDEuODItLjMzbC4wNi0uMDZhMiAyIDAgMSAxIDIuODMgMi44M2wtLjA2LjA2YTEuNjUgMS42NSAwIDAgMC0uMzMgMS44MlY5YTEuNjUgMS42NSAwIDAgMCAxLjUxIDFIMjFhMiAyIDAgMSAxIDAgNGgtLjA5YTEuNjUgMS42NSAwIDAgMC0xLjUxIDF6Ii8+PC9zdmc+", "sizes": "192x192"}]
+            }
+        ]
+    }, headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/sw.js")
 async def sw():
     js = """
-    const CACHE_NAME = 'solid-link-v2';
-    const STATIC_ASSETS = ['/manifest.json'];
+    const CACHE_NAME = 'solid-v3';
+    const STATIC_ASSETS = [
+        '/manifest.json',
+        '/static/ru_font.ttf'
+    ];
     self.addEventListener('install', (e) => {
         self.skipWaiting();
         e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {})));
@@ -304,6 +332,14 @@ async def sw():
         if (e.request.method !== 'GET') return;
         const url = new URL(e.request.url);
         if (url.origin !== self.location.origin) return;
+
+        if (e.request.mode === 'navigate') {
+            e.respondWith(
+                fetch(e.request).catch(() => caches.match('/'))
+            );
+            return;
+        }
+
         if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.json') {
             e.respondWith(
                 caches.match(e.request).then((cached) => {
@@ -362,6 +398,8 @@ def set_csrf_cookie(res, t, r):
 @app.exception_handler(RequestValidationError)
 async def val_handler(request: Request, exc: RequestValidationError):
     lang = _resolve_lang(request, request.query_params.get("setlang"))
+    if request.url.path == "/cabinet/edit":
+        return RedirectResponse("/cabinet/edit?error=empty", 303)
     em = "Заполните все обязательные поля!" if lang == "ru" else "Please fill all required fields!"
     token = get_csrf_token(request)
     res = HTMLResponse(content=auth_html(lang, em, token), status_code=422)
@@ -529,7 +567,9 @@ LOCALES = {
         "toast_new": "Новая запись добавлена!", "toast_link": "Ссылка скопирована!",
         "toast_copy_fail": "Не удалось скопировать", "toast_approved": "Одобрено!",
         "toast_rejected": "Отклонено!", "toast_approved_removed": "Одобрено и удалено!",
-        "toast_rejected_removed": "Отклонено и удалено!", "toast_failed": "Ошибка:", "toast_csrf": "Ошибка CSRF",
+        "toast_rejected_removed": "Отклонено и удалено!", "toast_failed": "Ошибка:", "toast_csrf": "Ошибка безопасности (CSRF). Обновите страницу.",
+        "err_empty": "Заполните обязательные поля!",
+        "err_db": "Ошибка базы данных. Попробуйте позже.",
         "stats_link": "Статистика", "faq_link": "FAQ",
         "stats_title": "СТАТИСТИКА", "stats_users": "Пользователей", "stats_posts": "Записей",
         "stats_sugges": "Предложек", "stats_started": "Сервер запущен", "stats_last_update": "Последнее обновление",
@@ -551,6 +591,7 @@ LOCALES = {
         "settings_about_text": "Solid — простая социальная платформа для записей и предложек. Делитесь мыслями, собирайте предложки от читателей и оставайтесь на связи.",
         "settings_links": "Полезные ссылки",
         "settings_version": "Версия",
+        "pwa_install": "Установить приложение",
     },
     "en": {
         "reg": "Registration", "login": "Login", "username": "username", "nickname": "nickname",
@@ -597,7 +638,9 @@ LOCALES = {
         "toast_new": "New record added!", "toast_link": "Link copied!",
         "toast_copy_fail": "Failed to copy", "toast_approved": "Approved!",
         "toast_rejected": "Rejected!", "toast_approved_removed": "Approved & removed!",
-        "toast_rejected_removed": "Rejected & removed!", "toast_failed": "Error:", "toast_csrf": "CSRF error",
+        "toast_rejected_removed": "Rejected & removed!", "toast_failed": "Error:", "toast_csrf": "Security error (CSRF). Refresh the page.",
+        "err_empty": "Fill required fields!",
+        "err_db": "Database error. Try again later.",
         "stats_link": "Stats", "faq_link": "FAQ",
         "stats_title": "STATISTICS", "stats_users": "Users", "stats_posts": "Records",
         "stats_sugges": "Suggestions", "stats_started": "Server started", "stats_last_update": "Last update",
@@ -619,6 +662,7 @@ LOCALES = {
         "settings_about_text": "Solid is a simple social platform for records and suggestions. Share your thoughts, collect suggestions from readers and stay in touch.",
         "settings_links": "Useful links",
         "settings_version": "Version",
+        "pwa_install": "Install App",
     }
 }
 
@@ -651,31 +695,18 @@ SVG_NAV_SUGGES = """<svg xmlns='http://www.w3.org/2000/svg' width='28' height='2
 
 def bottom_nav_html(lang):
     current = _current_path.get() or "/"
-    
-    # Логика определения активного таба для всех подразделов
     create_active = "active" if current == "/cabinet/new" else ""
     sug_active = "active" if current == "/cabinet/suggestions" else ""
     set_active = "active" if current == "/settings" else ""
-    
-    # Все маршруты начинающиеся на /cabinet (кроме /new и /suggestions) относятся к профилю
     profile_active = ""
     if current.startswith("/cabinet") and current not in ("/cabinet/new", "/cabinet/suggestions"):
         profile_active = "active"
-        
     return f"""
     <nav class="bottom-nav" aria-label="Навигация">
-        <a href="/cabinet/new" class="bottom-nav-item {create_active}">
-            {SVG_NAV_CREATE}
-        </a>
-        <a href="/cabinet/profile" class="bottom-nav-item {profile_active}">
-            {SVG_NAV_CABINET}
-        </a>
-        <a href="/cabinet/suggestions" class="bottom-nav-item {sug_active}">
-            {SVG_NAV_SUGGES}
-        </a>
-        <a href="/settings" class="bottom-nav-item {set_active}">
-            {SVG_NAV_SETTINGS}
-        </a>
+        <a href="/cabinet/new" class="bottom-nav-item {create_active}">{SVG_NAV_CREATE}</a>
+        <a href="/cabinet/profile" class="bottom-nav-item {profile_active}">{SVG_NAV_CABINET}</a>
+        <a href="/cabinet/suggestions" class="bottom-nav-item {sug_active}">{SVG_NAV_SUGGES}</a>
+        <a href="/settings" class="bottom-nav-item {set_active}">{SVG_NAV_SETTINGS}</a>
     </nav>
     <script>document.body.classList.add('has-bottom-nav');</script>
     """
@@ -838,7 +869,6 @@ def get_css():
             .contacts-box b { display: block; margin-bottom: 8px; font-size: 16px;}
             .contacts-box a { color: #4da6ff; }
 
-            /* ===== Settings page ===== */
             .settings-card { background: #161b22; border-radius: 12px; padding: 18px; margin-bottom: 12px; border: 1px solid #21262d; }
             .settings-card h3 { color: #4da6ff; margin: 0 0 14px 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: bold; }
             .settings-card .lang-switch { justify-content: flex-start; margin: 0; }
@@ -849,142 +879,38 @@ def get_css():
             .settings-link:hover { color: #4da6ff; text-decoration: none; }
             .settings-link::after { content: '›'; color: #666; font-size: 20px; font-weight: normal; }
 
-            /* ===== Image / avatar skeletons ===== */
-            .image-skeleton {
-                margin: 10px 0 0;
-                border-radius: 10px;
-                overflow: hidden;
-                background: linear-gradient(90deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
-                background-size: 200% 100%;
-                animation: shimmer 1.5s infinite linear;
-                min-height: 100px;
-                position: relative;
-            }
+            .image-skeleton { margin: 10px 0 0; border-radius: 10px; overflow: hidden; background: linear-gradient(90deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; min-height: 100px; position: relative; }
             .image-skeleton.loaded { animation: none; background: transparent; min-height: 0; }
             .image-skeleton .post-image { margin: 0; opacity: 0; transition: opacity 0.4s; }
             .image-skeleton .post-image.loaded { opacity: 1; }
-            .avatar-skeleton {
-                display: block; width: 120px; height: 120px; margin: 0 auto 10px;
-                border-radius: 8px; overflow: hidden;
-                background: linear-gradient(90deg, #2a2a2a 0%, #3a3a3a 50%, #2a2a2a 100%);
-                background-size: 200% 100%;
-                animation: shimmer 1.5s infinite linear;
-            }
+            .avatar-skeleton { display: block; width: 120px; height: 120px; margin: 0 auto 10px; border-radius: 8px; overflow: hidden; background: linear-gradient(90deg, #2a2a2a 0%, #3a3a3a 50%, #2a2a2a 100%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; }
             .avatar-skeleton.loaded { animation: none; background: transparent; }
             .avatar-skeleton .avatar { margin: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.4s; border-radius: 0; }
             .avatar-skeleton .avatar.loaded { opacity: 1; }
-            @keyframes shimmer {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
-            }
+            @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-            /* ===== Button spinner ===== */
-            .btn-spinner {
-                display: inline-block;
-                width: 18px; height: 18px;
-                border: 2px solid rgba(0,0,0,0.3);
-                border-top-color: #000;
-                border-radius: 50%;
-                animation: spin 0.6s linear infinite;
-                vertical-align: middle;
-            }
+            .btn-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
             @keyframes spin { to { transform: rotate(360deg); } }
 
-            /* ===== Progress bar ===== */
-            .progress-bar {
-                position: fixed; top: 0; left: 0;
-                height: 3px; width: 0;
-                background: linear-gradient(90deg, #4da6ff 0%, #9b59b6 50%, #4da6ff 100%);
-                background-size: 200% 100%;
-                animation: progress-shimmer 1.5s linear infinite;
-                z-index: 99999;
-                opacity: 0;
-                pointer-events: none;
-            }
+            .progress-bar { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: linear-gradient(90deg, #4da6ff 0%, #9b59b6 50%, #4da6ff 100%); background-size: 200% 100%; animation: progress-shimmer 1.5s linear infinite; z-index: 99999; opacity: 0; pointer-events: none; }
             .progress-bar.show { width: 80%; opacity: 1; transition: width 0.4s ease-out, opacity 0.2s; }
             @keyframes progress-shimmer { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
 
-            /* ===== Image viewer ===== */
-            #img-viewer {
-                position: fixed; top: 0; left: 0;
-                width: 100vw; height: 100vh; height: 100dvh;
-                background: rgba(0,0,0,0.95);
-                backdrop-filter: blur(8px);
-                z-index: 20000;
-                display: none;
-                justify-content: center;
-                align-items: center;
-                padding: 0;
-            }
+            #img-viewer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 20000; display: none; justify-content: center; align-items: center; padding: 0; }
             #img-viewer.show { display: flex; animation: fadeIn 0.2s; }
-            #img-viewer-img {
-                max-width: 90vw;
-                max-height: 82vh;
-                max-height: 82dvh;
-                object-fit: contain;
-                border-radius: 6px;
-                transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-                cursor: zoom-in;
-                user-select: none;
-                -webkit-user-select: none;
-                touch-action: manipulation;
-                box-shadow: 0 0 40px rgba(0,0,0,0.6);
-            }
+            #img-viewer-img { max-width: 90vw; max-height: 82vh; max-height: 82dvh; object-fit: contain; border-radius: 6px; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); cursor: zoom-in; user-select: none; -webkit-user-select: none; touch-action: manipulation; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
             #img-viewer-img.zoomed { transform: scale(2.2); cursor: zoom-out; }
-            .img-viewer-close {
-                position: fixed;
-                top: 20px; right: 20px;
-                background: rgba(0,0,0,0.6);
-                color: #fff;
-                border: 2px solid #fff;
-                width: 44px; height: 44px;
-                border-radius: 50%;
-                font-size: 24px;
-                display: flex; align-items: center; justify-content: center;
-                cursor: pointer;
-                z-index: 20005;
-                padding: 0;
-                line-height: 1;
-                box-sizing: border-box;
-            }
+            .img-viewer-close { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #fff; border: 2px solid #fff; width: 44px; height: 44px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20005; padding: 0; line-height: 1; box-sizing: border-box; }
             .img-viewer-close:hover { background: rgba(255,255,255,0.2); }
             @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-            /* ===== Create page ===== */
-            .create-page-container {
-                width: 100%;
-                max-width: 700px;
-                margin: 0 auto;
-            }
-            .create-page-title {
-                color: #333;
-                font-size: 24px;
-                text-align: center;
-                margin: 0 0 20px;
-                letter-spacing: 1px;
-            }
-            .create-page-form {
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-            }
-            .create-page-textarea {
-                width: 100%;
-                min-height: 300px;
-                height: 40vh;
-                padding: 14px;
-                font-size: 16px;
-                border-radius: 12px;
-                background: #a9a9a9;
-                border: none;
-                resize: vertical;
-                font-family: 'RuFont', 'Titillium Web', Arial, sans-serif;
-            }
+            .create-page-container { width: 100%; max-width: 700px; margin: 0 auto; }
+            .create-page-title { color: #333; font-size: 24px; text-align: center; margin: 0 0 20px; letter-spacing: 1px; }
+            .create-page-form { display: flex; flex-direction: column; gap: 10px; }
+            .create-page-textarea { width: 100%; min-height: 300px; height: 40vh; padding: 14px; font-size: 16px; border-radius: 12px; background: #a9a9a9; border: none; resize: vertical; font-family: 'RuFont', 'Titillium Web', Arial, sans-serif; }
 
-            /* ===== Bottom navigation ===== */
             .bottom-nav { display: none; }
 
-            /* ===== Mobile App-like dark theme ===== */
             @media (max-width: 768px) {
                 body { background-color: #000 !important; color: #fff; overflow-x: hidden; }
                 .page-content { justify-content: flex-start; padding: 0; min-height: 100vh; min-height: 100dvh; }
@@ -1020,10 +946,7 @@ def get_css():
                 .action-btn { background: #333; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; font-size: 12px; }
                 .action-btn:hover { background: #555; }
                 
-                /* Скрываем создание поста на мобилках */
                 .create-post-box { display: none !important; }
-                
-                /* Скрываем смену языка везде на телефоне, кроме настроек */
                 .lang-switch { display: none !important; }
                 .settings-card .lang-switch { display: flex !important; }
 
@@ -1112,9 +1035,7 @@ def get_js(lang, token, current_user=""):
             document.getElementById('img-viewer-img').classList.remove('zoomed');
             document.body.style.overflow = '';
         }
-        function toggleImgZoom(img) {
-            img.classList.toggle('zoomed');
-        }
+        function toggleImgZoom(img) { img.classList.toggle('zoomed'); }
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeImgViewer(); });
 
         window.skelLoad = function(el) {
@@ -1139,6 +1060,27 @@ def get_js(lang, token, current_user=""):
             });
             window.addEventListener('pagehide', () => bar.classList.remove('show'));
         })();
+
+        // PWA Install Prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'flex';
+        });
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        const installBtn = document.getElementById('pwa-install-btn');
+                        if (installBtn) installBtn.style.display = 'none';
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
 
         async function compressImage(file, maxWidth=1000, quality=0.75) {
             return new Promise((resolve, reject) => {
@@ -1416,7 +1358,6 @@ def auth_html(lang, error_msg="", token=""):
     og_title = "Solid — Вход / Регистрация" if lang == "ru" else "Solid — Login / Registration"
     og_desc = "Solid — простая социальная платформа с записями и предложкой" if lang == "ru" else "Solid — simple social platform with records and suggestions"
     og = og_tags(og_title, og_desc, "/", lang=lang)
-    # Исправленная верстка для мобилки (лейбл наверху)
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
@@ -1661,7 +1602,7 @@ def sugges_form_html(nickname, lang, token, error="", viewer="", rules="", enabl
         s = s.replace(k, v)
     return s
 
-def edit_html(nickname, user, lang, token):
+def edit_html(nickname, user, lang, token, error=""):
     desc = esc(user.get('description'))
     rules = esc(user.get('sugges_rules', ''))
     avatar = sanitize_url(user.get('avatar_data', ''))
@@ -1672,6 +1613,21 @@ def edit_html(nickname, user, lang, token):
     photo_checked = "checked" if user_sugges_photo_enabled(user) else ""
     og_title = "Редактировать профиль — Solid" if lang == "ru" else "Edit Profile — Solid"
     og = og_tags(og_title, desc or "", "/cabinet/edit", image=avatar, lang=lang)
+    
+    err_block = ""
+    if error == "csrf":
+        err_block = f"<div class='error-msg'>{t('toast_csrf', lang)}</div>"
+    elif error == "format":
+        err_block = f"<div class='error-msg'>{t('err_user_format', lang)}</div>"
+    elif error == "desc":
+        err_block = f"<div class='error-msg'>{t('alert_desc_long', lang)}</div>"
+    elif error == "rules":
+        err_block = f"<div class='error-msg'>{t('rules_alert_long', lang)}</div>"
+    elif error == "empty":
+        err_block = f"<div class='error-msg'>{t('err_empty', lang)}</div>"
+    elif error == "db":
+        err_block = f"<div class='error-msg'>{t('err_db', lang)}</div>"
+
     s = """
     <!DOCTYPE html><html lang="__LANG__"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#000000">
@@ -1680,6 +1636,7 @@ def edit_html(nickname, user, lang, token):
     <div class="page-content">
     <div class="dashboard-container" style="justify-content:center"><div class="main-content" style="max-width:600px"><div class="posts-area" style="padding:20px">
         <h2 style="color:#fff;text-align:center">__EDIT_PROFILE__</h2>
+        __ERR_BLOCK__
         <form action="/cabinet/edit" method="post" style="display:flex;flex-direction:column;gap:10px">
             <input type="hidden" name="csrf_token" value="__TOKEN__">
             <input type="hidden" name="avatar_data" id="avatar-data" value="">
@@ -1698,11 +1655,12 @@ def edit_html(nickname, user, lang, token):
             <button type="submit" style="background:#4da6ff;color:#fff;margin-top:10px">__SAVE_CHANGES__</button>
             <a href="/cabinet" class="btn" style="background:#a9a9a9">__CANCEL__</a>
         </form>
+        <div class="lang-switch" style="margin-top:20px"><a href="/set_lang/ru?next=/cabinet/edit" class="btn lang-btn __RU_ACTIVE__">RU</a><a href="/set_lang/en?next=/cabinet/edit" class="btn lang-btn __EN_ACTIVE__">EN</a></div>
     </div></div></div>
     </div>
     __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__EDIT_PROFILE__",t('edit_profile',lang)),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__TOKEN__",token),("__AVATAR_HTML__",avatar_html),("__ATTACH_AVATAR__",t('attach_avatar',lang)),("__USERNAME_LABEL__",t('username_label',lang)),("__USERNAME__",user_username),("__DESCRIPTION__",t('description',lang)),("__DESC_PLACEHOLDER__",t('desc_placeholder',lang)),("__DESC__",desc),("__DESC_LEN__",str(len(desc))),("__SUGGES_ENABLE_LABEL__",t('sugges_enable_label',lang)),("__SUGGES_CHECKED__",sugges_checked),("__SUGGES_PHOTO_ENABLE_LABEL__",t('sugges_photo_enable_label',lang)),("__PHOTO_CHECKED__",photo_checked),("__RULES_LABEL__",t('rules_edit_label',lang)),("__RULES_PLACEHOLDER__",t('rules_placeholder',lang)),("__RULES__",rules),("__RULES_LEN__",str(len(rules))),("__SAVE_CHANGES__",t('save_changes',lang)),("__CANCEL__",t('cancel',lang)),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__ERR_BLOCK__",err_block)]:
         s = s.replace(k, v)
     return s
 
@@ -1858,6 +1816,7 @@ def settings_html(nickname, user, lang, token):
                 <h3>__SETTINGS_ABOUT__</h3>
                 <p class="settings-about-text">__SETTINGS_ABOUT_TEXT__</p>
                 <p class="settings-version">__SETTINGS_VERSION__: v__APP_VERSION__ (__SERVER_START_DATE__)</p>
+                <button type="button" onclick="installPWA()" id="pwa-install-btn" style="display:none; background:#4da6ff; color:#fff; border-radius:8px; padding:10px; margin-top:10px;">__PWA_INSTALL__</button>
             </div>
 
             <div class="settings-card">
@@ -1874,7 +1833,7 @@ def settings_html(nickname, user, lang, token):
     </div>
     __BOTTOM_NAV____FOOTER____OVERLAY__</body></html>
     """
-    for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SETTINGS_TITLE__",t('settings_title',lang)),("__SETTINGS_LANGUAGE__",t('settings_language',lang)),("__SETTINGS_ABOUT__",t('settings_about',lang)),("__SETTINGS_ABOUT_TEXT__",t('settings_about_text',lang)),("__SETTINGS_VERSION__",t('settings_version',lang)),("__SETTINGS_LINKS__",t('settings_links',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__LOGOUT__",t('logout',lang)),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang))]:
+    for k, v in [("__LANG__",lang),("__OG__",og),("__CSS__",get_css()),("__JS__",get_js(lang, token, nickname)),("__SETTINGS_TITLE__",t('settings_title',lang)),("__SETTINGS_LANGUAGE__",t('settings_language',lang)),("__SETTINGS_ABOUT__",t('settings_about',lang)),("__SETTINGS_ABOUT_TEXT__",t('settings_about_text',lang)),("__SETTINGS_VERSION__",t('settings_version',lang)),("__SETTINGS_LINKS__",t('settings_links',lang)),("__PRIVACY_TITLE__",t('privacy_title',lang)),("__FAQ_LINK__",t('faq_link',lang)),("__STATS_LINK__",t('stats_link',lang)),("__BUGREPORT_TITLE__",t('bugreport_title',lang)),("__LOGOUT__",t('logout',lang)),("__APP_VERSION__",APP_VERSION),("__SERVER_START_DATE__",SERVER_START_DATE),("__RU_ACTIVE__","active" if lang=='ru' else ""),("__EN_ACTIVE__","active" if lang=='en' else ""),("__BOTTOM_NAV__",bottom_nav_html(lang)),("__FOOTER__",get_footer(lang)),("__OVERLAY__",get_overlay(lang)),("__PWA_INSTALL__",t('pwa_install',lang))]:
         s = s.replace(k, v)
     return s
 
@@ -2305,7 +2264,7 @@ async def rpc_endpoint(req: RPCRequest, r: Request, nickname: str = Cookie(None)
     except Exception as e: raise HTTPException(500, str(e))
 
 @app.get("/cabinet/edit", response_class=HTMLResponse)
-async def edit(r: Request, setlang: str = None):
+async def edit(r: Request, setlang: str = None, error: str = None):
     lang = _resolve_lang(r, setlang)
     nickname = r.cookies.get("nickname")
     if not nickname: return RedirectResponse("/", 303)
@@ -2314,7 +2273,7 @@ async def edit(r: Request, setlang: str = None):
         return HTMLResponse("<h2>Server temporarily unavailable</h2>", 503)
     if not user_data: return RedirectResponse("/", 303)
     token = get_csrf_token(r)
-    res = HTMLResponse(edit_html(nickname, user_data, lang, token))
+    res = HTMLResponse(edit_html(nickname, user_data, lang, token, error=error))
     set_csrf_cookie(res, token, r)
     if setlang in ("ru", "en"): _set_lang_cookie(res, r, lang)
     return res
@@ -2323,12 +2282,15 @@ async def edit(r: Request, setlang: str = None):
 async def edit_action(r: Request, res: Response, username: str = Form(...), description: str = Form(""), sugges_rules: str = Form(""), avatar_data: str = Form(""), sugges_enabled: str = Form(None), sugges_photo_enabled: str = Form(None), csrf_token: str = Form(None), nickname: str = Cookie(None), lang: str = Cookie("ru")):
     if lang not in ("ru", "en"): lang = "ru"
     if not nickname: return RedirectResponse("/", 303)
-    if not check_csrf(r, csrf_token): return HTMLResponse("<script>showToast('CSRF Error');window.history.back()</script>")
+    if not check_csrf(r, csrf_token):
+        return RedirectResponse("/cabinet/edit?error=csrf", 303)
     username = (username or "").strip()[:60]
     if not VALID_USER_RE.match(username):
-        return HTMLResponse(f"<script>showToast('{t('err_user_format', lang)}');window.history.back()</script>")
-    if len(description) > 300: return HTMLResponse(f"<script>showToast('{t('alert_desc_long', lang)}');window.history.back()</script>")
-    if len(sugges_rules) > 1000: return HTMLResponse(f"<script>showToast('{t('rules_alert_long', lang)}');window.history.back()</script>")
+        return RedirectResponse("/cabinet/edit?error=format", 303)
+    if len(description) > 300:
+        return RedirectResponse("/cabinet/edit?error=desc", 303)
+    if len(sugges_rules) > 1000:
+        return RedirectResponse("/cabinet/edit?error=rules", 303)
     update = {"username": username, "description": description, "sugges_rules": sugges_rules, "sugges_enabled": bool(sugges_enabled), "sugges_photo_enabled": bool(sugges_photo_enabled)}
     av = valid_b64(avatar_data)
     if av: update["avatar_data"] = av
@@ -2336,14 +2298,16 @@ async def edit_action(r: Request, res: Response, username: str = Form(...), desc
         await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
         if nickname in CACHE["users"]:
             CACHE["users"][nickname].update(update)
+        return RedirectResponse("/cabinet", 303)
     except Exception:
         update.pop("avatar_data", None); update.pop("sugges_enabled", None); update.pop("sugges_photo_enabled", None)
         try: 
             await asyncio.to_thread(lambda: sb.table('users').update(update).eq('nickname', nickname).execute())
             if nickname in CACHE["users"]:
                 CACHE["users"][nickname].update(update)
-        except Exception: pass
-    return RedirectResponse("/cabinet", 303)
+            return RedirectResponse("/cabinet", 303)
+        except Exception:
+            return RedirectResponse("/cabinet/edit?error=db", 303)
 
 @app.get("/bugreport", response_class=HTMLResponse)
 async def bugreport(r: Request, setlang: str = None):
