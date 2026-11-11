@@ -34,7 +34,7 @@ TRANSLATIONS = {
         "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?",
         "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply",
         "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
-        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings"
+        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "profile_updated": "Profile updated successfully!"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -52,7 +52,7 @@ TRANSLATIONS = {
         "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?",
         "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить",
         "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
-        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля"
+        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "profile_updated": "Профиль успешно обновлен!"
     }
 }
 
@@ -150,11 +150,11 @@ input,textarea,.selectable{user-select:text;}
 body{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}
 a{color:var(--accent-color);text-decoration:none;}
 
-/* Сетка */
+/* Сетка без ебучих фреймов */
 .app-layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}
 .app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}
 
-/* Верхняя панель (ФИКСИРОВАННАЯ, НЕЗАВИСИМАЯ ОТ САЙДБАРА) */
+/* Верхняя панель */
 .topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}
 .topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;}
 .logo{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}
@@ -278,8 +278,8 @@ input:checked+.slider:before{transform:translateX(22px);}
 .modal-actions button{flex:1;padding:12px;justify-content:center;}
 
 /* Утилиты */
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(-10px);}
+.toast{position:fixed;top:80px;right:20px;background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(10px);}
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;width:100%;background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);border-top:1px solid var(--border-color);justify-content:space-around;padding:12px 0;padding-bottom:max(12px, env(safe-area-inset-bottom));z-index:100;}
 .bottom-nav a{display:flex;flex-direction:column;align-items:center;color:var(--text-muted);width:60px;text-decoration:none;}
 .bottom-nav a.active{color:var(--accent-color);}
@@ -320,10 +320,18 @@ input:checked+.slider:before{transform:translateX(22px);}
     .desktop-only{display:none!important;}
     .main-content{grid-column:1;padding:15px;padding-bottom:80px;}
     .bottom-nav{display:flex;}
-    .post-view{flex-direction:column;gap:15px;}
-    .post-media{width:100%;max-height:50vh;min-height:200px;}
-    .post-details{width:100%;}
-    .actions-row{padding:0;}
+    
+    /* Фикс мобильного отображения поста */
+    .post-view { display: flex; flex-direction: column; height: auto; overflow: visible; gap: 15px; }
+    .post-media { flex: none; width: 100%; height: auto; max-height: 60vh; min-height: 250px; border-radius: 12px; margin-bottom: 0; }
+    .post-media img { width: 100%; max-height: 60vh; object-fit: contain; }
+    .post-details { flex: none; width: 100%; min-width: 0; display: flex; flex-direction: column; }
+    .post-top-info { width: 100%; }
+    .actions-row { margin-top: 15px; margin-bottom: 15px; padding: 0; }
+    .comments-section { flex: none; width: 100%; padding: 20px 0; border-top: 1px solid var(--border-color); overflow: visible; }
+    .toast { top: 20px; left: 50%; right: auto; transform: translateX(-50%); }
+    .toast.show { transform: translateX(-50%) translateY(10px); }
+    
     .create-layout{flex-direction:column;}
     .dropzone{padding:30px;min-height:200px;}
     
@@ -768,6 +776,10 @@ async def settings_page(request: Request):
     if not user: return RedirectResponse(url="/login")
     avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
     
+    # Проверка параметра updated для показа уведомления
+    updated = request.query_params.get("updated")
+    toast_script = f"<script>setTimeout(()=>showToast('{t('profile_updated', lang)}'), 100);</script>" if updated else ""
+
     content = f"""
     <div style="max-width: 800px; margin: 0 auto; width: 100%;">
         <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px;">{t('settings', lang)}</h2>
@@ -818,6 +830,7 @@ async def settings_page(request: Request):
             </div>
         </div>
     </div>
+    {toast_script}
     """
     return HTMLResponse(content=render_layout(content, user, request, "settings", t('settings', lang)))
 
@@ -828,7 +841,7 @@ async def update_profile(request: Request, display_name: str = Form(...), avatar
     users_db[user['username']]['display_name'] = display_name
     if avatar_base64: users_db[user['username']]['avatar'] = avatar_base64
     elif avatar and avatar.filename: users_db[user['username']]['avatar'] = await image_to_base64(avatar)
-    return RedirectResponse(url="/settings", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url="/settings?updated=1", status_code=status.HTTP_302_FOUND)
 
 @app.get("/write", response_class=HTMLResponse)
 async def create_post_page(request: Request):
