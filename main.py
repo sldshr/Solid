@@ -1,11 +1,11 @@
-from fastapi import FastAPI, Request, Form, Depends, HTTPException, status, File, UploadFile
+from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from passlib.context import CryptContext
 import uuid
 import base64
 from typing import List
 
-app = FastAPI()
+app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 users_db = {} 
@@ -20,7 +20,7 @@ TRANSLATIONS = {
         "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login",
         "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish",
         "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
-        "upload_limit": "JPEG, PNG up to 3 images", "back": "Back to feed", "comments": "Comments", "no_comments": "No comments yet.",
+        "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
         "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required for registration",
         "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts",
@@ -36,7 +36,7 @@ TRANSLATIONS = {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
         "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать",
         "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
-        "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад в ленту", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
+        "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
         "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
         "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить", "no_posts": "Пока нет постов", "posts": "постов",
@@ -499,11 +499,11 @@ CSS_STYLES = """
         var btn = document.getElementById('btn-save');
         if(btn) {
             if(data.saved) {
-                btn.innerHTML = `""" + SVG_SAVED + """`;
+                btn.innerHTML = '""" + SVG_SAVED.replace("'", "\\'") + """';
                 btn.style.color = 'var(--accent-color)';
                 btn.style.borderColor = 'var(--accent-color)';
             } else {
-                btn.innerHTML = `""" + SVG_SAVE + """`;
+                btn.innerHTML = '""" + SVG_SAVE.replace("'", "\\'") + """';
                 btn.style.color = '';
                 btn.style.borderColor = '';
             }
