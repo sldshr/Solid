@@ -44,7 +44,9 @@ TRANSLATIONS = {
         "no_posts": "No posts yet", "posts": "posts", "search_results": "Search results",
         "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
         "wrong_pass": "Wrong password", "need_name": "Display name is required for registration",
-        "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post"
+        "choose_files": "Choose files", "allow_comments": "Allow comments", "comments_disabled": "Comments are disabled for this post",
+        "edit_post": "Edit Post", "remove_saved": "Remove from saved", "delete_comment": "Delete comment",
+        "edit": "Edit", "update": "Update"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки",
@@ -61,12 +63,14 @@ TRANSLATIONS = {
         "no_posts": "Пока нет постов", "posts": "постов", "search_results": "Результаты поиска",
         "nothing_found": "Ничего не найдено", "no_saved": "У вас пока нет избранных постов",
         "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя",
-        "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены"
+        "choose_files": "Выбрать файлы", "allow_comments": "Разрешить комментарии", "comments_disabled": "Комментарии отключены",
+        "edit_post": "Редактировать пост", "remove_saved": "Убрать из избранного", "delete_comment": "Удалить комментарий",
+        "edit": "Редактировать", "update": "Обновить"
     }
 }
 
 def get_lang(request: Request):
-    lang = request.cookies.get("lang", "ru") # Default to Russian as requested
+    lang = request.cookies.get("lang", "ru")
     return lang if lang in TRANSLATIONS else "ru"
 
 def t(key, lang):
@@ -137,11 +141,17 @@ CSS_STYLES = """
     .topbar-left { display: flex; align-items: center; gap: 15px; width: 260px; flex-shrink: 0; }
     .logo { font-size: 22px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
     
-    .topbar-center { flex: 1; display: flex; justify-content: center; }
+    .topbar-center { flex: 1; display: flex; justify-content: center; position: relative; }
     .search-container { width: 100%; max-width: 500px; position: relative; }
     .search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px 15px 10px 40px; border-radius: 8px; color: #fff; font-size: 15px; outline: none; }
     .search-input:focus { border-color: var(--accent-color); }
     .search-icon { position: absolute; left: 12px; top: 10px; color: var(--text-muted); }
+    
+    /* Real-time Search Dropdown */
+    .search-dropdown { display: none; position: absolute; top: 50px; left: 0; width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 150; max-height: 300px; overflow-y: auto; }
+    .search-dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 15px; color: var(--text-main); border-bottom: 1px solid var(--border-color); transition: background 0.2s; }
+    .search-dropdown-item:hover { background: #2a2a2a; }
+    .search-dropdown-item img { width: 30px; height: 30px; border-radius: 4px; object-fit: cover; }
     
     .topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 15px; width: 260px; flex-shrink: 0; }
     
@@ -152,7 +162,7 @@ CSS_STYLES = """
     .user-menu-container { position: relative; }
     .user-menu-btn { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 6px 12px; border-radius: 8px; border: 1px solid transparent; }
     .user-menu-btn:hover { background: var(--card-bg); border-color: var(--border-color); }
-    .user-avatar-small { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: #333; }
+    .user-avatar-small { width: 36px; height: 36px; border-radius: 50% !important; object-fit: cover; background: #333; }
     .dropdown-menu { display: none; position: absolute; right: 0; top: 55px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 200; overflow: hidden; }
     .dropdown-header { padding: 15px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color); }
     .dropdown-header img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
@@ -166,8 +176,9 @@ CSS_STYLES = """
     /* Sidebar */
     .sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-color); padding: 20px 15px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
     .sidebar a { color: var(--text-muted); padding: 12px 15px; border-radius: 8px; display: flex; align-items: center; gap: 15px; font-size: 16px; font-weight: 500; }
-    .sidebar a:hover, .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
+    .sidebar a:hover:not(.active), .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
     .sidebar a.active svg { color: var(--accent-color); }
+    .sidebar a.active { pointer-events: none; }
     
     /* Main Content */
     .main-content { grid-column: 2; grid-row: 2; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; }
@@ -184,7 +195,7 @@ CSS_STYLES = """
     
     /* Profile */
     .profile-header { margin-bottom: 30px; display: flex; align-items: center; gap: 25px; }
-    .profile-avatar { width: 140px; height: 140px; border-radius: 50%; border: 4px solid var(--card-bg); object-fit: cover; background: #333; }
+    .profile-avatar { width: 140px; height: 140px; border-radius: 50% !important; border: 4px solid var(--card-bg); object-fit: cover; background: #333; }
     .profile-details h1 { font-size: 32px; margin-bottom: 5px; font-weight: 700; }
     .profile-details p { color: var(--text-muted); font-size: 16px; }
     
@@ -194,7 +205,7 @@ CSS_STYLES = """
     .post-media img { max-width: 100%; max-height: 80vh; object-fit: contain; }
     .post-details { flex: 1; min-width: 320px; display: flex; flex-direction: column; }
     .post-author { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-    .post-author img { width: 48px; height: 48px; border-radius: 50%; }
+    .post-author img { width: 48px; height: 48px; border-radius: 50% !important; }
     .post-title { font-size: 26px; font-weight: 700; margin-bottom: 15px; }
     .post-desc { color: #ccc; font-size: 16px; margin-bottom: 25px; white-space: pre-wrap; line-height: 1.5; }
     
@@ -212,13 +223,15 @@ CSS_STYLES = """
     
     /* Feed Grid */
     .feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-    .feed-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.2s; }
+    .feed-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.2s; position: relative; }
     .feed-card:hover { transform: translateY(-3px); border-color: #333; }
     .feed-card-img-container { width: 100%; height: 200px; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
     .feed-card-img-container img { width: 100%; height: 100%; object-fit: cover; }
     .feed-card-info { padding: 15px; flex: 1; display: flex; flex-direction: column; }
     .feed-card-title { font-weight: 700; font-size: 18px; margin-bottom: 10px; line-height: 1.3; }
     .feed-card-author { font-size: 14px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin-top: auto; }
+    .feed-card-remove-btn { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); border: none; color: #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
+    .feed-card-remove-btn:hover { background: var(--danger-color); }
     
     /* Create Post */
     .create-layout { display: flex; gap: 30px; max-width: 1100px; margin: 0 auto; width: 100%; }
@@ -244,16 +257,20 @@ CSS_STYLES = """
     /* Mobile Nav */
     .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 10px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 10px); }
     .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 12px; color: var(--text-muted); gap: 4px; width: 60px; text-decoration: none; }
-    .bottom-nav a.active { color: var(--accent-color); }
-    .bottom-nav .plus-btn { background: var(--accent-color); color: #fff; padding: 10px; border-radius: 12px; display: flex; align-items: center; justify-content: center; height: 44px; width: 44px; margin-top: 4px; }
-
+    .bottom-nav a.active { color: var(--accent-color); pointer-events: none; }
+    .bottom-nav a svg { width: 24px; height: 24px; }
+    
     /* Mobile Profile Menu */
     .mobile-profile-menu { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card-bg); z-index: 1000; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 20px; transform: translateY(100%); transition: transform 0.3s ease-in-out; flex-direction: column; gap: 15px; padding-bottom: env(safe-area-inset-bottom, 20px); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
     .mobile-profile-menu.open { transform: translateY(0); display: flex; }
     .mobile-profile-header { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color); }
-    .mobile-profile-header img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
+    .mobile-profile-header img { width: 50px; height: 50px; border-radius: 50% !important; object-fit: cover; }
     .mobile-profile-menu .dropdown-item { padding: 12px 10px; border-radius: 8px; }
     .mobile-menu-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
+
+    /* Helpers */
+    .mobile-only { display: none !important; }
+    .desktop-only { display: flex !important; }
 
     /* Responsive */
     @media (max-width: 1024px) {
@@ -268,16 +285,16 @@ CSS_STYLES = """
         .main-content { grid-column: 1; padding: 15px; padding-bottom: 80px; }
         .bottom-nav { display: flex; }
         
-        /* Topbar adjustments */
         .topbar { padding: 0 15px; gap: 10px; height: 60px; }
         .topbar-left { width: auto; }
         .logo span { display: none; }
         .topbar-center { display: none; } 
         .topbar-right { width: auto; }
         
-        /* Mobile Search in topbar */
-        .mobile-search-form { flex: 1; display: flex; margin: 0 10px; }
-        .mobile-search-form input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+        .mobile-only { display: flex !important; }
+        .desktop-only { display: none !important; }
+        
+        .mobile-search-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
 
         .post-view { flex-direction: column; padding: 15px; gap: 15px; }
         .post-media { min-height: 250px; max-height: 50vh; }
@@ -285,7 +302,6 @@ CSS_STYLES = """
         .dropzone { padding: 30px; min-height: 250px; }
         
         .profile-header { flex-direction: column; text-align: center; gap: 15px; }
-        .profile-info { flex-direction: column; align-items: center; }
         .profile-header .btn-primary { width: 100%; margin-top: 10px; }
         .profile-avatar { width: 100px; height: 100px; }
     }
@@ -313,6 +329,10 @@ CSS_STYLES = """
                 if (dropdowns[i].style.display === "block") dropdowns[i].style.display = "none";
             }
         }
+        if (!event.target.closest('.search-container')) {
+            var sd = document.getElementById('searchDropdown');
+            if(sd) sd.style.display = 'none';
+        }
     }
 
     // Password Toggle
@@ -331,11 +351,37 @@ CSS_STYLES = """
         }
     }
 
-    // Multiple File Upload Logic (FIXED)
-    let selectedFiles = new DataTransfer();
+    // Real-time Search
+    let searchTimeout;
+    function handleSearch(query) {
+        clearTimeout(searchTimeout);
+        const dropdown = document.getElementById('searchDropdown');
+        if (!query.trim()) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        searchTimeout = setTimeout(async () => {
+            const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+                dropdown.innerHTML = data.results.map(p => `
+                    <a href="/post/${p.id}" class="search-dropdown-item">
+                        <div style="font-weight:700; font-size:14px;">${p.title}</div>
+                        <div style="color:var(--text-muted); font-size:12px; margin-left:auto;">@${p.author}</div>
+                    </a>
+                `).join('');
+                dropdown.style.display = 'block';
+            } else {
+                dropdown.innerHTML = '<div style="padding:15px; color:var(--text-muted); font-size:14px; text-align:center;">Ничего не найдено / Nothing found</div>';
+                dropdown.style.display = 'block';
+            }
+        }, 300);
+    }
 
+    // Multiple File Upload Logic (Append)
+    let selectedFiles = new DataTransfer();
     function handleFiles(input) {
-        const newFiles = Array.from(input.files);
+        const newFiles = Array.from(input.files || input.dataTransfer?.files || []);
         for (let file of newFiles) {
             if (selectedFiles.items.length < 3) {
                 selectedFiles.items.add(file);
@@ -344,10 +390,11 @@ CSS_STYLES = """
                 break;
             }
         }
-        input.files = selectedFiles.files;
+        const fileInput = document.getElementById('file-input');
+        if (fileInput) fileInput.files = selectedFiles.files;
         renderFileList();
     }
-
+    
     function removeFile(index) {
         const dt = new DataTransfer();
         const files = Array.from(selectedFiles.files);
@@ -360,10 +407,13 @@ CSS_STYLES = """
 
     function renderFileList() {
         const previewContainer = document.getElementById('file-list');
+        if(!previewContainer) return;
         previewContainer.innerHTML = '';
         const files = Array.from(selectedFiles.files);
         if (files.length === 0) {
-            document.getElementById('dropzone-text').style.display = 'block';
+            document.getElementById('dropzone-text').style.display = 'flex';
+            document.getElementById('dropzone-text').style.flexDirection = 'column';
+            document.getElementById('dropzone-text').style.alignItems = 'center';
         } else {
             document.getElementById('dropzone-text').style.display = 'none';
             files.forEach((file, index) => {
@@ -384,6 +434,24 @@ CSS_STYLES = """
                 reader.readAsDataURL(file);
             });
         }
+    }
+
+    // Drag & Drop
+    const dropzone = document.getElementById('dropzone');
+    if(dropzone) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+        function preventDefaults (e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.add('dragover'), false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, () => dropzone.classList.remove('dragover'), false);
+        });
+        dropzone.addEventListener('drop', (e) => {
+            handleFiles(e.dataTransfer);
+        }, false);
     }
 
     // Visibility Toggle
@@ -431,20 +499,27 @@ CSS_STYLES = """
         downBtn.className = 'vote-btn ' + (data.user_vote === -1 ? 'active-down' : '');
     }
 
-    async function toggleSave(postId) {
+    async function toggleSave(postId, redirectToSaved = false) {
         const res = await fetch(`/api/save/${postId}`, { method: 'POST' });
         const data = await res.json();
         if(data.error) return alert(data.error);
         
+        if(redirectToSaved) {
+            window.location.reload();
+            return;
+        }
+        
         const btn = document.getElementById('btn-save');
-        if(data.saved) {
-            btn.innerHTML = `""" + SVG_SAVED + """`;
-            btn.style.color = 'var(--accent-color)';
-            btn.style.borderColor = 'var(--accent-color)';
-        } else {
-            btn.innerHTML = `""" + SVG_SAVE + """`;
-            btn.style.color = '';
-            btn.style.borderColor = '';
+        if(btn) {
+            if(data.saved) {
+                btn.innerHTML = `""" + SVG_SAVED + """`;
+                btn.style.color = 'var(--accent-color)';
+                btn.style.borderColor = 'var(--accent-color)';
+            } else {
+                btn.innerHTML = `""" + SVG_SAVE + """`;
+                btn.style.color = '';
+                btn.style.borderColor = '';
+            }
         }
     }
 
@@ -469,16 +544,41 @@ CSS_STYLES = """
             const ava = data.comment.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.comment.author}`;
             
             const div = document.createElement('div');
-            div.style.cssText = 'display:flex; gap:10px; margin-bottom:15px;';
+            div.id = `comment-${data.comment.id}`;
+            div.style.cssText = 'display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;';
+            
+            let deleteBtn = '';
+            if(data.is_author) {
+                deleteBtn = `<button onclick="deleteComment('${postId}', '${data.comment.id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">Удалить</button>`;
+            }
+
             div.innerHTML = `
-                <img src="${ava}" style="width:32px; height:32px; border-radius:50%;">
-                <div>
-                    <div style="font-weight:700; font-size:14px;">${data.comment.display_name} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@${data.comment.author}</span></div>
-                    <div style="font-size:14px; margin-top:2px;">${data.comment.text}</div>
+                <div style="display:flex; gap:10px;">
+                    <img src="${ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                    <div>
+                        <div style="font-weight:700; font-size:14px;">${data.comment.display_name} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@${data.comment.author}</span></div>
+                        <div style="font-size:14px; margin-top:2px;">${data.comment.text}</div>
+                    </div>
                 </div>
+                ${deleteBtn}
             `;
             list.appendChild(div);
             document.getElementById('comment-count').innerText = data.total_comments;
+        }
+    }
+
+    async function deleteComment(postId, commentId) {
+        if(!confirm('Удалить комментарий?')) return;
+        const res = await fetch(`/api/comment/${postId}/${commentId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if(data.success) {
+            document.getElementById(`comment-${commentId}`).remove();
+            document.getElementById('comment-count').innerText = data.total_comments;
+            if(data.total_comments === 0) {
+                document.getElementById('no-comments-msg').style.display = 'block';
+            }
+        } else {
+            alert(data.error || 'Error');
         }
     }
 </script>
@@ -487,7 +587,7 @@ CSS_STYLES = """
 # ==========================================
 # LAYOUT
 # ==========================================
-def render_layout(content_html, user, request: Request, active_page="feed"):
+def render_layout(content_html, user, request: Request, active_page="feed", is_create_page=False):
     lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
     current_lang_str = "RU" if lang == "ru" else "EN"
@@ -495,10 +595,10 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
 
-    # Topbar Right (Desktop / Mobile)
+    # Topbar Right
     if user:
         nav_right = f"""
-        <a href="/write" class="btn-primary" style="padding: 8px 16px; display: flex; gap:6px;"><span class="desktop-only">{SVG_PLUS} {t('new_post', lang)}</span><span class="mobile-only">{SVG_PLUS}</span></a>
+        <a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px; display: flex; gap:6px;">{SVG_PLUS} {t('new_post', lang)}</a>
         <div class="user-menu-container">
             <div class="user-menu-btn" onclick="toggleDropdown()">
                 <img src="{avatar_url}" class="user-avatar-small">
@@ -524,6 +624,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
         <a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login_register', lang)}</span></a>
         """
 
+    # Sidebar
     sidebar_html = ""
     if user:
         sidebar_html = f"""
@@ -551,15 +652,16 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
                 </div>
                 
                 <div class="topbar-center">
-                    <form action="/search" method="get" class="search-container">
+                    <div class="search-container">
                         <span class="search-icon">{SVG_SEARCH}</span>
-                        <input type="text" name="q" class="search-input" placeholder="{t('search_placeholder', lang)}" value="{request.query_params.get('q', '')}">
-                    </form>
+                        <input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off">
+                        <div id="searchDropdown" class="search-dropdown"></div>
+                    </div>
                 </div>
                 
-                <!-- Mobile Search Input (Replaces Icon) -->
-                <form action="/search" method="get" class="mobile-search-form mobile-only">
-                    <input type="text" name="q" placeholder="{t('search_placeholder', lang)}" value="{request.query_params.get('q', '')}">
+                <!-- Mobile Search Input -->
+                <form action="/search" method="get" class="mobile-only" style="flex:1;">
+                    <input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}">
                 </form>
                 
                 <div class="topbar-right">
@@ -599,7 +701,7 @@ def render_layout(content_html, user, request: Request, active_page="feed"):
 
         <div class="bottom-nav">
             <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} {t('feed', lang)}</a>
-            <a href="/write" class="plus-btn">{SVG_PLUS}</a>
+            {f'<a href="/write">{SVG_PLUS} {t("new_post", lang)}</a>' if user else ''}
             <a href="/@{user['username'] if user else 'login'}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} {t('profile', lang)}</a>
         </div>
     </body>
@@ -617,37 +719,22 @@ async def set_lang(lang: str, next: str = "/"):
         response.set_cookie(key="lang", value=lang, max_age=31536000, httponly=False)
     return response
 
-@app.get("/", response_class=HTMLResponse)
-async def read_feed(request: Request):
-    user = get_current_user(request)
-    lang = get_lang(request)
-    feed_posts = [p for p in posts_db if p.get('visibility') == 'feed']
+@app.get("/api/search")
+async def api_search(q: str = ""):
+    q_lower = q.lower().strip()
+    if not q_lower:
+        return JSONResponse({"results": []})
     
-    if not feed_posts:
-        content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
-    else:
-        cards = ""
-        for post in feed_posts:
-            author = users_db.get(post['author'])
-            ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            score = len(post['votes']['up']) - len(post['votes']['down'])
-            
-            cards += f"""
-            <a href="/post/{post['id']}" class="feed-card">
-                <div class="feed-card-img-container">{img_html}</div>
-                <div class="feed-card-info">
-                    <div class="feed-card-title">{post['title']}</div>
-                    <div class="feed-card-author">
-                        <img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}
-                        <span style="margin-left:auto; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span>
-                    </div>
-                </div>
-            </a>
-            """
-        content = f'<div class="feed-grid">{cards}</div>'
-        
-    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+    results = [
+        {"id": p['id'], "title": p['title'], "author": p['author']} 
+        for p in posts_db 
+        if p.get('visibility') == 'feed' and (
+            q_lower in p['title'].lower() or 
+            q_lower in p['content'].lower() or
+            q_lower in p['author'].lower()
+        )
+    ][:5] # limit to 5 for dropdown
+    return JSONResponse({"results": results})
 
 @app.get("/search", response_class=HTMLResponse)
 async def search_posts(request: Request, q: str = ""):
@@ -687,6 +774,38 @@ async def search_posts(request: Request, q: str = ""):
         
     return HTMLResponse(content=render_layout(content, user, request, "feed"))
 
+@app.get("/", response_class=HTMLResponse)
+async def read_feed(request: Request):
+    user = get_current_user(request)
+    lang = get_lang(request)
+    feed_posts = [p for p in posts_db if p.get('visibility') == 'feed']
+    
+    if not feed_posts:
+        content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
+    else:
+        cards = ""
+        for post in feed_posts:
+            author = users_db.get(post['author'])
+            ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
+            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            score = len(post['votes']['up']) - len(post['votes']['down'])
+            
+            cards += f"""
+            <a href="/post/{post['id']}" class="feed-card">
+                <div class="feed-card-img-container">{img_html}</div>
+                <div class="feed-card-info">
+                    <div class="feed-card-title">{post['title']}</div>
+                    <div class="feed-card-author">
+                        <img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}
+                        <span style="margin-left:auto; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span>
+                    </div>
+                </div>
+            </a>
+            """
+        content = f'<div class="feed-grid">{cards}</div>'
+        
+    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+
 @app.get("/saved", response_class=HTMLResponse)
 async def saved_posts(request: Request):
     user = get_current_user(request)
@@ -704,14 +823,18 @@ async def saved_posts(request: Request):
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            
             cards += f"""
-            <a href="/post/{post['id']}" class="feed-card">
-                <div class="feed-card-img-container">{img_html}</div>
-                <div class="feed-card-info">
-                    <div class="feed-card-title">{post['title']}</div>
-                    <div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}</div>
-                </div>
-            </a>
+            <div class="feed-card">
+                <button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button>
+                <a href="/post/{post['id']}" style="display:flex; flex-direction:column; flex:1;">
+                    <div class="feed-card-img-container">{img_html}</div>
+                    <div class="feed-card-info">
+                        <div class="feed-card-title">{post['title']}</div>
+                        <div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{post['author']}</div>
+                    </div>
+                </a>
+            </div>
             """
         content = f'<h2 style="margin-bottom:25px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
         
@@ -802,7 +925,7 @@ async def create_post_page(request: Request):
     <form action="/write" method="post" enctype="multipart/form-data" class="create-layout">
         
         <div class="dropzone" id="dropzone">
-            <div id="dropzone-text">
+            <div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">
                 {SVG_IMAGE}
                 <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div>
                 <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div>
@@ -848,7 +971,7 @@ async def create_post_page(request: Request):
         </div>
     </form>
     """
-    return HTMLResponse(content=render_layout(content, user, request, "feed"))
+    return HTMLResponse(content=render_layout(content, user, request, "feed", is_create_page=True))
 
 @app.post("/write")
 async def create_post(request: Request, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
@@ -874,6 +997,98 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     }
     posts_db.insert(0, new_post)
     return RedirectResponse(url=f"/post/{new_post['id']}", status_code=status.HTTP_302_FOUND)
+
+@app.get("/edit_post/{post_id}", response_class=HTMLResponse)
+async def edit_post_page(request: Request, post_id: str):
+    user = get_current_user(request)
+    lang = get_lang(request)
+    if not user: return RedirectResponse(url="/login")
+    
+    post = next((p for p in posts_db if p['id'] == post_id), None)
+    if not post or post['author'] != user['username']:
+        raise HTTPException(403, "Access denied")
+        
+    vis_feed_style = "border-color:var(--accent-color); color:var(--accent-color);" if post['visibility'] == 'feed' else "border-color:var(--border-color); color:var(--text-muted);"
+    vis_link_style = "border-color:var(--accent-color); color:var(--accent-color);" if post['visibility'] == 'link' else "border-color:var(--border-color); color:var(--text-muted);"
+    
+    checked = "checked" if post.get('allow_comments', True) else ""
+    
+    content = f"""
+    <h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px;">{t('edit_post', lang)}</h2>
+    <form action="/edit_post/{post_id}" method="post" enctype="multipart/form-data" class="create-layout">
+        
+        <div class="dropzone" id="dropzone">
+            <div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">
+                {SVG_IMAGE}
+                <div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div>
+                <div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div>
+                <div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;" onclick="document.getElementById('file-input').click()">{t('choose_files', lang)}</div>
+                <p style="margin-top:10px; font-size:12px; color:var(--accent-color);">Оставьте пустым, чтобы сохранить текущие фото</p>
+            </div>
+            <div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div>
+            <input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)">
+        </div>
+
+        <div class="create-sidebar">
+            <div class="input-group">
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label>
+                <input type="text" name="title" value="{post['title']}" required style="padding:14px;">
+            </div>
+            
+            <div class="input-group">
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)}</label>
+                <textarea name="content" style="min-height:120px; resize:vertical; padding:14px;">{post['content']}</textarea>
+            </div>
+
+            <div class="input-group">
+                <label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label>
+                <div style="display:flex; gap:10px;">
+                    <button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; {vis_feed_style} cursor:pointer; font-family:inherit; font-size:15px; border:1px solid;">
+                        {SVG_EYE} {t('in_feed', lang)}
+                    </button>
+                    <button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; {vis_link_style} cursor:pointer; font-family:inherit; font-size:15px; border:1px solid;">
+                        {SVG_LINK} {t('by_link', lang)}
+                    </button>
+                </div>
+                <input type="hidden" name="visibility" id="vis-input" value="{post['visibility']}">
+            </div>
+
+            <div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label>
+                <label class="switch">
+                    <input type="checkbox" name="allow_comments" {checked}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_SETTINGS} {t('update', lang)}</button>
+        </div>
+    </form>
+    """
+    return HTMLResponse(content=render_layout(content, user, request, "feed", is_create_page=True))
+
+@app.post("/edit_post/{post_id}")
+async def update_post(request: Request, post_id: str, title: str = Form(...), content: str = Form(""), visibility: str = Form("feed"), allow_comments: bool = Form(False), images: List[UploadFile] = File(None)):
+    user = get_current_user(request)
+    if not user: raise HTTPException(401)
+    
+    post = next((p for p in posts_db if p['id'] == post_id), None)
+    if not post or post['author'] != user['username']:
+        raise HTTPException(403, "Access denied")
+        
+    post['title'] = title
+    post['content'] = content
+    post['visibility'] = visibility
+    post['allow_comments'] = allow_comments
+    
+    if images and images[0].filename:
+        img_b64_list = []
+        for img in images[:3]:
+            b64 = await image_to_base64(img)
+            if b64: img_b64_list.append(b64)
+        post['images'] = img_b64_list
+        
+    return RedirectResponse(url=f"/post/{post_id}", status_code=status.HTTP_302_FOUND)
 
 # --- API Endpoints for AJAX ---
 @app.post("/api/vote/{post_id}/{action}")
@@ -908,7 +1123,6 @@ async def vote_post(post_id: str, action: str, request: Request):
     post['votes']['down'] = down_votes
     score = len(up_votes) - len(down_votes)
     
-    # Check actual user vote for response
     if username in post['votes']['up']: user_vote = 1
     elif username in post['votes']['down']: user_vote = -1
     else: user_vote = 0
@@ -949,7 +1163,24 @@ async def add_comment(post_id: str, request: Request, text: str = Form(...)):
         "text": text
     }
     post['comments'].append(comment)
-    return JSONResponse({"comment": comment, "total_comments": len(post['comments'])})
+    return JSONResponse({"comment": comment, "total_comments": len(post['comments']), "is_author": True})
+
+@app.delete("/api/comment/{post_id}/{comment_id}")
+async def delete_comment(post_id: str, comment_id: str, request: Request):
+    user = get_current_user(request)
+    if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    
+    post = next((p for p in posts_db if p['id'] == post_id), None)
+    if not post: return JSONResponse({"error": "Not found"}, status_code=404)
+    
+    comment = next((c for c in post['comments'] if c['id'] == comment_id), None)
+    if not comment: return JSONResponse({"error": "Comment not found"}, status_code=404)
+    
+    if comment['author'] != user['username']:
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
+        
+    post['comments'] = [c for c in post['comments'] if c['id'] != comment_id]
+    return JSONResponse({"success": True, "total_comments": len(post['comments'])})
 
 @app.post("/delete/{post_id}")
 async def delete_post(post_id: str, request: Request):
@@ -991,6 +1222,10 @@ async def view_post(request: Request, post_id: str):
         <button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button>
     </form>
     ''' if user and user['username'] == post['author'] else ''
+    
+    edit_btn = f'''
+    <a href="/edit_post/{post_id}" class="action-btn">{SVG_SETTINGS}</a>
+    ''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
         media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:70vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
@@ -1014,7 +1249,6 @@ async def view_post(request: Request, post_id: str):
     else:
         media_html = f'<div style="color:#555;">{SVG_IMAGE}</div>'
 
-    # Comment form or message
     if post.get('allow_comments', True):
         comments_input_html = f"""
         <form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;">
@@ -1028,13 +1262,18 @@ async def view_post(request: Request, post_id: str):
     comments_list_html = ""
     for c in post['comments']:
         c_ava = c.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['author']}"
+        del_btn = f'<button onclick="deleteComment(\'{post["id"]}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">Удалить</button>' if user and user['username'] == c['author'] else ''
+        
         comments_list_html += f"""
-        <div style="display:flex; gap:10px; margin-bottom:15px;">
-            <img src="{c_ava}" style="width:32px; height:32px; border-radius:50%;">
-            <div>
-                <div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div>
-                <div style="font-size:14px; margin-top:2px;">{c['text']}</div>
+        <div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;">
+            <div style="display:flex; gap:10px;">
+                <img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                <div>
+                    <div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div>
+                    <div style="font-size:14px; margin-top:2px;">{c['text']}</div>
+                </div>
             </div>
+            {del_btn}
         </div>
         """
 
@@ -1070,6 +1309,7 @@ async def view_post(request: Request, post_id: str):
                 
                 <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
                 
+                {edit_btn}
                 {delete_btn}
             </div>
             
