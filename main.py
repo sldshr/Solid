@@ -64,8 +64,8 @@ def t(key, lang):
 
 SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#3b82f6"/></svg>"""
 SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%233b82f6%22/></svg>"
-SVG_UP = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
-SVG_DOWN = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
+SVG_UP = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
+SVG_DOWN = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
 SVG_FEED = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
 SVG_PLUS = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
 SVG_USER = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
@@ -75,8 +75,8 @@ SVG_EYE = """<svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fi
 SVG_EYE_OFF = """<svg class="eye-closed" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 SVG_BACK = """<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
 SVG_IMAGE = """<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>"""
-SVG_SAVE = """<svg class="icon-save" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
-SVG_SAVED = """<svg class="icon-saved" style="display:none;" width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
+SVG_SAVE = """<svg class="icon-save" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
+SVG_SAVED = """<svg class="icon-saved" width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_LINK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>"""
 SVG_TRASH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>"""
 SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>"""
@@ -189,15 +189,21 @@ a{color:var(--accent-color);text-decoration:none;}
 .post-author img{width:48px;height:48px;border-radius:50%!important;}
 .post-title{font-size:26px;font-weight:700;margin-bottom:15px;}
 .post-desc{color:#ccc;font-size:16px;margin-bottom:25px;white-space:pre-wrap;line-height:1.5;max-height:150px;overflow-y:auto;}
-.actions-row{display:flex;align-items:center;gap:15px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}
-.vote-controls{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:6px 12px;border-radius:8px;border:1px solid var(--border-color);}
-.vote-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:4px;border-radius:4px;transition:color .2s;}
-.vote-btn:hover{background:#333;}
+
+/* ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ КНОПОК */
+.actions-row{display:flex;align-items:center;gap:10px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}
+.vote-controls{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;box-sizing:border-box;}
+.vote-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;border-radius:4px;transition:color .2s;height:100%;}
+.vote-btn:hover{background:transparent;}
 .vote-btn.active-up{color:var(--accent-color);}
 .vote-btn.active-down{color:var(--danger-color);}
-.vote-count{font-weight:700;font-size:18px;min-width:20px;text-align:center;}
-.action-btn{background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-muted);padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;transition:background .2s;}
+.vote-count{font-weight:700;font-size:18px;min-width:20px;text-align:center;line-height:1;}
+.action-btn{background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-muted);padding:0 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;transition:background .2s;height:40px;box-sizing:border-box;}
 .action-btn:hover{background:#333;color:#fff;}
+.action-btn svg{width:20px;height:20px;}
+form .action-btn{height:100%;width:100%;}
+/* КОНЕЦ ИСПРАВЛЕННЫХ СТИЛЕЙ */
+
 .comments-section{flex:1;overflow-y:auto;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}
 .feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
 .feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;}
@@ -516,20 +522,14 @@ async function toggleSave(postId,redirectToSaved=false){
     }
     var btn=document.getElementById('btn-save');
     if(btn){
-        var saveIcon=btn.querySelector('.icon-save');
-        var savedIcon=btn.querySelector('.icon-saved');
-        if(saveIcon&&savedIcon){
-            if(data.saved){
-                saveIcon.style.display='none';
-                savedIcon.style.display='block';
-                btn.style.color='var(--accent-color)';
-                btn.style.borderColor='var(--accent-color)';
-            }else{
-                saveIcon.style.display='block';
-                savedIcon.style.display='none';
-                btn.style.color='';
-                btn.style.borderColor='';
-            }
+        if(data.saved){
+            btn.innerHTML='<svg class="icon-saved" width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>';
+            btn.style.color='var(--accent-color)';
+            btn.style.borderColor='var(--accent-color)';
+        }else{
+            btn.innerHTML='<svg class="icon-save" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>';
+            btn.style.color='';
+            btn.style.borderColor='';
         }
     }
 }
@@ -638,7 +638,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     if user:
         nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px; display: flex; gap:6px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
-        nav_right = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} <span class="desktop-only">{current_lang_str}</span></a><a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login', lang)}</span></a>"""
+        nav_right = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px; height:auto;">{SVG_LANG} <span class="desktop-only">{current_lang_str}</span></a><a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login', lang)}</span></a>"""
 
     sidebar_html = ""
     if user:
@@ -971,10 +971,10 @@ async def view_post(request: Request, post_id: str):
         elif user['username'] in post['votes']['down']: user_vote = -1
     is_saved = user and post_id in user.get('saved_posts', [])
     
-    save_icon_html = f'<span class="icon-save" style="display:{"none" if is_saved else "block"}">{SVG_SAVE}</span><span class="icon-saved" style="display:{"block" if is_saved else "none"}">{SVG_SAVED}</span>'
+    save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
     save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
     
-    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="confirmDeletePost(event, this);"><button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
+    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0; display:flex; height:40px;" onsubmit="confirmDeletePost(event, this);"><button type="submit" class="action-btn" style="color:var(--danger-color);">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
     if post['images']:
         media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
         if len(post['images']) > 1:
