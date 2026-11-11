@@ -4,6 +4,7 @@ from passlib.context import CryptContext
 import uuid
 import base64
 import html
+import json
 from typing import List
 
 app = FastAPI(title="sol-id")
@@ -301,17 +302,18 @@ input:checked+.slider:before{transform:translateX(22px);}
 
 .mobile-only{display:none!important;}
 .desktop-only{display:flex!important;}
-.mobile-search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 12px;border-radius:8px;color:#fff;font-size:14px;outline:none;}
 
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}}
 @media(max-width:900px){
     .app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}
     .sidebar{display:none;}
-    .topbar{height:60px;padding:0 15px;}
+    .topbar{height:60px;padding:0 15px;gap:10px;}
     .topbar-left{width:auto;}
+    .topbar-center{display:flex; flex:1;}
+    .topbar-right{width:auto;}
     .logo span{display:none;}
     .menu-toggle{display:none!important;}
-    .topbar-center{display:none;}
+    .search-container{max-width:100%;}
     .topbar-right .user-menu-container{display:none!important;}
     .mobile-only{display:flex!important;}
     .desktop-only{display:none!important;}
@@ -386,7 +388,7 @@ function handleSearch(query){
         var res=await fetch('/api/search?q='+encodeURIComponent(query));
         var data=await res.json();
         if(data.results&&data.results.length>0){
-            dropdown.innerHTML=data.results.map(p=>'<a href="/'+p.id+'" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">'+p.title+'</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@'+p.author+'</div></a>').join('');
+            dropdown.innerHTML=data.results.map(p=>`<a href="/${p.id}" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">${p.title}</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@${p.author}</div></a>`).join('');
         }else{ dropdown.innerHTML='<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">Ничего не найдено</div>'; }
         dropdown.style.display='block';
     },300);
@@ -529,7 +531,16 @@ async function submitComment(e,postId){
         var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;
         var div=document.createElement('div'); div.id='comment-'+data.comment.id;
         div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
-        div.innerHTML='<div style="display:flex;gap:10px;"><img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><div><div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div><div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div></div></div><button onclick="confirmDeleteComment(\''+postId+'\', \''+data.comment.id+'\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">'+window.TRANSLATIONS.delete+'</button>';
+        div.innerHTML=`
+            <div style="display:flex;gap:10px;">
+                <img src="${ava}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
+                <div>
+                    <div style="font-weight:700;font-size:14px;">${data.comment.display_name} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@${data.comment.author}</span></div>
+                    <div style="font-size:14px;margin-top:2px;">${data.comment.text}</div>
+                </div>
+            </div>
+            <button onclick="confirmDeleteComment('${postId}', '${data.comment.id}')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">${window.TRANSLATIONS.delete}</button>
+        `;
         list.appendChild(div);
         document.getElementById('comment-count').innerText=data.total_comments;
     }
@@ -560,8 +571,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
 });
 
-// Поддержка скриптов при SPA переходах HTMX
-document.body.addEventListener('htmx:afterSwap', function(evt) {
+document.addEventListener('htmx:afterSwap', function(evt) {
     applySidebarState();
     var carouselImgs=document.querySelectorAll('.carousel-img');
     if(carouselImgs.length>1){
@@ -581,13 +591,15 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
     
     page_title = f"sol-id | {title_text}" if title_text else "sol-id"
-    translations_json = f"""<script>window.TRANSLATIONS = {TRANSLATIONS[lang]}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`;</script>"""
+    
+    # Используем json.dumps для безопасной передачи словаря в JS
+    translations_json = f"""<script>window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang])}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`;</script>"""
 
     if user:
         nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
-        nav_right = f"""<a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login', lang)}</span></a>"""
-    
+        nav_right = "" # Убрали кнопку входа сверху
+        
     lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold; margin-right:10px;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
 
     sidebar_html = ""
@@ -599,8 +611,9 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     else:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/login" class="{'active' if active_page == 'login' else ''}">{SVG_USER}</a></div>"""
 
-    html_content = f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}{translations_json}</head>
+    html_content = f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}</head>
 <body hx-boost="true" hx-target="body" hx-swap="outerHTML show:window:top">
+{translations_json}
 <div class="app-layout">
     <div class="topbar">
         <div class="topbar-left">
@@ -621,9 +634,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     </div>
     {sidebar_html}
     <div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">
-        <form action="/search" method="get" class="mobile-only" style="margin-bottom:15px;">
-            <input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}">
-        </form>
         {content_html}
     </div>
 </div>
