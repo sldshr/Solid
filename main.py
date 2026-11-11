@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from passlib.context import CryptContext
 import uuid
 import base64
-from typing import List, Optional
+from typing import List
 
 app = FastAPI(title="sol.id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -15,7 +15,7 @@ users_db = {}
 sessions = {} 
 posts_db = [] 
 
-# Создаем дефолтного админа для входа
+# Дефолтный пользователь для теста
 users_db["admin"] = {
     "username": "admin",
     "password": pwd_context.hash("admin"),
@@ -25,12 +25,19 @@ users_db["admin"] = {
 }
 
 # ==========================================
-# SVG ИКОНКИ
+# SVG ИКОНКИ И ЛОГОТИП
 # ==========================================
-SVG_LOGO = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM11 7H13V13H11V7ZM11 15H13V17H11V15Z" fill="#8cc84b"/></svg>"""
+SVG_LOGO = """<svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#3b82f6"/></svg>"""
+SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%233b82f6%22/></svg>"
+
+SVG_UP = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
+SVG_DOWN = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
 SVG_FEED = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
-SVG_PLUS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
-SVG_USER = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
+SVG_PLUS = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>"""
+SVG_USER = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>"""
+SVG_SETTINGS = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>"""
+SVG_LOGOUT = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>"""
+SVG_COMMENT = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>"""
 SVG_EYE = """<svg id="eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>"""
 SVG_EYE_OFF = """<svg id="eye-closed" style="display:none;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>"""
 SVG_BACK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>"""
@@ -42,8 +49,7 @@ SVG_IMAGE = """<svg width="40" height="40" viewBox="0 0 24 24" fill="none" strok
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
     if session_token and session_token in sessions:
-        username = sessions[session_token]
-        return users_db.get(username)
+        return users_db.get(sessions[session_token])
     return None
 
 async def image_to_base64(file: UploadFile):
@@ -52,77 +58,66 @@ async def image_to_base64(file: UploadFile):
     return f"data:{file.content_type};base64,{base64.b64encode(contents).decode('utf-8')}"
 
 # ==========================================
-# CSS СТИЛИ (CSS GRID + PIXEL FONTS)
+# CSS СТИЛИ И СКРИПТЫ
 # ==========================================
 CSS_STYLES = """
+<link rel="icon" type="image/svg+xml" href=\"""" + SVG_FAVICON + """\">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
     :root {
         --bg-color: #0f0f0f; --card-bg: #1c1c1c; --text-main: #f3f3f3; --text-muted: #888;
-        --accent-color: #8cc84b; --border-color: #2a2a2a;
+        --accent-color: #3b82f6; --border-color: #2a2a2a;
+        --danger-color: #ef4444;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pixelify Sans', sans-serif; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Manrope', sans-serif; }
     body { background-color: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; min-height: 100vh; }
     a { color: var(--accent-color); text-decoration: none; }
     
     /* Layout Grid */
-    .app-layout {
-        display: grid;
-        grid-template-columns: 200px 1fr;
-        grid-template-rows: 60px 1fr;
-        height: 100vh;
-        width: 100%;
-    }
+    .app-layout { display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 60px 1fr; height: 100vh; width: 100%; }
     
     /* Topbar */
-    .topbar {
-        grid-column: 1 / -1;
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 0 20px; border-bottom: 1px solid var(--border-color);
-        background-color: var(--bg-color); z-index: 100;
-    }
-    .logo { font-size: 20px; font-weight: bold; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
-    .btn-primary {
-        background-color: var(--accent-color); color: #000; border: none; padding: 8px 16px;
-        border-radius: 6px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
-        font-size: 14px;
-    }
-    .btn-primary:hover { opacity: 0.8; }
-    .user-nav { display: flex; align-items: center; gap: 15px; font-size: 14px; }
+    .topbar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--border-color); background-color: var(--bg-color); z-index: 100; }
+    .logo { font-size: 20px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+    .btn-primary { background-color: var(--accent-color); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-size: 14px; }
+    .btn-primary:hover { opacity: 0.9; }
+    
+    /* User Dropdown */
+    .user-menu-container { position: relative; }
+    .user-menu-btn { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 5px; border-radius: 8px; }
+    .user-menu-btn:hover { background: var(--card-bg); }
+    .user-avatar-small { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #333; }
+    .dropdown-menu { display: none; position: absolute; right: 0; top: 50px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; width: 220px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 200; overflow: hidden; }
+    .dropdown-header { padding: 15px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border-color); }
+    .dropdown-header img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+    .dropdown-header div { display: flex; flex-direction: column; }
+    .dropdown-header .name { font-weight: 700; font-size: 14px; }
+    .dropdown-header .login { font-size: 12px; color: var(--text-muted); }
+    .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 12px 15px; color: var(--text-main); font-size: 14px; }
+    .dropdown-item:hover { background: #2a2a2a; }
+    .dropdown-item.danger { color: var(--danger-color); border-top: 1px solid var(--border-color); }
     
     /* Sidebar */
-    .sidebar {
-        grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-color);
-        padding: 20px 10px; display: flex; flex-direction: column; gap: 5px;
-        overflow-y: auto;
-    }
-    .sidebar a {
-        color: var(--text-muted); padding: 10px 15px; border-radius: 6px;
-        display: flex; align-items: center; gap: 12px; font-size: 16px;
-    }
+    .sidebar { grid-column: 1; grid-row: 2; border-right: 1px solid var(--border-color); padding: 20px 10px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+    .sidebar a { color: var(--text-muted); padding: 10px 15px; border-radius: 6px; display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 500; }
     .sidebar a:hover, .sidebar a.active { color: var(--text-main); background-color: var(--card-bg); }
     .sidebar a.active svg { color: var(--accent-color); }
     
     /* Main Content */
-    .main-content {
-        grid-column: 2; grid-row: 2; padding: 20px; overflow-y: auto; display: flex; flex-direction: column;
-    }
+    .main-content { grid-column: 2; grid-row: 2; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
     
     /* Auth Forms */
     .auth-container { display: flex; justify-content: center; align-items: center; flex: 1; }
     .auth-form { background-color: var(--card-bg); padding: 30px; border-radius: 12px; width: 100%; max-width: 400px; border: 1px solid var(--border-color); }
-    .auth-form h2 { text-align: center; margin-bottom: 20px; font-weight: 500; }
+    .auth-form h2 { text-align: center; margin-bottom: 20px; font-weight: 700; }
     .input-group { margin-bottom: 15px; position: relative; }
-    .input-group input, .input-group textarea {
-        width: 100%; padding: 12px; background-color: var(--bg-color); border: 1px solid var(--border-color);
-        border-radius: 6px; color: white; font-size: 16px; outline: none;
-    }
-    .input-group input:focus { border-color: var(--accent-color); }
+    .input-group input, .input-group select, .input-group textarea { width: 100%; padding: 12px; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; color: white; font-size: 15px; outline: none; }
+    .input-group input:focus, .input-group select:focus, .input-group textarea:focus { border-color: var(--accent-color); }
     .pass-toggle { position: absolute; right: 12px; top: 14px; cursor: pointer; color: var(--text-muted); }
     .checkbox-group { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; font-size: 14px; color: var(--text-muted); }
-    .error { color: #ff5555; text-align: center; margin-bottom: 15px; font-size: 14px; }
+    .error { color: var(--danger-color); text-align: center; margin-bottom: 15px; font-size: 14px; }
     
     /* Profile */
     .profile-header { position: relative; margin-bottom: 20px; border-radius: 12px; overflow: hidden; background: var(--card-bg); }
@@ -130,7 +125,7 @@ CSS_STYLES = """
     .profile-info { display: flex; gap: 20px; padding: 0 20px 20px 20px; margin-top: -50px; align-items: flex-end; }
     .profile-avatar { width: 100px; height: 100px; border-radius: 50%; border: 4px solid var(--card-bg); object-fit: cover; background: #333; }
     .profile-details { flex: 1; }
-    .profile-details h1 { font-size: 24px; margin-bottom: 5px; font-weight: 500; }
+    .profile-details h1 { font-size: 24px; margin-bottom: 5px; font-weight: 700; }
     .profile-details p { color: var(--text-muted); font-size: 14px; }
     
     /* Post View */
@@ -140,43 +135,67 @@ CSS_STYLES = """
     .post-details { flex: 1; min-width: 300px; display: flex; flex-direction: column; }
     .post-author { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
     .post-author img { width: 40px; height: 40px; border-radius: 50%; }
-    .post-title { font-size: 22px; font-weight: 500; margin-bottom: 10px; }
+    .post-title { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
     .post-desc { color: var(--text-muted); font-size: 15px; margin-bottom: 20px; white-space: pre-wrap; }
-    .post-actions { display: flex; gap: 15px; margin-bottom: 20px; color: var(--text-muted); font-size: 14px; }
-    .comments-section { flex: 1; overflow-y: auto; border-top: 1px solid var(--border-color); padding-top: 15px; }
+    
+    /* Voting */
+    .vote-controls { display: flex; align-items: center; gap: 10px; background: var(--bg-color); padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border-color); width: fit-content; margin-bottom: 20px; }
+    .vote-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 4px; }
+    .vote-btn:hover { background: #333; color: #fff; }
+    .vote-btn.up:hover { color: var(--accent-color); }
+    .vote-btn.down:hover { color: var(--danger-color); }
+    .vote-count { font-weight: 700; font-size: 16px; }
     
     /* Feed Grid */
     .feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
     .feed-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); display: flex; flex-direction: column; }
     .feed-card img { width: 100%; height: 160px; object-fit: cover; }
     .feed-card-info { padding: 12px; }
-    .feed-card-title { font-weight: 500; font-size: 16px; margin-bottom: 5px; }
+    .feed-card-title { font-weight: 700; font-size: 16px; margin-bottom: 5px; }
     .feed-card-author { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
     
     /* Upload Area */
     .upload-area { border: 2px dashed var(--border-color); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; margin-bottom: 20px; color: var(--text-muted); display: block; }
-    .upload-area:hover { border-color: var(--accent-color); }
+    .upload-area:hover { border-color: var(--accent-color); color: var(--accent-color); }
     .upload-area input[type="file"] { display: none; }
 
     /* Mobile Nav */
-    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 10px 0; z-index: 100; }
-    .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: var(--text-muted); gap: 4px; }
+    .bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; background: var(--bg-color); border-top: 1px solid var(--border-color); justify-content: space-around; padding: 10px 0; z-index: 100; padding-bottom: env(safe-area-inset-bottom, 10px); }
+    .bottom-nav a { display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--text-muted); gap: 4px; }
     .bottom-nav a.active { color: var(--accent-color); }
-    .bottom-nav .plus-btn { background: var(--accent-color); color: #000; padding: 10px; border-radius: 50%; transform: translateY(-15px); box-shadow: 0 4px 10px rgba(140, 200, 75, 0.4); }
+    .bottom-nav .plus-btn { background: var(--accent-color); color: #fff; padding: 10px; border-radius: 50%; transform: translateY(-15px); box-shadow: 0 4px 10px rgba(59, 130, 246, 0.4); }
 
     @media (max-width: 768px) {
         .app-layout { grid-template-columns: 1fr; grid-template-rows: 60px 1fr; }
         .sidebar { display: none; }
-        .main-content { grid-column: 1; }
+        .main-content { grid-column: 1; padding-bottom: 100px; }
         .bottom-nav { display: flex; }
-        .topbar .user-nav span, .topbar .btn-primary span { display: none; }
+        .topbar .user-menu-btn span { display: none; }
+        .topbar .btn-primary span { display: none; }
         .post-view { flex-direction: column; padding: 15px; }
-        .profile-banner { height: 120px; }
+        .profile-banner { height: 140px; }
         .profile-avatar { width: 80px; height: 80px; }
-        .main-content { padding-bottom: 80px; }
+        .profile-info { flex-direction: column; align-items: flex-start; gap: 10px; margin-top: -40px; }
+        .profile-info > div:last-child { width: 100%; }
+        .profile-info .btn-primary { width: 100%; justify-content: center; }
     }
 </style>
 <script>
+    function toggleDropdown() {
+        var dropdown = document.getElementById("user-dropdown");
+        dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+    }
+    window.onclick = function(event) {
+        if (!event.target.closest('.user-menu-container')) {
+            var dropdowns = document.getElementsByClassName("dropdown-menu");
+            for (var i = 0; i < dropdowns.length; i++) {
+                var openDropdown = dropdowns[i];
+                if (openDropdown.style.display === "block") {
+                    openDropdown.style.display = "none";
+                }
+            }
+        }
+    }
     function togglePassword(id) {
         var input = document.getElementById(id);
         var eyeOpen = document.getElementById('eye-open-' + id);
@@ -207,19 +226,33 @@ def render_layout(content_html, user, active_page="feed"):
     
     if user:
         nav_html = f"""
-        <div class="user-nav">
+        <div style="display:flex; align-items:center; gap:15px;">
             <a href="/write" class="btn-primary">{SVG_PLUS} <span>Новый пост</span></a>
-            <a href="/@{user['username']}" style="display:flex; align-items:center; gap:8px; color:#fff;">
-                <img src="{avatar_url}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
-                <span>{user['display_name']}</span>
-            </a>
-            <a href="/logout" style="color:var(--text-muted);">Выйти</a>
+            
+            <div class="user-menu-container">
+                <div class="user-menu-btn" onclick="toggleDropdown()">
+                    <img src="{avatar_url}" class="user-avatar-small">
+                    <span style="font-weight:500; font-size:14px;">{user['display_name']}</span>
+                </div>
+                <div id="user-dropdown" class="dropdown-menu">
+                    <div class="dropdown-header">
+                        <img src="{avatar_url}">
+                        <div>
+                            <span class="name">{user['display_name']}</span>
+                            <span class="login">@{user['username']}</span>
+                        </div>
+                    </div>
+                    <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} Профиль</a>
+                    <a href="/settings" class="dropdown-item">{SVG_SETTINGS} Настройки</a>
+                    <a href="/logout" class="dropdown-item danger">{SVG_LOGOUT} Выход</a>
+                </div>
+            </div>
         </div>
         """
     else:
         nav_html = f"""
-        <div class="user-nav">
-            <a href="/login" style="color:var(--text-main);">Вход</a>
+        <div style="display:flex; align-items:center; gap:15px;">
+            <a href="/login" style="color:var(--text-main); font-weight:500;">Вход</a>
             <a href="/register" class="btn-primary">Регистрация</a>
         </div>
         """
@@ -238,7 +271,7 @@ def render_layout(content_html, user, active_page="feed"):
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>sol.id</title>
         {CSS_STYLES}
     </head>
@@ -284,19 +317,22 @@ async def read_feed(request: Request):
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="height:160px; background:#222; display:flex; align-items:center; justify-content:center;">{SVG_IMAGE}</div>'
+            score = post['upvotes'] - post['downvotes']
             
             cards += f"""
             <a href="/post/{post['id']}" class="feed-card">
                 {img_html}
                 <div class="feed-card-info">
                     <div class="feed-card-title">{post['title']}</div>
-                    <div class="feed-card-author"><img src="{ava}" style="width:20px;height:20px;border-radius:50%;"> @{post['author']}</div>
+                    <div class="feed-card-author">
+                        <img src="{ava}" style="width:20px;height:20px;border-radius:50%;"> @{post['author']}
+                        <span style="margin-left:auto;">{SVG_UP} {score}</span>
+                    </div>
                 </div>
             </a>
             """
         content = f'<div class="feed-grid">{cards}</div>'
         
-    # Принудительно отдаем HTMLResponse
     return HTMLResponse(content=render_layout(content, user, "feed"))
 
 @app.get("/register", response_class=HTMLResponse)
@@ -305,7 +341,7 @@ async def register_page():
     <div class="auth-container">
         <form class="auth-form" action="/register" method="post">
             <h2>Регистрация</h2>
-            <div class="input-group"><input type="text" name="username" placeholder="Логин (для /@login)" required></div>
+            <div class="input-group"><input type="text" name="username" placeholder="Логин (без @)" required></div>
             <div class="input-group"><input type="text" name="display_name" placeholder="Отображаемое имя" required></div>
             <div class="input-group">
                 <input type="password" id="pass1" name="password" placeholder="Пароль" required>
@@ -320,7 +356,7 @@ async def register_page():
                 <label for="privacy">Я согласен с <a href="#">политикой конфиденциальности</a>.</label>
             </div>
             <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">Создать аккаунт</button>
-            <div style="text-align:center; margin-top:15px; font-size:14px;">Уже есть аккаунт? <a href="/login">Войти</a></div>
+            <div style="text-align:center; margin-top:15px; font-size:14px; color: var(--text-muted);">Уже есть аккаунт? <a href="/login">Войти</a></div>
         </form>
     </div>
     """
@@ -354,7 +390,7 @@ async def login_page():
                 <span class="pass-toggle" onclick="togglePassword('pass1')">{SVG_EYE}{SVG_EYE_OFF}</span>
             </div>
             <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">Войти</button>
-            <div style="text-align:center; margin-top:15px; font-size:14px;">Нет аккаунта? <a href="/register">Создать</a></div>
+            <div style="text-align:center; margin-top:15px; font-size:14px; color: var(--text-muted);">Нет аккаунта? <a href="/register">Создать</a></div>
         </form>
     </div>
     """
@@ -380,6 +416,28 @@ async def logout(request: Request):
     response.delete_cookie("session_token")
     return response
 
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    user = get_current_user(request)
+    if not user: return RedirectResponse(url="/login")
+    
+    content = f"""
+    <div style="max-width: 600px; margin: 0 auto; width: 100%;">
+        <h2 style="margin-bottom: 20px; font-weight: 700;">Настройки</h2>
+        <div style="background: var(--card-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px; font-weight: 500;">Язык интерфейса</h3>
+            <div class="input-group" style="max-width: 300px;">
+                <select>
+                    <option value="ru">Русский (RU)</option>
+                    <option value="en">English (EN)</option>
+                </select>
+            </div>
+            <p style="color: var(--text-muted); font-size: 14px;">Смена языка пока носит демонстрационный характер.</p>
+        </div>
+    </div>
+    """
+    return HTMLResponse(content=render_layout(content, user, "settings"))
+
 @app.get("/write", response_class=HTMLResponse)
 async def create_post_page(request: Request):
     user = get_current_user(request)
@@ -387,7 +445,7 @@ async def create_post_page(request: Request):
     
     content = f"""
     <div style="max-width: 800px; margin: 0 auto; width: 100%;">
-        <h2 style="margin-bottom: 20px; font-weight: 500;">Новый пост</h2>
+        <h2 style="margin-bottom: 20px; font-weight: 700;">Новый пост</h2>
         <form action="/write" method="post" enctype="multipart/form-data" style="display:flex; gap:20px; flex-wrap:wrap;">
             <div style="flex:1; min-width:300px;">
                 <label class="upload-area" for="file-upload">
@@ -431,11 +489,25 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         "title": title,
         "content": content,
         "images": img_b64_list,
-        "likes": 0,
+        "upvotes": 0,
+        "downvotes": 0,
         "comments": []
     }
     posts_db.insert(0, new_post)
     return RedirectResponse(url=f"/post/{new_post['id']}", status_code=status.HTTP_302_FOUND)
+
+@app.post("/vote/{post_id}/{action}")
+async def vote_post(post_id: str, action: str, request: Request):
+    user = get_current_user(request)
+    if not user: return RedirectResponse(url="/login")
+    
+    post = next((p for p in posts_db if p['id'] == post_id), None)
+    if post:
+        if action == "up": post['upvotes'] += 1
+        elif action == "down": post['downvotes'] += 1
+    
+    referer = request.headers.get("referer", "/")
+    return RedirectResponse(url=referer, status_code=status.HTTP_302_FOUND)
 
 @app.get("/post/{post_id}", response_class=HTMLResponse)
 async def view_post(request: Request, post_id: str):
@@ -446,6 +518,7 @@ async def view_post(request: Request, post_id: str):
         
     author = users_db.get(post['author'])
     ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
+    score = post['upvotes'] - post['downvotes']
     
     if post['images']:
         media_html = "".join([f'<img src="{img}" style="max-width:100%; max-height:70vh; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img">' for i, img in enumerate(post['images'])])
@@ -467,7 +540,7 @@ async def view_post(request: Request, post_id: str):
 
     content = f"""
     <div style="margin-bottom:20px;">
-        <a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted);">{SVG_BACK} Назад в ленту</a>
+        <a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500;">{SVG_BACK} Назад в ленту</a>
     </div>
     <div class="post-view">
         <div class="post-media">
@@ -477,21 +550,29 @@ async def view_post(request: Request, post_id: str):
             <div class="post-author">
                 <img src="{ava}">
                 <div>
-                    <div style="font-weight:500;">{author['display_name'] if author else post['author']}</div>
+                    <div style="font-weight:700;">{author['display_name'] if author else post['author']}</div>
                     <div style="font-size:12px; color:var(--text-muted);">@{post['author']}</div>
                 </div>
             </div>
             <div class="post-title">{post['title']}</div>
             <div class="post-desc">{post['content']}</div>
             
-            <div class="post-actions">
-                <span style="display:flex; align-items:center; gap:5px;">♥ {post['likes']}</span>
-                <span style="display:flex; align-items:center; gap:5px;">💬 {len(post['comments'])}</span>
+            <div style="display:flex; align-items:center; gap:20px; margin-bottom:20px;">
+                <div class="vote-controls" style="margin-bottom:0;">
+                    <form action="/vote/{post['id']}/up" method="post" style="margin:0;">
+                        <button type="submit" class="vote-btn up">{SVG_UP}</button>
+                    </form>
+                    <span class="vote-count">{score}</span>
+                    <form action="/vote/{post['id']}/down" method="post" style="margin:0;">
+                        <button type="submit" class="vote-btn down">{SVG_DOWN}</button>
+                    </form>
+                </div>
+                <span style="color:var(--text-muted); display:flex; align-items:center; gap:5px;">{SVG_COMMENT} {len(post['comments'])}</span>
             </div>
             
             <div class="comments-section">
-                <h3 style="margin-bottom:15px; font-weight:500;">Комментарии</h3>
-                <div style="background:var(--bg-color); padding:10px; border-radius:6px; margin-bottom:20px; border: 1px solid var(--border-color);">
+                <h3 style="margin-bottom:15px; font-weight:700;">Комментарии</h3>
+                <div style="background:var(--bg-color); padding:12px; border-radius:6px; margin-bottom:20px; border: 1px solid var(--border-color);">
                     <input type="text" placeholder="Напишите комментарий..." style="width:100%; background:transparent; border:none; color:#fff; outline:none; font-size:14px;">
                 </div>
                 <div style="font-size:14px; color:var(--text-muted);">Пока нет комментариев.</div>
@@ -537,14 +618,14 @@ async def view_profile(request: Request, username: str):
             <div class="profile-details">
                 <h1>{profile_user['display_name']}</h1>
                 <p>@{username}</p>
-                <p style="margin-top:5px; font-size:12px;">{len(user_posts)} постов</p>
+                <p style="margin-top:5px; font-size:12px; font-weight:500;">{len(user_posts)} постов</p>
             </div>
             <div>{edit_btn}</div>
         </div>
     </div>
     
     <div style="border-bottom: 1px solid var(--border-color); margin-bottom: 20px; display:flex; gap:20px;">
-        <a href="#" style="color:#fff; padding-bottom:10px; border-bottom:2px solid var(--accent-color); font-size:16px;">Посты</a>
+        <a href="#" style="color:#fff; padding-bottom:10px; border-bottom:2px solid var(--accent-color); font-size:15px; font-weight:700;">Посты</a>
     </div>
     
     <div class="feed-grid">
@@ -560,7 +641,7 @@ async def edit_profile_page(request: Request):
     
     content = f"""
     <div style="max-width: 600px; margin: 0 auto; background: var(--card-bg); padding: 30px; border-radius: 12px; border: 1px solid var(--border-color); width: 100%;">
-        <h2 style="margin-bottom:20px; font-weight:500;">Редактор профиля</h2>
+        <h2 style="margin-bottom:20px; font-weight:700;">Редактор профиля</h2>
         <form action="/edit_profile" method="post" enctype="multipart/form-data">
             <div class="input-group">
                 <label style="font-size:14px; color:var(--text-muted); margin-bottom:5px; display:block;">Отображаемое имя</label>
@@ -574,7 +655,7 @@ async def edit_profile_page(request: Request):
                 <label style="font-size:14px; color:var(--text-muted); margin-bottom:5px; display:block;">Баннер (JPEG/PNG)</label>
                 <input type="file" name="banner" accept="image/*" style="padding: 8px;">
             </div>
-            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:10px;">Сохранить</button>
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; margin-top:10px;">Сохранить изменения</button>
         </form>
     </div>
     """
