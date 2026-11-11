@@ -11,12 +11,10 @@ from datetime import datetime
 app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
+# Убрал дефолтного админа
 users_db = {} 
 sessions = {} 
 posts_db = [] 
-
-admin_pwd = pwd_context.hash("admin")
-users_db["admin"] = {"username": "admin", "password": admin_pwd, "display_name": "Administrator", "avatar": None, "saved_posts": []}
 
 TRANSLATIONS = {
     "en": {
@@ -341,10 +339,12 @@ input:checked+.slider:before{transform:translateX(22px);}
     .profile-details h1{font-size:24px;text-align:center;margin-bottom:5px;word-break:break-word;}
     .profile-details p{font-size:14px;text-align:center;}
     .profile-header > div:last-child{position:absolute;top:20px;right:15px;margin:0!important;}
-    .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:15px;}
+    .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}
     
+    /* Лента на телефоне: от края до края, без ховера */
     .feed-grid{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}
     .feed-card{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}
+    .feed-card:hover{border-bottom-color:var(--border-color);}
     .feed-card-img-container{width:100%;height:auto;aspect-ratio:4/3;}
     .feed-card-info{padding:15px;width:100%;}
     .feed-card-meta{flex-wrap:wrap;gap:10px;}
@@ -358,10 +358,11 @@ input:checked+.slider:before{transform:translateX(22px);}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
     
     /* Просмотр поста (фикс мобилки) */
-    .post-view{display:flex;flex-direction:column;padding:15px;gap:15px;height:auto;width:100%;}
-    .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:12px;margin-bottom:0;}
+    .post-view{display:flex;flex-direction:column;padding:0;gap:15px;height:auto;width:100%;}
+    .post-header-actions{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}
+    .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);}
     .carousel-nav-btn{top:45%;width:36px;height:36px;}
-    .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;}
+    .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;padding:15px;}
     .post-title{font-size:22px;}
     .actions-row{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;}
     .comments-section{width:100%;padding:15px 0;border-top:1px solid var(--border-color);flex:none;}
@@ -661,7 +662,16 @@ function confirmDeleteComment(postId,commentId){
 }
 
 function confirmLogout(e){ e.preventDefault(); showConfirm(window.TRANSLATIONS.logout, window.TRANSLATIONS.logout_confirm, ()=>window.location.href='/logout'); }
-function confirmDeletePost(e, form){ e.preventDefault(); showConfirm(window.TRANSLATIONS.delete, window.TRANSLATIONS.delete_confirm, ()=>form.submit()); }
+
+function confirmDeletePost(e, postId){
+    e.preventDefault();
+    showConfirm(window.TRANSLATIONS.delete, window.TRANSLATIONS.delete_confirm, function(){
+        fetch('/delete/' + postId, { method: 'POST' })
+        .then(() => { window.location.href = '/'; })
+        .catch(() => showToast('Error deleting post'));
+    });
+}
+
 function switchTab(tabId){
     document.querySelectorAll('.tab-btn').forEach(btn=>btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(el=>el.style.display='none');
@@ -1099,14 +1109,8 @@ async def view_post(request: Request, post_id: str):
     save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
     save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
     
-    # Кнопка удаления (для шапки)
-    delete_btn = f'''<form action="/delete/{post_id}" method="post" style="margin:0;" onsubmit="confirmDeletePost(event, this);"><button type="submit" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center;">{SVG_TRASH}</button></form>''' if user and user['username'] == post['author'] else ''
-    
-    # Верхняя панель (назад и удалить)
-    top_bar = f"""<div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
-        <a href="/" style="display:flex; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>
-        {delete_btn}
-    </div>"""
+    # Кнопка удаления (теперь с вызовом JS, а не формы)
+    delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
         imgs = "".join([f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
@@ -1132,7 +1136,11 @@ async def view_post(request: Request, post_id: str):
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
     date_str = post.get('created_at', '')
     
-    content = f"""{top_bar}
+    # Добавил отступы для top_bar, чтобы кнопки не прилипали
+    content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <a href="/" style="display:flex; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>
+        {delete_btn}
+    </div>
     <div class="post-view">
         {media_html}
         <div class="post-details">
