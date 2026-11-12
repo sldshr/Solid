@@ -63,10 +63,6 @@ def get_lang(request: Request):
 def t(key, lang):
     return TRANSLATIONS[lang].get(key, key)
 
-# Новый логотип и фавикон (кастомный, 21x19 пикселей, не растягивается)
-SVG_LOGO = """<svg width="21" height="19" viewBox="0 0 21 19" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 0L13.5 7H21L15 11.5L17.5 19L10.5 14.5L3.5 19L6 11.5L0 7H7.5L10.5 0Z" fill="#3b82f6"/></svg>"""
-SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 21 19%22><path d=%22M10.5 0L13.5 7H21L15 11.5L17.5 19L10.5 14.5L3.5 19L6 11.5L0 7H7.5L10.5 0Z%22 fill=%22%233b82f6%22/></svg>"
-
 SVG_UP = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
 SVG_DOWN = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
 SVG_FEED = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
@@ -88,7 +84,6 @@ SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stro
 SVG_LANG = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>"""
 SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>"""
 SVG_CAMERA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>"""
-SVG_CHECK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 SVG_LOCK = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>"""
 SVG_CALENDAR = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>"""
 
@@ -108,14 +103,14 @@ async def get_manifest():
     return JSONResponse({
         "name": "sol-id", "short_name": "sol-id", "start_url": "/", 
         "display": "standalone", "background_color": "#0a0a0a", "theme_color": "#3b82f6",
-        "icons": [{"src": SVG_FAVICON, "sizes": "192x192", "type": "image/svg+xml"}]
+        "icons": [{"src": "/solid-logo.png", "sizes": "192x192", "type": "image/png"}]
     })
 
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v1';
-    const urlsToCache = ['/', '/manifest.json'];
+    const CACHE_NAME = 'solid-cache-v2';
+    const urlsToCache = ['/', '/manifest.json', '/solid-logo.png'];
     self.addEventListener('install', event => {
         self.skipWaiting();
         event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
@@ -137,7 +132,7 @@ async def get_sw():
     return Response(content=sw_code, media_type="application/javascript")
 
 CSS_STYLES = """
-<link rel="icon" type="image/svg+xml" href=\"""" + SVG_FAVICON + """\">
+<link rel="icon" type="image/png" href="/solid-logo.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -164,7 +159,7 @@ a{color:var(--accent-color);text-decoration:none;}
 .topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}
 .topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}
 .logo{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}
-.logo svg{width:21px;height:19px;object-fit:contain;}
+.logo img{width:21px;height:19px;object-fit:contain;}
 .menu-toggle{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}
 .menu-toggle:hover{background:var(--card-bg);color:var(--text-main);}
 
@@ -329,7 +324,7 @@ input:checked+.slider:before{transform:translateX(22px);}
     .app-layout{display:flex;flex-direction:column;width:100%;min-height:100vh;overflow-x:hidden;}
     .topbar{position:fixed;top:0;left:0;width:100%;height:60px;padding:0 15px;gap:10px;z-index:100;}
     .topbar-left{width:auto;}
-    .topbar-center{display:none;} /* Скрываем заголовок на телефоне, чтобы не мешал */
+    .topbar-center{display:none;}
     .topbar-right{width:auto;}
     .logo span{display:none;}
     .menu-toggle{display:none!important;}
@@ -348,7 +343,6 @@ input:checked+.slider:before{transform:translateX(22px);}
     .profile-header > div:last-child{position:absolute;top:20px;right:15px;margin:0!important;}
     .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}
     
-    /* Лента на телефоне: от края до края, без ховера */
     .feed-grid{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}
     .feed-card{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}
     .feed-card:hover{border-bottom-color:var(--border-color);}
@@ -364,7 +358,6 @@ input:checked+.slider:before{transform:translateX(22px);}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
     
-    /* Просмотр поста (фикс мобилки) */
     .post-view{display:flex;flex-direction:column;padding:0;gap:15px;height:auto;width:100%;}
     .post-header-actions{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}
     .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);}
@@ -443,7 +436,6 @@ function handleSearch(query){
     },300);
 }
 
-// Сжатие изображений на клиенте
 function compressImage(file, maxWidth = 1920, maxHeight = 1920) {
     return new Promise((resolve, reject) => {
         if (!file.type.startsWith('image/')) return resolve(file);
@@ -514,7 +506,6 @@ function updateInputAndRender(){
     }
 }
 
-// ВСТАВКА ИЗ БУФЕРА
 document.addEventListener('paste', async function(e) {
     if (!document.getElementById('file-input')) return; 
 
@@ -710,7 +701,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
     
-    # Заголовок по умолчанию - название текущей страницы
     display_title = title_text if title_text else t('feed', lang)
     page_title = f"sol-id | {display_title}"
     
@@ -739,7 +729,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     <div class="topbar">
         <div class="topbar-left">
             {f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}
-            <a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a>
+            <a href="/" class="logo"><img src="/solid-logo.png" alt="Logo"> <span>sol-id</span></a>
         </div>
         <div class="topbar-center">
             <span class="page-title">{display_title}</span>
@@ -1119,7 +1109,6 @@ async def view_post(request: Request, post_id: str):
     save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
     save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
     
-    # Кнопка удаления (теперь с вызовом JS, а не формы)
     delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
@@ -1146,7 +1135,6 @@ async def view_post(request: Request, post_id: str):
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
     date_str = post.get('created_at', '')
     
-    # Добавил отступы для top_bar, чтобы кнопки не прилипали
     content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
         <a href="/" style="display:flex; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>
         {delete_btn}
