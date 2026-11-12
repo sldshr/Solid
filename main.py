@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from passlib.context import CryptContext
 from supabase import create_client, Client
 import uuid
@@ -11,6 +12,10 @@ from typing import List
 from datetime import datetime
 
 app = FastAPI(title="sol-id")
+
+# Включаем GZIP для скорости (сжимает ответы сервера)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # --- SUPABASE SETUP ---
@@ -19,6 +24,15 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 sessions = {} 
+
+# Мидлварь для базовых заголовков безопасности
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 TRANSLATIONS = {
     "en": {
@@ -44,7 +58,7 @@ TRANSLATIONS = {
         "faq_title": "FAQ", "faq_q1": "How to post?", "faq_a1": "Click the '+' button in the top menu.",
         "faq_q2": "How to save?", "faq_a2": "Click the bookmark icon under any post.",
         "faq_q3": "How to hide a post?", "faq_a3": "When creating, select 'By Link' - only you and those with the link will see it.",
-        "got_it": "Got it!"
+        "got_it": "Got it!", "invalid_pass_format": "Invalid password format"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -69,7 +83,7 @@ TRANSLATIONS = {
         "faq_title": "FAQ", "faq_q1": "Как выложить пост?", "faq_a1": "Нажмите на кнопку '+' в верхнем меню.",
         "faq_q2": "Как сохранить?", "faq_a2": "Нажмите на иконку закладки под любым постом.",
         "faq_q3": "Как скрыть пост?", "faq_a3": "При создании выберите 'По ссылке' - его увидишь только ты и те, у кого есть ссылка.",
-        "got_it": "Понятно!"
+        "got_it": "Понятно!", "invalid_pass_format": "Неверный формат пароля"
     }
 }
 
@@ -134,7 +148,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v3';
+    const CACHE_NAME = 'solid-cache-v4';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -208,6 +222,7 @@ a{{color:var(--accent-color);text-decoration:none;}}
 
 .btn-primary{{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;}}
 .btn-primary:hover{{opacity:.9;}}
+.btn-primary:disabled{{opacity:0.5;cursor:not-allowed;}}
 .user-menu-container{{position:relative;}}
 .user-menu-btn{{display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px;border-radius:50%;border:none;outline:none;}}
 .user-menu-btn:hover{{background:var(--card-bg);}}
@@ -223,18 +238,19 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .dropdown-item.danger{{color:var(--danger-color);border-top:1px solid var(--border-color);}}
 
 /* Сайдбар */
-.sidebar{{grid-column:1;position:sticky;top:70px;border-right:1px solid var(--border-color);padding:20px 15px;display:flex;flex-direction:column;gap:8px;height:calc(100vh - 70px);overflow-y:auto;transition:padding .3s;}}
-.sidebar a{{color:var(--text-muted);padding:12px 15px;border-radius:8px;display:flex;align-items:center;gap:15px;font-size:16px;font-weight:500;transition:all .2s;white-space:nowrap;overflow:hidden;}}
+.sidebar{{grid-column:1;position:sticky;top:70px;border-right:1px solid var(--border-color);padding:20px 0;display:flex;flex-direction:column;gap:8px;height:calc(100vh - 70px);overflow-y:auto;transition:padding .3s;}}
+.sidebar a{{color:var(--text-muted);padding:12px 25px;display:flex;align-items:center;gap:15px;font-size:16px;font-weight:500;transition:all .2s;white-space:nowrap;overflow:hidden;}}
 .sidebar a:hover:not(.active),.sidebar a.active{{color:var(--text-main);background-color:var(--card-bg);}}
 .sidebar a.active svg{{color:var(--accent-color);}}
-.app-layout.sidebar-collapsed .sidebar{{padding:20px 10px;align-items:center;}}
+.app-layout.sidebar-collapsed .sidebar{{padding:20px 0;align-items:center;}}
 .app-layout.sidebar-collapsed .sidebar a{{justify-content:center;padding:15px 0;width:100%;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
 
-/* Нижний баннер в сайдбаре (УВЕЛИЧЕН В 3 РАЗА) */
-.sidebar-bottom-banner{{margin-top:auto;display:flex;justify-content:center;align-items:center;width:100%;padding:10px 0;transition:opacity .2s;}}
-.sidebar-bottom-banner img{{width:72px;height:102px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:8px;}}
+/* Баннер eblo.id от края до края */
+.sidebar-bottom-banner{{margin-top:auto;display:block;width:100%;padding:0;transition:opacity .2s;}}
+.sidebar-bottom-banner img{{width:100%;height:auto;display:block;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:0;}}
 .sidebar-bottom-banner:hover{{opacity:0.8;}}
+.app-layout.sidebar-collapsed .sidebar-bottom-banner img{{object-fit:cover;height:100px;}} /* В свернутом виде делаем квадратным */
 
 /* Основной контент */
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}}
@@ -477,7 +493,6 @@ function updatePanoTransform() {
     }
 }
 
-// Вешаем события на оверлей после загрузки
 document.addEventListener('DOMContentLoaded', function() {
     var pano = document.getElementById('panorama');
     if(pano) {
@@ -513,7 +528,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Тач-события для мобилок (простой пан)
         var touchStartX = 0, touchStartY = 0;
         pano.addEventListener('touchstart', function(e) {
             if(e.target === panoImg && e.touches.length === 1) {
@@ -749,10 +763,17 @@ function applyCrop(){
 }
 
 async function vote(postId,action){
+    var upBtn=document.getElementById('btn-up'), downBtn=document.getElementById('btn-down');
+    if(upBtn) upBtn.disabled = true;
+    if(downBtn) downBtn.disabled = true;
+    
     var res=await fetch('/api/vote/'+postId+'/'+action,{method:'POST'}); var data=await res.json();
+    
+    if(upBtn) upBtn.disabled = false;
+    if(downBtn) downBtn.disabled = false;
+    
     if(data.error)return showToast(data.error);
     var count=document.getElementById('vote-count'); if(count)count.innerText=data.score;
-    var upBtn=document.getElementById('btn-up'), downBtn=document.getElementById('btn-down');
     if(upBtn)upBtn.className='vote-btn '+(data.user_vote===1?'active-up':'');
     if(downBtn)downBtn.className='vote-btn '+(data.user_vote===-1?'active-down':'');
 }
@@ -837,7 +858,6 @@ function switchProfileTab(tabId) {
     document.getElementById('profile-'+tabId).classList.add('active');
 }
 
-// Валидация пароля
 function validatePassword(val) {
     var itemLen = document.querySelector('[data-rule="p_len"]');
     var itemLatin = document.querySelector('[data-rule="p_latin"]');
@@ -849,7 +869,6 @@ function validatePassword(val) {
     itemLatin.classList.toggle('valid', isLatin);
 }
 
-// Валидация логина (только уникальность)
 var usernameTimeout;
 function validateUsername(val) {
     var itemAvail = document.querySelector('[data-rule="avail"]');
@@ -1036,12 +1055,16 @@ async def search_posts(request: Request, q: str = ""):
     if not results:
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div></div>'
     else:
+        # Оптимизация: получаем авторов пачкой
+        author_usernames = list(set([p['author'] for p in results]))
+        res_users = supabase.table("users").select("username, avatar").in_("username", author_usernames).execute()
+        users_map = {u['username']: u for u in res_users.data}
+
         cards = ""
         for post in results:
-            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
-            author = author_res.data[0] if author_res.data else None
+            author = users_map.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a>"""
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div></div>'
@@ -1051,20 +1074,28 @@ async def search_posts(request: Request, q: str = ""):
 async def read_feed(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
+    
+    # Оптимизация: 1 запрос на посты
     res = supabase.table("posts").select("*").eq("visibility", "feed").order("created_at", desc=True).execute()
     feed_posts = res.data
     
     if not feed_posts:
         content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
     else:
+        # Оптимизация: 1 запрос на авторов
+        author_usernames = list(set([p['author'] for p in feed_posts]))
+        res_users = supabase.table("users").select("username, avatar").in_("username", author_usernames).execute()
+        users_map = {u['username']: u for u in res_users.data}
+
         cards = ""
         for post in feed_posts:
-            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
-            author = author_res.data[0] if author_res.data else None
+            author = users_map.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            
             score = len(post['votes'].get('up', [])) - len(post['votes'].get('down', []))
             arrow_icon = SVG_DOWN if score < 0 else SVG_UP
+            
             date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date">{SVG_CALENDAR} {date_str}</div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
@@ -1082,12 +1113,16 @@ async def saved_posts(request: Request):
     else:
         res = supabase.table("posts").select("*").in_("id", saved_ids).execute()
         saved_posts_list = res.data
+        
+        author_usernames = list(set([p['author'] for p in saved_posts_list]))
+        res_users = supabase.table("users").select("username, avatar").in_("username", author_usernames).execute()
+        users_map = {u['username']: u for u in res_users.data}
+        
         cards = ""
         for post in saved_posts_list:
-            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
-            author = author_res.data[0] if author_res.data else None
+            author = users_map.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
             cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a></div>"""
         content = f'<h2 style="margin-bottom:25px; padding:15px 15px 0 15px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
@@ -1130,7 +1165,7 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     username = username.strip()
     
     if len(password) < 6 or not re.match(r"^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]+$", password):
-        return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">Invalid password format</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
+        return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("invalid_pass_format", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
 
     res = supabase.table("users").select("*").eq("username", username).execute()
     user = res.data[0] if res.data else None
@@ -1153,7 +1188,9 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     sessions[session_token] = username
     redirect_url = "/?welcome=1" if is_new else "/"
     response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
-    response.set_cookie(key="session_token", value=session_token, httponly=True)
+    
+    # Безопасные куки
+    response.set_cookie(key="session_token", value=session_token, httponly=True, samesite="lax")
     return response
 
 @app.get("/logout")
@@ -1233,7 +1270,7 @@ async def update_profile(request: Request, display_name: str = Form(...), avatar
     user = get_current_user(request)
     if not user: raise HTTPException(401)
     
-    update_data = {"display_name": display_name}
+    update_data = {"display_name": html.escape(display_name)}
     if avatar_base64: 
         update_data["avatar"] = avatar_base64
     elif avatar and avatar.filename: 
@@ -1263,8 +1300,8 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     new_post = {
         "id": str(uuid.uuid4())[:6], 
         "author": user["username"], 
-        "title": title, 
-        "content": content, 
+        "title": html.escape(title), 
+        "content": html.escape(content), 
         "images": img_b64_list, 
         "visibility": visibility, 
         "votes": {"up": [], "down": []}, 
@@ -1390,7 +1427,7 @@ async def view_profile(request: Request, username: str):
     
     posts_html = ""
     for post in user_posts:
-        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+        img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
         date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
         
@@ -1408,11 +1445,15 @@ async def view_profile(request: Request, username: str):
     if saved_ids:
         res_saved = supabase.table("posts").select("*").in_("id", saved_ids).execute()
         saved_posts_list = res_saved.data
+        
+        author_usernames = list(set([p['author'] for p in saved_posts_list]))
+        res_users = supabase.table("users").select("username, avatar").in_("username", author_usernames).execute()
+        users_map = {u['username']: u for u in res_users.data}
+        
         for post in saved_posts_list:
-            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
-            author = author_res.data[0] if author_res.data else None
+            author = users_map.get(post['author'])
             a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
             saved_html += f"""<a href="/{post['id']}" class="feed-card">
                 <div class="feed-card-img-container">{img_html}</div>
