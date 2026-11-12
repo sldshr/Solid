@@ -13,7 +13,6 @@ from datetime import datetime
 
 app = FastAPI(title="sol-id")
 
-# Включаем GZIP для скорости
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -483,12 +482,25 @@ var startX, startY, startTouchX, startTouchY;
 var initialPinchDistance = 0;
 var swipeThreshold = 50;
 
-function openPanorama(src, imagesJson, index) {
+function openPanorama(imgElement, index) {
     var img = document.getElementById('panorama-img');
     var pano = document.getElementById('panorama');
+    
+    var container = document.getElementById('post-media-container');
+    if (container && container.dataset.images) {
+        try {
+            panoImages = JSON.parse(container.dataset.images);
+            panoIndex = index !== undefined ? index : 0;
+        } catch(e) {
+            panoImages = [imgElement.src];
+            panoIndex = 0;
+        }
+    } else {
+        panoImages = [imgElement.src];
+        panoIndex = 0;
+    }
+
     if(img) {
-        panoImages = imagesJson ? JSON.parse(imagesJson) : [src];
-        panoIndex = index !== undefined ? index : 0;
         img.src = panoImages[panoIndex];
         panoImg = img;
         panoScale = 1;
@@ -505,7 +517,7 @@ function closePanorama() {
 
 function updatePanoTransform() {
     if(panoImg) {
-        panoImg.style.transform = `translate(${panoX}px, ${panoY}px) scale(${panoScale})`;
+        panoImg.style.transform = 'translate(' + panoX + 'px, ' + panoY + 'px) scale(' + panoScale + ')';
     }
 }
 
@@ -522,7 +534,6 @@ function changePanoImg(dir) {
 document.addEventListener('DOMContentLoaded', function() {
     var pano = document.getElementById('panorama');
     if(pano) {
-        // Зум колесиком мыши
         pano.addEventListener('wheel', function(e) {
             e.preventDefault();
             if(!panoImg) return;
@@ -531,7 +542,6 @@ document.addEventListener('DOMContentLoaded', function() {
             updatePanoTransform();
         });
 
-        // Перетаскивание (ПК)
         pano.addEventListener('mousedown', function(e) {
             if(e.target === panoImg) {
                 isDragging = true;
@@ -556,7 +566,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Касания (Свайпы и зум на мобилке)
         pano.addEventListener('touchstart', function(e) {
             if(e.target === panoImg) {
                 if(e.touches.length === 1) {
@@ -594,7 +603,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 var dx = e.touches[0].clientX - startX;
                 var dy = e.touches[0].clientY - startY;
                 if(panoScale === 1 && Math.abs(e.touches[0].clientX - startTouchX) > 10) {
-                    // Если не увеличено, тянем для свайпа
                     panoX = dx;
                 } else {
                     panoX = dx; panoY = dy;
@@ -612,7 +620,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     if(diffX > 0) changePanoImg(-1);
                     else changePanoImg(1);
                 } else {
-                    // Возвращаем на место, если это был не свайп или мы просто панорамировали
                     if(panoScale === 1) { panoX = 0; updatePanoTransform(); }
                 }
             }
@@ -670,8 +677,12 @@ function handleSearch(query){
         var res=await fetch('/api/search?q='+encodeURIComponent(query));
         var data=await res.json();
         if(data.results&&data.results.length>0){
-            dropdown.innerHTML=data.results.map(p=>`<a href="/${p.id}" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">${p.title}</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@${p.author}</div></a>`).join('');
-        }else{ dropdown.innerHTML='<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">'+window.TRANSLATIONS.nothing_found+'</div>'; }
+            dropdown.innerHTML = data.results.map(function(p) {
+                return '<a href="/'+p.id+'" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">'+p.title+'</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@'+p.author+'</div></a>';
+            }).join('');
+        }else{ 
+            dropdown.innerHTML = '<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">'+window.TRANSLATIONS.nothing_found+'</div>'; 
+        }
         dropdown.style.display='block';
     },300);
 }
@@ -741,7 +752,12 @@ function updateInputAndRender(){
             reader.onload=function(e){
                 var div=document.createElement('div'); div.className='file-preview';
                 div.onclick=(e)=>e.stopPropagation();
-                div.innerHTML='<img src="'+e.target.result+'"><div style="flex:1;overflow:hidden;"><div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">'+file.name+'</div><div style="font-size:12px;color:var(--text-muted);">'+(file.size/1024).toFixed(1)+' KB</div></div><span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile('+index+', event)">×</span>';
+                div.innerHTML = '<img src="'+e.target.result+'">' +
+                    '<div style="flex:1;overflow:hidden;">' +
+                        '<div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">'+file.name+'</div>' +
+                        '<div style="font-size:12px;color:var(--text-muted);">'+(file.size/1024).toFixed(1)+' KB</div>' +
+                    '</div>' +
+                    '<span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile('+index+', event)">×</span>';
                 previewContainer.appendChild(div);
             }; reader.readAsDataURL(file);
         });
@@ -891,16 +907,14 @@ async function submitComment(e,postId){
         var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;
         var div=document.createElement('div'); div.id='comment-'+data.comment.id;
         div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
-        div.innerHTML=`
-            <div style="display:flex;gap:10px;">
-                <img src="${ava}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
-                <div>
-                    <div style="font-weight:700;font-size:14px;">${data.comment.display_name} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@${data.comment.author}</span></div>
-                    <div style="font-size:14px;margin-top:2px;">${data.comment.text}</div>
-                </div>
-            </div>
-            <button onclick="confirmDeleteComment('${postId}', '${data.comment.id}')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">${window.TRANSLATIONS.delete}</button>
-        `;
+        div.innerHTML = '<div style="display:flex;gap:10px;">' +
+                '<img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">' +
+                '<div>' +
+                    '<div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div>' +
+                    '<div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div>' +
+                '</div>' +
+            '</div>' +
+            '<button onclick="confirmDeleteComment(\''+postId+'\', \''+data.comment.id+'\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">'+window.TRANSLATIONS.delete+'</button>';
         list.appendChild(div);
         document.getElementById('comment-count').innerText=data.total_comments;
     }
@@ -1590,11 +1604,15 @@ async def view_post(request: Request, post_id: str):
     delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
-        imgs_array = json.dumps(post['images'])
-        imgs = "".join([f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src, \'{imgs_array}\', {i})">' for i, img in enumerate(post['images'])])
+        imgs_html = ""
+        for i, img in enumerate(post['images']):
+            display = "" if i == 0 else "none"
+            imgs_html += f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" onclick="openPanorama(this, {i})">'
+        
         nav_btns = f'<div class="carousel-nav-btn left" onclick="changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
-        media_html = f"""<div class="post-media" style="position:relative;">
-            {imgs}
+        safe_images_json = html.escape(json.dumps(post['images']))
+        media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">
+            {imgs_html}
             {nav_btns}
         </div>"""
     else: 
