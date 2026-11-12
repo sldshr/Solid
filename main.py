@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from passlib.context import CryptContext
+from supabase import create_client, Client
 import uuid
 import base64
 import html
@@ -12,9 +13,12 @@ from datetime import datetime
 app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-users_db = {} 
+# --- SUPABASE SETUP ---
+SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 sessions = {} 
-posts_db = [] 
 
 TRANSLATIONS = {
     "en": {
@@ -108,7 +112,10 @@ SPRITE_URL = "https://i.ibb.co/7x55NbD0/solidsprite.png"
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
     if session_token and session_token in sessions:
-        return users_db.get(sessions[session_token])
+        username = sessions[session_token]
+        res = supabase.table("users").select("*").eq("username", username).execute()
+        if res.data:
+            return res.data[0]
     return None
 
 async def image_to_base64(file: UploadFile):
@@ -152,7 +159,8 @@ async def get_sw():
 @app.get("/api/check_username")
 async def api_check_username(q: str = ""):
     if not q: return JSONResponse({"available": False})
-    return JSONResponse({"available": q not in users_db})
+    res = supabase.table("users").select("username").eq("username", q).execute()
+    return JSONResponse({"available": len(res.data) == 0})
 
 CSS_STYLES = f"""
 <link rel="icon" type="image/png" href="{LOGO_URL}">
@@ -223,9 +231,9 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .app-layout.sidebar-collapsed .sidebar a{{justify-content:center;padding:15px 0;width:100%;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
 
-/* Нижний баннер в сайдбаре (только пк) */
+/* Нижний баннер в сайдбаре (УВЕЛИЧЕН В 3 РАЗА) */
 .sidebar-bottom-banner{{margin-top:auto;display:flex;justify-content:center;align-items:center;width:100%;padding:10px 0;transition:opacity .2s;}}
-.sidebar-bottom-banner img{{width:100%;height:auto;max-height:100px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:8px;}}
+.sidebar-bottom-banner img{{width:72px;height:102px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:8px;}}
 .sidebar-bottom-banner:hover{{opacity:0.8;}}
 
 /* Основной контент */
@@ -323,26 +331,26 @@ form .action-btn{{height:100%;width:100%;}}
 input:checked+.slider{{background-color:var(--accent-color);}}
 input:checked+.slider:before{{transform:translateX(22px);}}
 
-/* Оверлеи */
-.overlay{{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;}}
-.overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);}}
+/* Оверлеи (ПОЧИНЕН ПРОСМОТР КАРТИНОК + ЗУМ) */
+.overlay{{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;overflow:hidden;}}
+.overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);transition:transform 0.1s ease-out; cursor:grab;}}
+.overlay img:active{{cursor:grabbing;}}
 .close-overlay{{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10000;line-height:1;}}
 
-/* Модалки */
+/* Модалки (ПОЧИНЕН WELCOME) */
 .modal-box{{background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);width:90%;max-width:400px;display:flex;flex-direction:column;gap:20px;text-align:center;}}
 .modal-box h3{{font-weight:700;font-size:20px;}}
 .modal-box p{{color:var(--text-muted);}}
 .modal-actions{{display:flex;gap:10px;}}
 .modal-actions button{{flex:1;padding:12px;justify-content:center;}}
 
-/* Приветственная модалка */
-.welcome-modal-content{{text-align:left; max-width:500px; max-height:80vh; overflow-y:auto; padding-right:10px;}}
+.welcome-modal-content{{text-align:left; max-width:500px; width: 100%; max-height:80vh; overflow-y:auto; padding: 25px; align-items: stretch;}}
 .welcome-modal-content h2{{text-align:center; margin-bottom:15px; color:var(--accent-color);}}
-.welcome-modal-content p{{margin-bottom:20px; line-height:1.5;}}
-.welcome-modal-content .faq-section{{background:var(--bg-color); padding:15px; border-radius:12px; border:1px solid var(--border-color); margin-bottom:20px;}}
-.welcome-modal-content .faq-section h4{{margin-bottom:10px; font-size:16px;}}
+.welcome-modal-content p{{margin-bottom:20px; line-height:1.5; text-align:left;}}
+.welcome-modal-content .faq-section{{background:var(--bg-color); padding:15px; border-radius:12px; border:1px solid var(--border-color); margin-bottom:20px; width: 100%;}}
+.welcome-modal-content .faq-section h4{{margin-bottom:10px; font-size:16px; color:#fff;}}
 .welcome-modal-content .faq-section ul{{list-style:none; padding:0; display:flex; flex-direction:column; gap:10px;}}
-.welcome-modal-content .faq-section li{{font-size:14px; color:#ddd;}}
+.welcome-modal-content .faq-section li{{font-size:14px; color:#ddd; line-height: 1.4;}}
 .welcome-modal-content .faq-section li strong{{color:#fff; display:block; margin-bottom:2px;}}
 
 /* Утилиты */
@@ -438,6 +446,98 @@ var filesList=[];
 var currentImage=null;
 var currentZoom=1;
 
+// --- ЛОГИКА ЗУМА И ПЕРЕМЕЩЕНИЯ КАРТИНКИ ---
+var panoImg = null;
+var panoScale = 1;
+var panoX = 0, panoY = 0;
+var isDragging = false;
+var startX, startY;
+
+function openPanorama(src) {
+    var img = document.getElementById('panorama-img');
+    var pano = document.getElementById('panorama');
+    if(img) {
+        img.src = src;
+        panoImg = img;
+        panoScale = 1;
+        panoX = 0; panoY = 0;
+        updatePanoTransform();
+    }
+    if(pano) pano.style.display='flex';
+}
+
+function closePanorama() {
+    var pano = document.getElementById('panorama');
+    if(pano) pano.style.display='none';
+}
+
+function updatePanoTransform() {
+    if(panoImg) {
+        panoImg.style.transform = `translate(${panoX}px, ${panoY}px) scale(${panoScale})`;
+    }
+}
+
+// Вешаем события на оверлей после загрузки
+document.addEventListener('DOMContentLoaded', function() {
+    var pano = document.getElementById('panorama');
+    if(pano) {
+        pano.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            if(!panoImg) return;
+            var delta = e.deltaY > 0 ? -0.1 : 0.1;
+            panoScale = Math.max(0.5, Math.min(5, panoScale + delta));
+            updatePanoTransform();
+        });
+
+        pano.addEventListener('mousedown', function(e) {
+            if(e.target === panoImg) {
+                isDragging = true;
+                startX = e.clientX - panoX;
+                startY = e.clientY - panoY;
+                panoImg.style.cursor = 'grabbing';
+            }
+        });
+
+        window.addEventListener('mousemove', function(e) {
+            if(isDragging && panoImg) {
+                panoX = e.clientX - startX;
+                panoY = e.clientY - startY;
+                updatePanoTransform();
+            }
+        });
+
+        window.addEventListener('mouseup', function() {
+            if(isDragging) {
+                isDragging = false;
+                if(panoImg) panoImg.style.cursor = 'grab';
+            }
+        });
+
+        // Тач-события для мобилок (простой пан)
+        var touchStartX = 0, touchStartY = 0;
+        pano.addEventListener('touchstart', function(e) {
+            if(e.target === panoImg && e.touches.length === 1) {
+                isDragging = true;
+                touchStartX = e.touches[0].clientX - panoX;
+                touchStartY = e.touches[0].clientY - panoY;
+            }
+        });
+
+        pano.addEventListener('touchmove', function(e) {
+            if(isDragging && panoImg && e.touches.length === 1) {
+                panoX = e.touches[0].clientX - touchStartX;
+                panoY = e.touches[0].clientY - touchStartY;
+                updatePanoTransform();
+            }
+        });
+
+        pano.addEventListener('touchend', function() {
+            isDragging = false;
+        });
+    }
+});
+
+// --- ОСТАЛЬНАЯ ЛОГИКА ---
 function applySidebarState(){
     var layout=document.querySelector('.app-layout');
     if(!layout)return;
@@ -616,8 +716,6 @@ function showConfirm(title, desc, onConfirm){
 }
 
 function copyLink(){ navigator.clipboard.writeText(window.location.href); showToast(window.TRANSLATIONS.link_copied); }
-function openPanorama(src){ var img=document.getElementById('panorama-img'), pano=document.getElementById('panorama'); if(img)img.src=src; if(pano)pano.style.display='flex'; }
-function closePanorama(){ var pano=document.getElementById('panorama'); if(pano)pano.style.display='none'; }
 
 function loadAvatar(event){
     var file=event.target.files[0]; if(!file)return;
@@ -775,7 +873,6 @@ function validateUsername(val) {
 
 function closeWelcomeModal(){
     document.getElementById('welcome-modal').style.display='none';
-    // Убираем параметр из URL без перезагрузки
     window.history.replaceState({}, document.title, window.location.pathname);
 }
 
@@ -914,24 +1011,38 @@ async def set_lang(lang: str, next: str = "/"):
 async def api_search(q: str = ""):
     q_lower = q.lower().strip()
     if not q_lower: return JSONResponse({"results": []})
-    results = [{"id": p['id'], "title": html.escape(p['title']), "author": html.escape(p['author'])} for p in posts_db if p.get('visibility') == 'feed' and (q_lower in p['title'].lower() or q_lower in p['content'].lower() or q_lower in p['author'].lower())][:5]
-    return JSONResponse({"results": results})
+    
+    res = supabase.table("posts").select("*").eq("visibility", "feed").execute()
+    results = []
+    for p in res.data:
+        if q_lower in p['title'].lower() or q_lower in p['content'].lower() or q_lower in p['author'].lower():
+            results.append({"id": p['id'], "title": html.escape(p['title']), "author": html.escape(p['author'])})
+    
+    return JSONResponse({"results": results[:5]})
 
 @app.get("/search", response_class=HTMLResponse)
 async def search_posts(request: Request, q: str = ""):
     user = get_current_user(request)
     lang = get_lang(request)
     q_lower = q.lower().strip()
-    results = [p for p in posts_db if p.get('visibility') == 'feed' and (q_lower in p['title'].lower() or q_lower in p['content'].lower() or q_lower in p['author'].lower())] if q_lower else []
+    
+    res = supabase.table("posts").select("*").eq("visibility", "feed").execute()
+    results = []
+    if q_lower:
+        for p in res.data:
+            if q_lower in p['title'].lower() or q_lower in p['content'].lower() or q_lower in p['author'].lower():
+                results.append(p)
+
     if not results:
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div></div>'
     else:
         cards = ""
         for post in results:
-            author = users_db.get(post['author'])
+            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
+            author = author_res.data[0] if author_res.data else None
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            date_str = post.get('created_at', '')
+            date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a>"""
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div></div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
@@ -940,18 +1051,22 @@ async def search_posts(request: Request, q: str = ""):
 async def read_feed(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
-    feed_posts = [p for p in posts_db if p.get('visibility') == 'feed']
+    res = supabase.table("posts").select("*").eq("visibility", "feed").order("created_at", desc=True).execute()
+    feed_posts = res.data
+    
     if not feed_posts:
         content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
     else:
         cards = ""
         for post in feed_posts:
-            author = users_db.get(post['author'])
+            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
+            author = author_res.data[0] if author_res.data else None
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            score = len(post['votes']['up']) - len(post['votes']['down'])
-            date_str = post.get('created_at', '')
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date">{SVG_CALENDAR} {date_str}</div><div style="display:flex;align-items:center;gap:4px;">{SVG_UP} {score}</div></div></div></div></a>"""
+            score = len(post['votes'].get('up', [])) - len(post['votes'].get('down', []))
+            arrow_icon = SVG_DOWN if score < 0 else SVG_UP
+            date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date">{SVG_CALENDAR} {date_str}</div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('feed', lang)))
 
@@ -961,16 +1076,19 @@ async def saved_posts(request: Request):
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     saved_ids = user.get('saved_posts', [])
-    saved_posts_list = [p for p in posts_db if p['id'] in saved_ids]
-    if not saved_posts_list:
+    
+    if not saved_ids:
         content = f"<div style='text-align:center; padding:60px; color:var(--text-muted); font-size:18px;'>{t('no_saved', lang)}</div>"
     else:
+        res = supabase.table("posts").select("*").in_("id", saved_ids).execute()
+        saved_posts_list = res.data
         cards = ""
         for post in saved_posts_list:
-            author = users_db.get(post['author'])
+            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
+            author = author_res.data[0] if author_res.data else None
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            date_str = post.get('created_at', '')
+            date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
             cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a></div>"""
         content = f'<h2 style="margin-bottom:25px; padding:15px 15px 0 15px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "saved", t('saved', lang)))
@@ -1014,13 +1132,21 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     if len(password) < 6 or not re.match(r"^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]+$", password):
         return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">Invalid password format</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
 
-    user = users_db.get(username)
+    res = supabase.table("users").select("*").eq("username", username).execute()
+    user = res.data[0] if res.data else None
+    
     is_new = False
     if user:
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
-        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": []}
+        supabase.table("users").insert({
+            "username": username,
+            "password": pwd_context.hash(password),
+            "display_name": username,
+            "avatar": None,
+            "saved_posts": []
+        }).execute()
         is_new = True
         
     session_token = str(uuid.uuid4())
@@ -1106,9 +1232,14 @@ async def settings_page(request: Request):
 async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None)):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
-    users_db[user['username']]['display_name'] = display_name
-    if avatar_base64: users_db[user['username']]['avatar'] = avatar_base64
-    elif avatar and avatar.filename: users_db[user['username']]['avatar'] = await image_to_base64(avatar)
+    
+    update_data = {"display_name": display_name}
+    if avatar_base64: 
+        update_data["avatar"] = avatar_base64
+    elif avatar and avatar.filename: 
+        update_data["avatar"] = await image_to_base64(avatar)
+        
+    supabase.table("users").update(update_data).eq("username", user['username']).execute()
     return RedirectResponse(url="/settings?updated=1", status_code=status.HTTP_302_FOUND)
 
 @app.get("/write", response_class=HTMLResponse)
@@ -1128,6 +1259,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         for img in images[:3]:
             b64 = await image_to_base64(img)
             if b64: img_b64_list.append(b64)
+            
     new_post = {
         "id": str(uuid.uuid4())[:6], 
         "author": user["username"], 
@@ -1137,18 +1269,20 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         "visibility": visibility, 
         "votes": {"up": [], "down": []}, 
         "comments": [], 
-        "allow_comments": allow_comments,
-        "created_at": datetime.now().strftime("%d.%m.%Y %H:%M")
+        "allow_comments": allow_comments
     }
-    posts_db.insert(0, new_post)
+    supabase.table("posts").insert(new_post).execute()
     return RedirectResponse(url=f"/{new_post['id']}", status_code=status.HTTP_302_FOUND)
 
 @app.post("/api/vote/{post_id}/{action}")
 async def vote_post(post_id: str, action: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    post = next((p for p in posts_db if p['id'] == post_id), None)
+    
+    res = supabase.table("posts").select("*").eq("id", post_id).execute()
+    post = res.data[0] if res.data else None
     if not post: return JSONResponse({"error": "Not found"}, status_code=404)
+    
     username = user['username']
     up_votes, down_votes = post['votes'].get('up', []), post['votes'].get('down', [])
     user_vote = 0
@@ -1164,81 +1298,101 @@ async def vote_post(post_id: str, action: str, request: Request):
             down_votes.append(username)
             if username in up_votes: up_votes.remove(username)
             user_vote = -1
-    post['votes']['up'], post['votes']['down'] = up_votes, down_votes
+            
     score = len(up_votes) - len(down_votes)
     if username in up_votes: user_vote = 1
     elif username in down_votes: user_vote = -1
     else: user_vote = 0
+    
+    supabase.table("posts").update({"votes": {"up": up_votes, "down": down_votes}}).eq("id", post_id).execute()
     return JSONResponse({"score": score, "user_vote": user_vote})
 
 @app.post("/api/save/{post_id}")
 async def save_post(post_id: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    if 'saved_posts' not in users_db[user['username']]: users_db[user['username']]['saved_posts'] = []
-    if post_id in users_db[user['username']]['saved_posts']:
-        users_db[user['username']]['saved_posts'].remove(post_id)
+    
+    saved_posts = user.get('saved_posts', [])
+    if post_id in saved_posts:
+        saved_posts.remove(post_id)
         saved = False
     else:
-        users_db[user['username']]['saved_posts'].append(post_id)
+        saved_posts.append(post_id)
         saved = True
+        
+    supabase.table("users").update({"saved_posts": saved_posts}).eq("username", user['username']).execute()
     return JSONResponse({"saved": saved})
 
 @app.post("/api/comment/{post_id}")
 async def add_comment(post_id: str, request: Request, text: str = Form(...)):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    post = next((p for p in posts_db if p['id'] == post_id), None)
+    
+    res = supabase.table("posts").select("*").eq("id", post_id).execute()
+    post = res.data[0] if res.data else None
     if not post: return JSONResponse({"error": "Not found"}, status_code=404)
     if not post.get('allow_comments', True): return JSONResponse({"error": "Comments disabled"}, status_code=403)
+    
     comment = {"id": str(uuid.uuid4())[:6], "author": user['username'], "display_name": html.escape(user['display_name']), "avatar": user.get('avatar'), "text": html.escape(text)}
-    post['comments'].append(comment)
-    return JSONResponse({"comment": comment, "total_comments": len(post['comments']), "is_author": True})
+    comments = post['comments']
+    comments.append(comment)
+    
+    supabase.table("posts").update({"comments": comments}).eq("id", post_id).execute()
+    return JSONResponse({"comment": comment, "total_comments": len(comments), "is_author": True})
 
 @app.delete("/api/comment/{post_id}/{comment_id}")
 async def delete_comment(post_id: str, comment_id: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    post = next((p for p in posts_db if p['id'] == post_id), None)
+    
+    res = supabase.table("posts").select("*").eq("id", post_id).execute()
+    post = res.data[0] if res.data else None
     if not post: return JSONResponse({"error": "Not found"}, status_code=404)
+    
     comment = next((c for c in post['comments'] if c['id'] == comment_id), None)
     if not comment: return JSONResponse({"error": "Comment not found"}, status_code=404)
     if comment['author'] != user['username']: return JSONResponse({"error": "Forbidden"}, status_code=403)
-    post['comments'] = [c for c in post['comments'] if c['id'] != comment_id]
-    return JSONResponse({"success": True, "total_comments": len(post['comments'])})
+    
+    new_comments = [c for c in post['comments'] if c['id'] != comment_id]
+    supabase.table("posts").update({"comments": new_comments}).eq("id", post_id).execute()
+    return JSONResponse({"success": True, "total_comments": len(new_comments)})
 
 @app.post("/delete/{post_id}")
 async def delete_post(post_id: str, request: Request):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
-    global posts_db
-    post = next((p for p in posts_db if p['id'] == post_id), None)
+    
+    res = supabase.table("posts").select("*").eq("id", post_id).execute()
+    post = res.data[0] if res.data else None
     if post and post['author'] == user['username']:
-        posts_db = [p for p in posts_db if p['id'] != post_id]
-        for u in users_db.values():
-            if 'saved_posts' in u and post_id in u['saved_posts']: u['saved_posts'].remove(post_id)
+        supabase.table("posts").delete().eq("id", post_id).execute()
+        
     return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
 @app.get("/@{username}", response_class=HTMLResponse)
 async def view_profile(request: Request, username: str):
     current_user = get_current_user(request)
     lang = get_lang(request)
-    profile_user = users_db.get(username)
-    if not profile_user: raise HTTPException(404, "User not found")
-    ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
     
+    res = supabase.table("users").select("*").eq("username", username).execute()
+    profile_user = res.data[0] if res.data else None
+    if not profile_user: raise HTTPException(404, "User not found")
+    
+    ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
     is_own_profile = current_user and current_user['username'] == username
     
     if is_own_profile: 
-        user_posts = [p for p in posts_db if p['author'] == username]
+        res_posts = supabase.table("posts").select("*").eq("author", username).order("created_at", desc=True).execute()
     else: 
-        user_posts = [p for p in posts_db if p['author'] == username and p.get('visibility') == 'feed']
-        
+        res_posts = supabase.table("posts").select("*").eq("author", username).eq("visibility", "feed").order("created_at", desc=True).execute()
+    
+    user_posts = res_posts.data
+    
     posts_html = ""
     for post in user_posts:
         img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
-        date_str = post.get('created_at', '')
+        date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
         
         posts_html += f"""<a href="/{post['id']}" class="feed-card">
             {badge}
@@ -1249,27 +1403,27 @@ async def view_profile(request: Request, username: str):
         </a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_posts", lang)}</div>'
     
-    # Saved posts block
     saved_html = ""
     saved_ids = profile_user.get('saved_posts', [])
-    saved_posts_list = [p for p in posts_db if p['id'] in saved_ids]
-    
-    for post in saved_posts_list:
-        author = users_db.get(post['author'])
-        a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-        date_str = post.get('created_at', '')
-        saved_html += f"""<a href="/{post['id']}" class="feed-card">
-            <div class="feed-card-img-container">{img_html}</div>
-            <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div>
-            <div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
-            </div>
-        </a>"""
+    if saved_ids:
+        res_saved = supabase.table("posts").select("*").in_("id", saved_ids).execute()
+        saved_posts_list = res_saved.data
+        for post in saved_posts_list:
+            author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
+            author = author_res.data[0] if author_res.data else None
+            a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
+            img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
+            saved_html += f"""<a href="/{post['id']}" class="feed-card">
+                <div class="feed-card-img-container">{img_html}</div>
+                <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div>
+                <div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
+                </div>
+            </a>"""
     if not saved_html: saved_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_saved", lang)}</div>'
 
     edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
     
-    # Tabs for profile
     tabs_html = f"""
     <div class="profile-tabs">
         <button class="profile-tab-btn active" data-tab="posts" onclick="switchProfileTab('posts')">{t('posts', lang)}</button>
@@ -1299,15 +1453,21 @@ async def view_profile(request: Request, username: str):
 async def view_post(request: Request, post_id: str):
     user = get_current_user(request)
     lang = get_lang(request)
-    post = next((p for p in posts_db if p['id'] == post_id), None)
+    
+    res = supabase.table("posts").select("*").eq("id", post_id).execute()
+    post = res.data[0] if res.data else None
     if not post: raise HTTPException(404, "Post not found")
-    author = users_db.get(post['author'])
+    
+    author_res = supabase.table("users").select("*").eq("username", post['author']).execute()
+    author = author_res.data[0] if author_res.data else None
     ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-    score = len(post['votes']['up']) - len(post['votes']['down'])
+    
+    score = len(post['votes'].get('up', [])) - len(post['votes'].get('down', []))
     user_vote = 0
     if user:
-        if user['username'] in post['votes']['up']: user_vote = 1
-        elif user['username'] in post['votes']['down']: user_vote = -1
+        if user['username'] in post['votes'].get('up', []): user_vote = 1
+        elif user['username'] in post['votes'].get('down', []): user_vote = -1
+        
     is_saved = user and post_id in user.get('saved_posts', [])
     
     save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
@@ -1337,7 +1497,7 @@ async def view_post(request: Request, post_id: str):
         comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div><div style="font-size:14px; margin-top:2px;">{c['text']}</div></div></div>{del_btn}</div>"""
     
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
-    date_str = post.get('created_at', '')
+    date_str = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00')).strftime("%d.%m.%Y %H:%M")
     
     content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
         <a href="/" style="display:flex; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>
