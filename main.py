@@ -16,19 +16,18 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-# --- SUPABASE SETUP ---
 SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 sessions = {}
 
-# --- IN-MEMORY CACHE ---
+# --- CACHE ---
 users_db = {}
 posts_db = {}
 votes_db = {}
 scores_cache = {}
-comments_db = {}  # post_id -> list of comments
+comments_db = {}
 
 def rebuild_scores():
     scores_cache.clear()
@@ -74,7 +73,7 @@ def load_all_from_supabase():
         comments_db = {}
     
     rebuild_scores()
-    print(f"Loaded: {len(users_db)} users, {len(posts_db)} posts, {len(votes_db)} votes, {len(comments_db)} comment threads")
+    print(f"Loaded: {len(users_db)} users, {len(posts_db)} posts, {len(votes_db)} votes, {len(comments_db)} threads")
 
 @app.on_event("startup")
 async def startup_event():
@@ -113,7 +112,7 @@ TRANSLATIONS = {
         "faq_q2": "How to save?", "faq_a2": "Click the bookmark icon under any post.",
         "faq_q3": "How to hide a post?", "faq_a3": "When creating, select 'By Link' - only you and those with the link will see it.",
         "got_it": "Got it!", "invalid_pass_format": "Invalid password format", "idea_by": "Idea: eblo.id",
-        "login_to_interact": "Log in to vote, save, and comment"
+        "login_to_interact": "Log in to vote, save, and comment", "reset": "Reset", "copy_comment_link": "Copy comment link"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -139,7 +138,7 @@ TRANSLATIONS = {
         "faq_q2": "Как сохранить?", "faq_a2": "Нажмите на иконку закладки под любым постом.",
         "faq_q3": "Как скрыть пост?", "faq_a3": "При создании выберите 'По ссылке' - его увидишь только ты и те, у кого есть ссылка.",
         "got_it": "Понятно!", "invalid_pass_format": "Неверный формат пароля", "idea_by": "Идея: eblo.id",
-        "login_to_interact": "Войдите, чтобы оценивать, сохранять и комментировать"
+        "login_to_interact": "Войдите, чтобы оценивать, сохранять и комментировать", "reset": "Сброс", "copy_comment_link": "Скопировать ссылку на комментарий"
     }
 }
 
@@ -243,34 +242,20 @@ CSS_STYLES = f"""
 ::-webkit-scrollbar-track{{background:var(--bg-color);}}
 ::-webkit-scrollbar-thumb{{background:#333;border-radius:4px;}}
 ::-webkit-scrollbar-thumb:hover{{background:var(--text-muted);}}
-
-img {{
-    image-rendering: -moz-crisp-edges;
-    image-rendering: -webkit-crisp-edges;
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-}}
-
+img {{ image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: -webkit-crisp-edges; image-rendering: crisp-edges; }}
 *{{box-sizing:border-box;margin:0;padding:0;font-family:'Manrope',sans-serif;user-select:none;}}
 input,textarea,.selectable{{user-select:text;}}
 body{{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}}
 a{{color:var(--accent-color);text-decoration:none;}}
-
-button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
-    touch-action: manipulation;
-    position: relative;
-}}
-
+button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{ touch-action: manipulation; position: relative; }}
 .app-layout{{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}}
 .app-layout.sidebar-collapsed{{grid-template-columns:80px 1fr;}}
-
 .topbar{{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}}
 .topbar-left{{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}}
 .logo{{font-size:22px;font-weight:700;color:var(--accent-color);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
 .logo img{{width:42px;height:38px;object-fit:contain;}}
 .menu-toggle{{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}}
 .menu-toggle:hover{{background:var(--card-bg);color:var(--text-main);}}
-
 .topbar-center{{position:absolute;left:50%;transform:translateX(-50%);width:100%;max-width:500px;display:flex;justify-content:center;z-index:10;}}
 .search-container{{width:100%;position:relative;}}
 .search-input{{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 15px 8px 36px;border-radius:8px;color:#fff;font-size:14px;outline:none;}}
@@ -279,9 +264,7 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .search-dropdown{{display:none;position:absolute;top:40px;left:0;width:100%;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.6);z-index:150;max-height:300px;overflow-y:auto;}}
 .search-dropdown-item{{display:flex;align-items:center;gap:10px;padding:10px 15px;color:var(--text-main);border-bottom:1px solid var(--border-color);}}
 .search-dropdown-item:hover{{background:#2a2a2a;}}
-
 .topbar-right{{display:flex;align-items:center;justify-content:flex-end;gap:15px;flex-shrink:0;width:auto;}}
-
 .btn-primary{{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;z-index:10;}}
 .btn-primary:hover{{opacity:.9;}}
 .btn-primary:disabled{{opacity:0.5;cursor:not-allowed;}}
@@ -298,7 +281,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .dropdown-item{{display:flex;align-items:center;gap:12px;padding:14px 15px;color:var(--text-main);font-size:15px;}}
 .dropdown-item:hover{{background:#2a2a2a;}}
 .dropdown-item.danger{{color:var(--danger-color);border-top:1px solid var(--border-color);}}
-
 .sidebar{{grid-column:1;position:sticky;top:70px;border-right:1px solid var(--border-color);padding:20px 0;display:flex;flex-direction:column;gap:8px;height:calc(100vh - 70px);overflow-y:auto;transition:padding .3s;}}
 .sidebar a{{color:var(--text-muted);padding:12px 25px;display:flex;align-items:center;gap:15px;font-size:16px;font-weight:500;transition:all .2s;white-space:nowrap;overflow:hidden;}}
 .sidebar a:hover:not(.active),.sidebar a.active{{color:var(--text-main);background-color:var(--card-bg);}}
@@ -306,14 +288,12 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .app-layout.sidebar-collapsed .sidebar{{padding:20px 0;align-items:center;}}
 .app-layout.sidebar-collapsed .sidebar a{{justify-content:center;padding:15px 0;width:100%;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
-
 .sidebar-bottom-banner{{margin-top:auto;display:flex;flex-direction:column;align-items:center;width:100%;padding:0;transition:opacity .2s;text-decoration:none;}}
 .sidebar-bottom-banner img{{width:100%;height:auto;display:block;object-fit:contain;border-radius:0;}}
 .sidebar-bottom-banner .banner-text{{font-size:12px;color:var(--text-muted);margin-top:5px;margin-bottom:10px;text-align:center;}}
 .sidebar-bottom-banner:hover{{opacity:0.8;}}
 .app-layout.sidebar-collapsed .sidebar-bottom-banner img{{object-fit:cover;height:100px;}} 
 .app-layout.sidebar-collapsed .sidebar-bottom-banner .banner-text{{display:none;}}
-
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;position:relative;z-index:1;}}
 .auth-container{{display:flex;justify-content:center;align-items:center;flex:1;}}
 .auth-form{{background-color:var(--card-bg);padding:40px;border-radius:16px;width:100%;max-width:450px;border:1px solid var(--border-color);}}
@@ -324,7 +304,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .input-group textarea{{resize:none;max-height:250px;overflow-y:auto;}}
 .pass-toggle{{position:absolute;right:15px;top:15px;cursor:pointer;color:var(--text-muted);}}
 .error{{color:var(--danger-color);text-align:center;margin-bottom:15px;font-size:15px;}}
-
 .val-list{{list-style:none;margin-top:8px;padding:0;display:flex;flex-direction:column;gap:4px;}}
 .val-item{{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);transition:color .2s;}}
 .val-item .icon-cross{{display:block;}}
@@ -332,19 +311,16 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .val-item.valid{{color:#22c55e;}}
 .val-item.valid .icon-cross{{display:none;}}
 .val-item.valid .icon-check{{display:block;}}
-
 .profile-header{{margin-bottom:30px;display:flex;align-items:center;gap:25px;position:relative;width:100%;}}
 .profile-avatar{{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;flex-shrink:0;}}
 .profile-details h1{{font-size:32px;margin-bottom:5px;font-weight:700;line-height:1.2;}}
 .profile-details p{{color:var(--text-muted);font-size:16px;}}
 .profile-edit-btn-wrapper{{margin-left:auto;}}
-
 .profile-tabs{{display:flex; gap:20px; border-bottom:1px solid var(--border-color); margin-bottom:25px;}}
 .profile-tab-btn{{background:none; border:none; color:var(--text-muted); font-size:18px; font-weight:700; padding:10px 5px; cursor:pointer; border-bottom:3px solid transparent; transition:all .2s;}}
 .profile-tab-btn.active{{color:#fff; border-bottom-color:var(--accent-color);}}
 .profile-tab-content{{display:none;}}
 .profile-tab-content.active{{display:block;}}
-
 .post-view{{display:flex;gap:30px;width:100%;max-width:1400px;margin:0 auto;padding:0 20px;align-items:flex-start;}}
 .post-media{{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}}
 .post-media img{{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}}
@@ -358,7 +334,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .post-author img{{width:48px;height:48px;border-radius:50%!important;}}
 .post-title{{font-size:26px;font-weight:700;margin-bottom:10px;}}
 .post-desc{{color:#ccc;font-size:16px;margin-bottom:15px;white-space:pre-wrap;line-height:1.5;}}
-
 .actions-row{{display:flex;align-items:center;gap:10px;margin-top:10px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}}
 .vote-controls{{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;position:relative;z-index:5;}}
 .vote-btn{{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s;height:100%;position:relative;z-index:6;}}
@@ -369,12 +344,9 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .action-btn:hover{{background:#333;color:#fff;}}
 .action-btn svg{{width:20px;height:20px;}}
 form .action-btn{{height:100%;width:100%;}}
-
 .login-notice{{background:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;padding:12px;color:var(--text-muted);font-size:14px;text-align:center;margin-top:10px;margin-bottom:25px;}}
 .login-notice a{{font-weight:600;}}
-
 .comments-section{{flex:1;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}}
-
 .feed-grid{{display:grid;grid-template-columns:repeat(4, 1fr);gap:20px;width:100%;}}
 @media (max-width:1600px){{.feed-grid{{grid-template-columns:repeat(3, 1fr);}}}}
 @media (max-width:1200px){{.feed-grid{{grid-template-columns:repeat(2, 1fr);}}}}
@@ -390,7 +362,6 @@ form .action-btn{{height:100%;width:100%;}}
 .feed-card-remove-btn{{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);border:none;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;}}
 .feed-card-remove-btn:hover{{background:var(--danger-color);}}
 .post-badge{{position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.75);color:var(--accent-color);padding:6px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:10;border:1px solid var(--accent-color);box-shadow:0 2px 5px rgba(0,0,0,0.5);}}
-
 .create-layout{{display:flex;gap:30px;width:100%;}}
 .dropzone{{flex:2;border:2px dashed var(--border-color);border-radius:16px;padding:50px;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;cursor:pointer;width:100%;}}
 .dropzone.dragover{{border-color:var(--accent-color);background:rgba(59,130,246,.05);}}
@@ -403,83 +374,23 @@ form .action-btn{{height:100%;width:100%;}}
 .slider:before{{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background-color:white;transition:.4s;border-radius:50%;}}
 input:checked+.slider{{background-color:var(--accent-color);}}
 input:checked+.slider:before{{transform:translateX(22px);}}
-
-/* Photo Viewer */
-#photo-viewer{{
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    background: rgba(0,0,0,0.95);
-    z-index: 9999;
-    display: none;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    touch-action: none;
-}}
-#photo-viewer-img{{
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    cursor: grab;
-    transition: none;
-    user-select: none;
-    -webkit-user-drag: none;
-}}
-.photo-viewer-controls{{
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 10px;
-    z-index: 10001;
-}}
-.photo-viewer-btn{{
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.3);
-    color: #fff;
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 20px;
-    backdrop-filter: blur(4px);
-}}
-.photo-viewer-btn:hover{{
-    background: rgba(255,255,255,0.2);
-}}
-.photo-viewer-close{{
-    position: absolute;
-    top: 15px; right: 20px;
-    font-size: 40px; color: #fff;
-    cursor: pointer;
-    background: none;
-    border: none;
-    z-index: 10001;
-    line-height: 1;
-}}
-.photo-nav-prev, .photo-nav-next{{
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 10001;
-}}
+#photo-viewer{{position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); z-index: 9999; display: none; justify-content: center; align-items: center; overflow: hidden; touch-action: none;}}
+#photo-viewer-img{{max-width: 100%; max-height: 100%; object-fit: contain; cursor: grab; transition: none; user-select: none; -webkit-user-drag: none;}}
+.photo-viewer-controls{{position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 10001;}}
+.photo-viewer-btn{{background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #fff; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; backdrop-filter: blur(4px);}}
+.photo-viewer-btn:hover{{background: rgba(255,255,255,0.2);}}
+.photo-viewer-close{{position: absolute; top: 15px; right: 20px; font-size: 40px; color: #fff; cursor: pointer; background: none; border: none; z-index: 10001; line-height: 1;}}
+.photo-nav-prev, .photo-nav-next{{position: absolute; top: 50%; transform: translateY(-50%); z-index: 10001;}}
 .photo-nav-prev{{ left: 15px; }}
 .photo-nav-next{{ right: 15px; }}
-
 .overlay{{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;overflow:hidden;}}
 .overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);}}
 .close-overlay{{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10000;line-height:1;}}
-
 .modal-box{{background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);width:90%;max-width:400px;display:flex;flex-direction:column;gap:20px;text-align:center;}}
 .modal-box h3{{font-weight:700;font-size:20px;}}
 .modal-box p{{color:var(--text-muted);}}
 .modal-actions{{display:flex;gap:10px;}}
 .modal-actions button{{flex:1;padding:12px;justify-content:center;}}
-
 .welcome-modal-content{{text-align:left; max-width:500px; width: 100%; max-height:80vh; overflow-y:auto; padding: 25px; align-items: stretch;}}
 .welcome-modal-content h2{{text-align:center; margin-bottom:15px; color:var(--accent-color);}}
 .welcome-modal-content p{{margin-bottom:20px; line-height:1.5; text-align:left;}}
@@ -488,7 +399,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 .welcome-modal-content .faq-section ul{{list-style:none; padding:0; display:flex; flex-direction:column; gap:10px;}}
 .welcome-modal-content .faq-section li{{font-size:14px; color:#ddd; line-height: 1.4;}}
 .welcome-modal-content .faq-section li strong{{color:#fff; display:block; margin-bottom:2px;}}
-
 .toast{{position:fixed;top:80px;right:20px;background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}}
 .toast.show{{opacity:1;transform:translateY(10px);}}
 .bottom-nav{{display:none;position:fixed;bottom:0;left:0;width:100%;background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);border-top:1px solid var(--border-color);justify-content:space-around;padding:12px 0;padding-bottom:max(12px, env(safe-area-inset-bottom));z-index:100;}}
@@ -500,7 +410,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 .mobile-profile-header{{display:flex;align-items:center;gap:15px;margin-bottom:10px;padding-bottom:15px;border-bottom:1px solid var(--border-color);}}
 .mobile-profile-header img{{width:50px;height:50px;border-radius:50%!important;object-fit:cover;}}
 .mobile-menu-overlay{{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;}}
-
 .editor-card{{background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:30px;display:flex;flex-direction:column;gap:15px;width:100%;max-width:600px;margin:0 auto;}}
 .avatar-edit-container{{position:relative;width:120px;height:120px;margin:0 auto;cursor:pointer;border-radius:50%;overflow:hidden;border:2px solid var(--border-color);}}
 .avatar-edit-container:hover{{border-color:var(--accent-color);}}
@@ -510,12 +419,9 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 .tabs{{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border-color);padding-bottom:10px;width:100%;}}
 .tab-btn{{background:none;border:none;color:var(--text-muted);font-size:16px;font-weight:500;cursor:pointer;padding:10px 15px;border-radius:8px;}}
 .tab-btn.active{{color:var(--accent-color);background:var(--card-bg);}}
-
 .mobile-only{{display:none!important;}}
 .desktop-only{{display:flex!important;}}
-
 @media(max-width:1024px){{.app-layout{{grid-template-columns:220px 1fr;}}.app-layout.sidebar-collapsed{{grid-template-columns:80px 1fr;}}}}
-
 @media(max-width:900px){{
     .app-layout{{display:flex;flex-direction:column;width:100%;min-height:100vh;overflow-x:hidden;}}
     .topbar{{position:fixed;top:0;left:0;width:100%;height:60px;padding:0 15px;gap:10px;z-index:100;}}
@@ -528,77 +434,27 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     .search-container{{max-width:100%;width:100%;}}
     .topbar-right .user-menu-container{{display:none!important;}}
     .sidebar{{display:none;}}
-    
     .main-content{{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;position:relative;z-index:1;}}
     .bottom-nav{{display:flex;}}
-    
-    .profile-header{{
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        justify-content:center;
-        text-align:center;
-        padding:30px 15px;
-        margin:0;
-        width:100%;
-        position:relative;
-        box-sizing:border-box;
-        gap:15px;
-    }}
-    .profile-avatar{{
-        width:100px!important;
-        height:100px!important;
-        border-radius:50%!important;
-        object-fit:cover;
-        margin:0 auto!important;
-        display:block;
-        flex-shrink:0;
-        position:relative;
-        z-index:1;
-    }}
-    .profile-details{{
-        display:flex;
-        flex-direction:column;
-        align-items:center;
-        width:100%;
-        position:relative;
-        z-index:1;
-    }}
-    .profile-details h1{{
-        font-size:24px;
-        margin-bottom:5px;
-        word-break:break-word;
-        line-height:1.2;
-    }}
-    .profile-details p{{
-        font-size:14px;
-        color:var(--text-muted);
-        margin-bottom:4px;
-    }}
-    .profile-edit-btn-wrapper{{
-        position:absolute;
-        top:15px;
-        right:15px;
-        margin:0!important;
-        z-index:50;
-    }}
+    .profile-header{{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;box-sizing:border-box;gap:15px;}}
+    .profile-avatar{{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 auto!important;display:block;flex-shrink:0;position:relative;z-index:1;}}
+    .profile-details{{display:flex;flex-direction:column;align-items:center;width:100%;position:relative;z-index:1;}}
+    .profile-details h1{{font-size:24px;margin-bottom:5px;word-break:break-word;line-height:1.2;}}
+    .profile-details p{{font-size:14px;color:var(--text-muted);margin-bottom:4px;}}
+    .profile-edit-btn-wrapper{{position:absolute;top:15px;right:15px;margin:0!important;z-index:50;}}
     .profile-tabs{{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}}
-    
     .feed-grid{{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}}
     .feed-card{{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}}
     .feed-card:hover{{border-bottom-color:var(--border-color);}}
     .feed-card-img-container{{width:100%;height:auto;aspect-ratio:4/3;}}
     .feed-card-info{{padding:15px;width:100%;}}
     .feed-card-meta{{flex-wrap:wrap;gap:10px;}}
-    
     .editor-card{{width:100%!important;max-width:100%!important;padding:20px 15px!important;margin:0!important;border-radius:0;border-left:none;border-right:none;}}
     .tabs{{padding:0 15px;margin-bottom:0;border-bottom:none;}}
     .tab-content{{padding:15px;}}
-    
     .create-layout{{flex-direction:column;width:100%!important;padding:15px;gap:15px;}}
     .dropzone{{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}}
     .create-sidebar{{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}}
-    
     .post-view{{display:flex;flex-direction:column;padding:0;gap:15px;height:auto;width:100%;}}
     .post-header-actions{{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}}
     .post-media{{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}}
@@ -607,7 +463,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     .post-title{{font-size:22px;}}
     .actions-row{{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;position:relative;z-index:10;}}
     .comments-section{{width:100%;padding:15px 0;border-top:1px solid var(--border-color);flex:none;position:relative;z-index:1;}}
-    
     .toast{{top:20px;left:50%;right:auto;transform:translateX(-50%);}}
     .toast.show{{transform:translateX(-50%) translateY(10px);}}
     .mobile-only{{display:flex!important;}}
@@ -624,44 +479,19 @@ var filesList=[];
 var currentImage=null;
 var currentZoom=1;
 
-// --- PHOTO VIEWER STATE ---
-var pvState = {
-    images: [],
-    index: 0,
-    scale: 1,
-    tx: 0,
-    ty: 0,
-    isDragging: false,
-    startX: 0,
-    startY: 0,
-    touchStartX: 0,
-    touchStartY: 0,
-    initialPinchDist: 0,
-    isPinching: false
-};
+var pvState = { images: [], index: 0, scale: 1, tx: 0, ty: 0, isDragging: false, startX: 0, startY: 0, touchStartX: 0, touchStartY: 0, initialPinchDist: 0, isPinching: false };
 
 function openPanorama(imgElement, index) {
     var container = document.getElementById('post-media-container');
     if (container && container.dataset.images) {
-        try {
-            pvState.images = JSON.parse(container.dataset.images);
-        } catch(e) {
-            pvState.images = [imgElement.src];
-        }
-    } else {
-        pvState.images = [imgElement.src];
-    }
+        try { pvState.images = JSON.parse(container.dataset.images); }
+        catch(e) { pvState.images = [imgElement.src]; }
+    } else { pvState.images = [imgElement.src]; }
     pvState.index = index || 0;
-    pvState.scale = 1;
-    pvState.tx = 0;
-    pvState.ty = 0;
-    
+    pvState.scale = 1; pvState.tx = 0; pvState.ty = 0;
     var overlay = document.getElementById('photo-viewer');
     var img = document.getElementById('photo-viewer-img');
-    if (img) {
-        img.src = pvState.images[pvState.index];
-        img.style.transform = 'translate(0px, 0px) scale(1)';
-    }
+    if (img) { img.src = pvState.images[pvState.index]; img.style.transform = 'translate(0px, 0px) scale(1)'; }
     if (overlay) overlay.style.display = 'flex';
 }
 
@@ -672,9 +502,7 @@ function closePanorama() {
 
 function updatePanoTransform() {
     var img = document.getElementById('photo-viewer-img');
-    if (img) {
-        img.style.transform = 'translate(' + pvState.tx + 'px, ' + pvState.ty + 'px) scale(' + pvState.scale + ')';
-    }
+    if (img) img.style.transform = 'translate(' + pvState.tx + 'px, ' + pvState.ty + 'px) scale(' + pvState.scale + ')';
 }
 
 function photoZoom(delta) {
@@ -683,9 +511,7 @@ function photoZoom(delta) {
 }
 
 function photoReset() {
-    pvState.scale = 1;
-    pvState.tx = 0;
-    pvState.ty = 0;
+    pvState.scale = 1; pvState.tx = 0; pvState.ty = 0;
     updatePanoTransform();
 }
 
@@ -708,13 +534,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var img = document.getElementById('photo-viewer-img');
     if (!viewer || !img) return;
 
-    // Mouse wheel zoom
     viewer.addEventListener('wheel', function(e) {
         e.preventDefault();
         photoZoom(e.deltaY > 0 ? -0.2 : 0.2);
     }, { passive: false });
 
-    // Mouse drag
     viewer.addEventListener('mousedown', function(e) {
         if (e.target === img) {
             pvState.isDragging = true;
@@ -733,13 +557,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     window.addEventListener('mouseup', function() {
-        if (pvState.isDragging) {
-            pvState.isDragging = false;
-            img.style.cursor = 'grab';
-        }
+        if (pvState.isDragging) { pvState.isDragging = false; img.style.cursor = 'grab'; }
     });
 
-    // Touch events
     viewer.addEventListener('touchstart', function(e) {
         if (e.touches.length === 1) {
             pvState.isDragging = true;
@@ -750,20 +570,14 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (e.touches.length === 2) {
             pvState.isDragging = false;
             pvState.isPinching = true;
-            pvState.initialPinchDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+            pvState.initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         }
     }, { passive: true });
 
     viewer.addEventListener('touchmove', function(e) {
         e.preventDefault();
         if (e.touches.length === 2 && pvState.isPinching) {
-            var dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+            var dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             var factor = dist / pvState.initialPinchDist;
             pvState.scale = Math.max(0.5, Math.min(8, pvState.scale * factor));
             pvState.initialPinchDist = dist;
@@ -779,7 +593,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (pvState.isDragging && e.changedTouches.length === 1) {
             var dx = e.changedTouches[0].clientX - pvState.touchStartX;
             var dy = e.changedTouches[0].clientY - pvState.touchStartY;
-            
             if (pvState.scale <= 1.05 && pvState.images.length > 1) {
                 if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
                     if (dx > 0) photoPrev(); else photoNext();
@@ -791,7 +604,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// --- ОСТАЛЬНАЯ ЛОГИКА ---
 function applySidebarState(){
     var layout=document.querySelector('.app-layout');
     if(!layout)return;
@@ -846,15 +658,12 @@ function handleSearch(query){
                 var a = document.createElement('a');
                 a.href = '/' + p.id;
                 a.className = 'search-dropdown-item';
-                
                 var titleDiv = document.createElement('div');
                 titleDiv.style.cssText = 'font-weight:700;font-size:14px;';
                 titleDiv.innerText = p.title;
-                
                 var authorDiv = document.createElement('div');
                 authorDiv.style.cssText = 'color:var(--text-muted);font-size:12px;margin-left:auto;';
                 authorDiv.innerText = '@' + p.author;
-                
                 a.appendChild(titleDiv);
                 a.appendChild(authorDiv);
                 dropdown.appendChild(a);
@@ -871,7 +680,6 @@ function compressImage(file, maxWidth = 1920, maxHeight = 1920) {
     return new Promise((resolve, reject) => {
         if (file.type === 'image/gif') return resolve(file);
         if (!file.type.startsWith('image/')) return resolve(file);
-        
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = event => {
@@ -905,10 +713,7 @@ async function handleFiles(input){
         if(filesList.length<3) {
             var compressed = await compressImage(newFiles[i]);
             filesList.push(compressed);
-        } else { 
-            showToast(window.TRANSLATIONS.max_files); 
-            break; 
-        }
+        } else { showToast(window.TRANSLATIONS.max_files); break; }
     }
     input.value=''; updateInputAndRender();
 }
@@ -932,12 +737,7 @@ function updateInputAndRender(){
             reader.onload=function(e){
                 var div=document.createElement('div'); div.className='file-preview';
                 div.onclick=(e)=>e.stopPropagation();
-                div.innerHTML = '<img src="'+e.target.result+'">' +
-                    '<div style="flex:1;overflow:hidden;">' +
-                        '<div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">'+file.name+'</div>' +
-                        '<div style="font-size:12px;color:var(--text-muted);">'+(file.size/1024).toFixed(1)+' KB</div>' +
-                    '</div>' +
-                    '<span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile('+index+', event)">×</span>';
+                div.innerHTML = '<img src="'+e.target.result+'"><div style="flex:1;overflow:hidden;"><div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">'+file.name+'</div><div style="font-size:12px;color:var(--text-muted);">'+(file.size/1024).toFixed(1)+' KB</div></div><span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile('+index+', event)">×</span>';
                 previewContainer.appendChild(div);
             }; reader.readAsDataURL(file);
         });
@@ -946,17 +746,13 @@ function updateInputAndRender(){
 
 document.addEventListener('paste', async function(e) {
     if (!document.getElementById('file-input')) return; 
-
     var items = (e.clipboardData || e.originalEvent.clipboardData).items;
     var imageFile = null;
-    
     for (var index = 0; index < items.length; index++) {
         if (items[index].kind === 'file' && items[index].type.includes('image/')) {
-            imageFile = items[index].getAsFile();
-            break;
+            imageFile = items[index].getAsFile(); break;
         }
     }
-
     if (imageFile) {
         e.preventDefault();
         if (filesList.length < 3) {
@@ -964,9 +760,7 @@ document.addEventListener('paste', async function(e) {
             var compressed = await compressImage(file);
             filesList.push(compressed);
             updateInputAndRender();
-        } else {
-            showToast(window.TRANSLATIONS.max_files);
-        }
+        } else { showToast(window.TRANSLATIONS.max_files); }
     }
 });
 
@@ -1000,9 +794,14 @@ function showConfirm(title, desc, onConfirm){
 
 function copyLink(){ navigator.clipboard.writeText(window.location.href); showToast(window.TRANSLATIONS.link_copied); }
 
+function copyCommentLink(postId, commentId) {
+    var url = window.location.origin + '/' + postId + '/' + commentId;
+    navigator.clipboard.writeText(url);
+    showToast(window.TRANSLATIONS.link_copied);
+}
+
 function loadAvatar(event){
     var file=event.target.files[0]; if(!file)return;
-    
     if (file.type === 'image/gif') {
         var reader = new FileReader();
         reader.onload = function(e) {
@@ -1012,7 +811,6 @@ function loadAvatar(event){
         reader.readAsDataURL(file);
         return;
     }
-
     var reader=new FileReader();
     reader.onload=function(e){
         var img=new Image();
@@ -1046,12 +844,9 @@ async function vote(postId,action){
     var upBtn=document.getElementById('btn-up'), downBtn=document.getElementById('btn-down');
     if(upBtn) upBtn.disabled = true;
     if(downBtn) downBtn.disabled = true;
-    
     var res=await fetch('/api/vote/'+postId+'/'+action,{method:'POST'}); var data=await res.json();
-    
     if(upBtn) upBtn.disabled = false;
     if(downBtn) downBtn.disabled = false;
-    
     if(data.error)return showToast(data.error);
     var count=document.getElementById('vote-count'); if(count)count.innerText=data.score;
     if(upBtn)upBtn.className='vote-btn '+(data.user_vote===1?'active-up':'');
@@ -1076,6 +871,9 @@ async function toggleSave(postId,redirectToSaved=false){
 
 async function submitComment(e,postId){
     e.preventDefault();
+    e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    
     var input=document.getElementById('comment-input'); if(!input)return;
     var text=input.value.trim(); if(!text)return;
     var formData=new FormData(); formData.append('text',text);
@@ -1102,7 +900,6 @@ async function submitComment(e,postId){
         img.style.cssText = 'width:32px;height:32px;border-radius:50%;object-fit:cover;';
         
         var textDiv = document.createElement('div');
-        
         var nameDiv = document.createElement('div');
         nameDiv.style.cssText = 'font-weight:700;font-size:14px;';
         nameDiv.innerHTML = data.comment.display_name + ' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@' + data.comment.login + '</span>';
@@ -1117,13 +914,27 @@ async function submitComment(e,postId){
         leftDiv.appendChild(img);
         leftDiv.appendChild(textDiv);
         
+        // Actions on the right
+        var actionsDiv = document.createElement('div');
+        actionsDiv.style.cssText = 'display:flex;gap:2px;align-items:flex-start;';
+        
+        var copyBtn = document.createElement('button');
+        copyBtn.style.cssText = 'background:none;border:none;color:var(--text-muted);cursor:pointer;padding:5px;display:flex;align-items:center;';
+        copyBtn.title = window.TRANSLATIONS.copy_comment_link;
+        copyBtn.innerHTML = window.SVG_LINK;
+        copyBtn.onclick = function() { copyCommentLink(postId, data.comment.id); };
+        
         var delBtn = document.createElement('button');
-        delBtn.style.cssText = 'background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;';
-        delBtn.innerText = window.TRANSLATIONS.delete;
+        delBtn.style.cssText = 'background:none;border:none;color:var(--danger-color);cursor:pointer;padding:5px;display:flex;align-items:center;';
+        delBtn.title = window.TRANSLATIONS.delete_comment;
+        delBtn.innerHTML = window.SVG_TRASH;
         delBtn.onclick = function() { confirmDeleteComment(postId, data.comment.id); };
         
+        actionsDiv.appendChild(copyBtn);
+        actionsDiv.appendChild(delBtn);
+        
         div.appendChild(leftDiv);
-        div.appendChild(delBtn);
+        div.appendChild(actionsDiv);
         
         list.appendChild(div);
         
@@ -1138,10 +949,8 @@ function confirmDeleteComment(postId,commentId){
         if(data.success){
             var el = document.getElementById('comment-'+commentId);
             if(el) el.remove();
-            
             var cCount=document.getElementById('comment-count');
             if(cCount) cCount.innerText=data.total_comments;
-            
             if(data.total_comments===0) {
                 var noMsg = document.getElementById('no-comments-msg');
                 if(noMsg) noMsg.style.display='block';
@@ -1178,9 +987,7 @@ function switchProfileTab(tabId) {
 function validatePassword(val) {
     var itemLen = document.querySelector('[data-rule="p_len"]');
     var itemLatin = document.querySelector('[data-rule="p_latin"]');
-
     if(!itemLen) return;
-
     itemLen.classList.toggle('valid', val.length >= 6);
     var isLatin = /^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+$/.test(val) && val.length > 0;
     itemLatin.classList.toggle('valid', isLatin);
@@ -1190,7 +997,6 @@ var usernameTimeout;
 function validateUsername(val) {
     var itemAvail = document.querySelector('[data-rule="avail"]');
     if(!itemAvail) return; 
-
     clearTimeout(usernameTimeout);
     if(val.length > 0) {
         usernameTimeout = setTimeout(async () => {
@@ -1198,13 +1004,9 @@ function validateUsername(val) {
                 var res = await fetch('/api/check_username?q=' + encodeURIComponent(val));
                 var data = await res.json();
                 itemAvail.classList.toggle('valid', data.available);
-            } catch (e) {
-                console.error(e);
-            }
+            } catch (e) { console.error(e); }
         }, 500);
-    } else {
-        itemAvail.classList.remove('valid');
-    }
+    } else { itemAvail.classList.remove('valid'); }
 }
 
 function closeWelcomeModal(){
@@ -1219,16 +1021,39 @@ function checkWelcome() {
     }
 }
 
+function scrollToCommentIfNeeded() {
+    var parts = window.location.pathname.split('/').filter(Boolean);
+    if (parts.length === 2) {
+        var commentId = parts[1];
+        var el = document.getElementById('comment-' + commentId);
+        if (el) {
+            setTimeout(function() {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.style.transition = 'background 0.5s, padding 0.5s';
+                el.style.background = 'rgba(59, 130, 246, 0.15)';
+                el.style.borderRadius = '8px';
+                el.style.padding = '8px';
+                setTimeout(function() {
+                    el.style.background = '';
+                    el.style.padding = '';
+                }, 3000);
+            }, 300);
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded',function(){
     applySidebarState();
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
     checkWelcome();
+    scrollToCommentIfNeeded();
 });
 
 document.addEventListener('htmx:afterSwap', function(evt) {
     applySidebarState();
     closeMobileMenu();
     checkWelcome();
+    scrollToCommentIfNeeded();
     var carouselImgs=document.querySelectorAll('.carousel-img');
     if(carouselImgs.length>1){
         var currentImg=0;
@@ -1245,16 +1070,13 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     current_lang_str = "RU" if lang == "ru" else "EN"
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
-    
     page_title = f"sol-id | {title_text}" if title_text else "sol-id"
-    
-    translations_json = f"""<script>window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang])}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`;</script>"""
+    translations_json = f"""<script>window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang])}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`; window.SVG_LINK = `{SVG_LINK}`; window.SVG_TRASH = `{SVG_TRASH}`;</script>"""
 
     if user:
         nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
         nav_right = f"""<a href="/login" class="btn-primary desktop-only" style="padding:8px 16px;">{SVG_USER} <span>{t('login', lang)}</span></a>"""
-        
     lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
 
     sidebar_html = ""
@@ -1294,7 +1116,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 </div>
 {f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}
 
-<!-- Photo Viewer -->
 <div id="photo-viewer">
     <button class="photo-viewer-close" onclick="closePanorama()">&times;</button>
     <button class="photo-viewer-btn photo-nav-prev" onclick="photoPrev()" style="position:absolute; left:15px; top:50%; transform:translateY(-50%); width:48px; height:48px;">
@@ -1306,7 +1127,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     <img id="photo-viewer-img" src="" onclick="event.stopPropagation()">
     <div class="photo-viewer-controls">
         <button class="photo-viewer-btn" onclick="photoZoom(-0.3)">-</button>
-        <button class="photo-viewer-btn" onclick="photoReset()" style="font-size:12px; width:auto; padding:0 16px; border-radius:20px;">Сброс</button>
+        <button class="photo-viewer-btn" onclick="photoReset()" style="font-size:12px; width:auto; padding:0 16px; border-radius:20px;">{t('reset', lang)}</button>
         <button class="photo-viewer-btn" onclick="photoZoom(0.3)">+</button>
     </div>
 </div>
@@ -1331,7 +1152,6 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 {bottom_nav}
 {JS_SCRIPT}
 </body></html>"""
-    
     return html_content
 
 @app.exception_handler(404)
@@ -1358,13 +1178,11 @@ async def set_lang(lang: str, next: str = "/"):
 async def api_search(q: str = ""):
     q_lower = q.lower().strip()
     if not q_lower: return JSONResponse({"results": []})
-    
     results = []
     for p in posts_db.values():
         if p.get('visibility') != 'feed': continue
         if q_lower in p['title'].lower() or q_lower in p.get('content', '').lower() or q_lower in p['author'].lower():
             results.append({"id": p['id'], "title": html.escape(p['title']), "author": html.escape(p['author'])})
-    
     return JSONResponse({"results": results[:5]})
 
 @app.get("/search", response_class=HTMLResponse)
@@ -1372,14 +1190,12 @@ async def search_posts(request: Request, q: str = ""):
     user = get_current_user(request)
     lang = get_lang(request)
     q_lower = q.lower().strip()
-    
     results = []
     if q_lower:
         for p in posts_db.values():
             if p.get('visibility') != 'feed': continue
             if q_lower in p['title'].lower() or q_lower in p.get('content', '').lower() or q_lower in p['author'].lower():
                 results.append(p)
-
     if not results:
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div></div>'
     else:
@@ -1397,9 +1213,7 @@ async def search_posts(request: Request, q: str = ""):
 async def read_feed(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
-    
     feed_posts = sorted([p for p in posts_db.values() if p.get('visibility') == 'feed'], key=lambda p: p.get('created_at', ''), reverse=True)
-    
     if not feed_posts:
         content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
     else:
@@ -1408,10 +1222,8 @@ async def read_feed(request: Request):
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-            
             score = get_score(post['id'])
             arrow_icon = SVG_DOWN if score < 0 else SVG_UP
-            
             date_str = post.get('created_at', '')[:16].replace('T', ' ')
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date">{SVG_CALENDAR} {date_str}</div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
@@ -1423,9 +1235,7 @@ async def saved_posts(request: Request):
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     saved_ids = user.get('saved_posts', [])
-    
     saved_posts_list = [posts_db[pid] for pid in saved_ids if pid in posts_db]
-    
     if not saved_posts_list:
         content = f"<div style='text-align:center; padding:60px; color:var(--text-muted); font-size:18px;'>{t('no_saved', lang)}</div>"
     else:
@@ -1446,14 +1256,10 @@ async def login_page(request: Request):
     <div class="auth-container">
         <form class="auth-form" action="/login" method="post" hx-boost="false">
             <h2>{t('login', lang)}</h2>
-            
             <div class="input-group">
                 <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off" oninput="validateUsername(this.value)">
-                <ul class="val-list">
-                    <li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li>
-                </ul>
+                <ul class="val-list"><li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li></ul>
             </div>
-            
             <div class="input-group" style="margin-top:15px;">
                 <input type="password" name="password" id="passwordInput" placeholder="{t('password', lang)}" required oninput="validatePassword(this.value)">
                 <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
@@ -1462,7 +1268,6 @@ async def login_page(request: Request):
                     <li class="val-item" data-rule="p_latin">{SVG_CROSS}{SVG_CHECK} {t('val_p_latin', lang)}</li>
                 </ul>
             </div>
-            
             <p style="color:var(--text-muted); font-size:13px; margin-top:20px; margin-bottom:15px;">{t('login_hint', lang)}</p>
             <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login', lang)}</button>
         </form>
@@ -1474,27 +1279,18 @@ async def login_page(request: Request):
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...)):
     lang = get_lang(request)
     username = username.strip()
-    
     if len(password) < 6 or not re.match(r"^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]+$", password):
         return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("invalid_pass_format", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
-
     user = users_db.get(username)
     is_new = False
     if user:
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
-        new_user_data = {
-            "username": username,
-            "password": pwd_context.hash(password),
-            "display_name": username,
-            "avatar": None,
-            "saved_posts": []
-        }
+        new_user_data = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": []}
         supabase.table("users").insert(new_user_data).execute()
         users_db[username] = new_user_data
         is_new = True
-        
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
     redirect_url = "/?welcome=1" if is_new else "/"
@@ -1516,10 +1312,8 @@ async def settings_page(request: Request):
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
     avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
-    
     updated = request.query_params.get("updated")
     toast_script = f"<script>setTimeout(()=>showToast('{t('profile_updated', lang)}'), 100);</script>" if updated else ""
-
     content = f"""
     <div style="max-width: 800px; margin: 0 auto; width: 100%;">
         <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px; padding: 15px 15px 0 15px;">{t('settings', lang)}</h2>
@@ -1578,18 +1372,11 @@ async def settings_page(request: Request):
 async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None)):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
-    
     update_data = {"display_name": html.escape(display_name)}
-    if avatar_base64: 
-        update_data["avatar"] = avatar_base64
-    elif avatar and avatar.filename: 
-        update_data["avatar"] = await image_to_base64(avatar)
-        
+    if avatar_base64: update_data["avatar"] = avatar_base64
+    elif avatar and avatar.filename: update_data["avatar"] = await image_to_base64(avatar)
     supabase.table("users").update(update_data).eq("username", user['username']).execute()
-    
-    for k, v in update_data.items():
-        users_db[user['username']][k] = v
-    
+    for k, v in update_data.items(): users_db[user['username']][k] = v
     return RedirectResponse(url="/settings?updated=1", status_code=status.HTTP_302_FOUND)
 
 @app.get("/write", response_class=HTMLResponse)
@@ -1609,18 +1396,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         for img in images[:3]:
             b64 = await image_to_base64(img)
             if b64: img_b64_list.append(b64)
-            
-    new_post = {
-        "id": str(uuid.uuid4())[:6], 
-        "author": user["username"], 
-        "title": html.escape(title), 
-        "content": html.escape(content), 
-        "images": img_b64_list, 
-        "visibility": visibility, 
-        "votes": {"up": [], "down": []}, 
-        "comments": [], 
-        "allow_comments": allow_comments
-    }
+    new_post = {"id": str(uuid.uuid4())[:6], "author": user["username"], "title": html.escape(title), "content": html.escape(content), "images": img_b64_list, "visibility": visibility, "votes": {"up": [], "down": []}, "comments": [], "allow_comments": allow_comments}
     supabase.table("posts").insert(new_post).execute()
     posts_db[new_post['id']] = new_post
     return RedirectResponse(url=f"/{new_post['id']}", status_code=status.HTTP_302_FOUND)
@@ -1629,37 +1405,28 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
 async def vote_post(post_id: str, action: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    
     if post_id not in posts_db: return JSONResponse({"error": "Not found"}, status_code=404)
-    
     username = user['username']
     old_vote = votes_db.get((post_id, username), 0)
-    
     if action == 'up':
         if old_vote == 1:
             votes_db.pop((post_id, username), None)
-            delta = -1
-            new_vote = 0
+            delta = -1; new_vote = 0
             supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
         else:
             delta = 1 - old_vote
-            votes_db[(post_id, username)] = 1
-            new_vote = 1
+            votes_db[(post_id, username)] = 1; new_vote = 1
             supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": 1}).execute()
     elif action == 'down':
         if old_vote == -1:
             votes_db.pop((post_id, username), None)
-            delta = 1
-            new_vote = 0
+            delta = 1; new_vote = 0
             supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
         else:
             delta = -1 - old_vote
-            votes_db[(post_id, username)] = -1
-            new_vote = -1
+            votes_db[(post_id, username)] = -1; new_vote = -1
             supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": -1}).execute()
-    else:
-        return JSONResponse({"error": "Invalid action"}, status_code=400)
-    
+    else: return JSONResponse({"error": "Invalid action"}, status_code=400)
     scores_cache[post_id] = scores_cache.get(post_id, 0) + delta
     return JSONResponse({"score": scores_cache[post_id], "user_vote": new_vote})
 
@@ -1667,15 +1434,9 @@ async def vote_post(post_id: str, action: str, request: Request):
 async def save_post(post_id: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    
     saved_posts = list(user.get('saved_posts', []))
-    if post_id in saved_posts:
-        saved_posts.remove(post_id)
-        saved = False
-    else:
-        saved_posts.append(post_id)
-        saved = True
-        
+    if post_id in saved_posts: saved_posts.remove(post_id); saved = False
+    else: saved_posts.append(post_id); saved = True
     supabase.table("users").update({"saved_posts": saved_posts}).eq("username", user['username']).execute()
     users_db[user['username']]['saved_posts'] = saved_posts
     return JSONResponse({"saved": saved})
@@ -1684,129 +1445,75 @@ async def save_post(post_id: str, request: Request):
 async def add_comment(post_id: str, request: Request, text: str = Form(...)):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    
     if post_id not in posts_db: return JSONResponse({"error": "Not found"}, status_code=404)
     if not posts_db[post_id].get('allow_comments', True): return JSONResponse({"error": "Comments disabled"}, status_code=403)
-    
     new_comment_id = str(uuid.uuid4())[:8]
-    new_comment = {
-        "id": new_comment_id,
-        "post_id": post_id,
-        "login": user['username'],
-        "comment_text": html.escape(text)
-    }
+    new_comment = {"id": new_comment_id, "post_id": post_id, "login": user['username'], "comment_text": html.escape(text)}
     supabase.table("comments").insert(new_comment).execute()
-    
-    if post_id not in comments_db:
-        comments_db[post_id] = []
+    if post_id not in comments_db: comments_db[post_id] = []
     comments_db[post_id].append(new_comment)
-    
     author = users_db.get(user['username'])
     display_name = author.get('display_name') if author else user['username']
     avatar = author.get('avatar') if author else None
-    
-    resp_comment = {
-        "id": new_comment_id,
-        "login": user['username'],
-        "display_name": display_name,
-        "avatar": avatar,
-        "text": html.escape(text)
-    }
-    
+    resp_comment = {"id": new_comment_id, "login": user['username'], "display_name": display_name, "avatar": avatar, "text": html.escape(text)}
     return JSONResponse({"comment": resp_comment, "total_comments": len(comments_db[post_id]), "is_author": True})
 
 @app.delete("/api/comment/{post_id}/{comment_id}")
 async def delete_comment(post_id: str, comment_id: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
-    
     if post_id not in posts_db: return JSONResponse({"error": "Not found"}, status_code=404)
-    
     post_comments = comments_db.get(post_id, [])
     comment = next((c for c in post_comments if c['id'] == comment_id), None)
     if not comment: return JSONResponse({"error": "Comment not found"}, status_code=404)
     if comment['login'] != user['username']: return JSONResponse({"error": "Forbidden"}, status_code=403)
-    
     supabase.table("comments").delete().eq("id", comment_id).execute()
     comments_db[post_id] = [c for c in post_comments if c['id'] != comment_id]
-    
     return JSONResponse({"success": True, "total_comments": len(comments_db[post_id])})
 
 @app.post("/delete/{post_id}")
 async def delete_post(post_id: str, request: Request):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
-    
     if post_id in posts_db and posts_db[post_id]['author'] == user['username']:
         supabase.table("posts").delete().eq("id", post_id).execute()
         del posts_db[post_id]
         scores_cache.pop(post_id, None)
         comments_db.pop(post_id, None)
-        
         for key in list(votes_db.keys()):
-            if key[0] == post_id:
-                del votes_db[key]
-    
+            if key[0] == post_id: del votes_db[key]
     return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
 
 @app.get("/@{username}", response_class=HTMLResponse)
 async def view_profile(request: Request, username: str):
     current_user = get_current_user(request)
     lang = get_lang(request)
-    
     profile_user = users_db.get(username)
     if not profile_user: raise HTTPException(404, "User not found")
-    
     ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
     is_own_profile = current_user and current_user['username'] == username
-    
-    if is_own_profile: 
-        user_posts = sorted([p for p in posts_db.values() if p['author'] == username], key=lambda p: p.get('created_at', ''), reverse=True)
-    else: 
-        user_posts = sorted([p for p in posts_db.values() if p['author'] == username and p.get('visibility') == 'feed'], key=lambda p: p.get('created_at', ''), reverse=True)
-    
+    if is_own_profile: user_posts = sorted([p for p in posts_db.values() if p['author'] == username], key=lambda p: p.get('created_at', ''), reverse=True)
+    else: user_posts = sorted([p for p in posts_db.values() if p['author'] == username and p.get('visibility') == 'feed'], key=lambda p: p.get('created_at', ''), reverse=True)
     posts_html = ""
     for post in user_posts:
         img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
         date_str = post.get('created_at', '')[:16].replace('T', ' ')
-        
-        posts_html += f"""<a href="/{post['id']}" class="feed-card">
-            {badge}
-            <div class="feed-card-img-container">{img_html}</div>
-            <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div>
-            <div class="feed-card-meta"><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
-            </div>
-        </a>"""
+        posts_html += f"""<a href="/{post['id']}" class="feed-card">{badge}<div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_posts", lang)}</div>'
-    
     saved_html = ""
     saved_ids = profile_user.get('saved_posts', [])
     if saved_ids:
         saved_posts_list = [posts_db[pid] for pid in saved_ids if pid in posts_db]
-        
         for post in saved_posts_list:
             author = users_db.get(post['author'])
             a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             date_str = post.get('created_at', '')[:16].replace('T', ' ')
-            saved_html += f"""<a href="/{post['id']}" class="feed-card">
-                <div class="feed-card-img-container">{img_html}</div>
-                <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div>
-                <div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
-                </div>
-            </a>"""
+            saved_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div></div></a>"""
     if not saved_html: saved_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_saved", lang)}</div>'
-
     edit_btn = f'<div class="profile-edit-btn-wrapper"><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
-    
-    tabs_html = f"""
-    <div class="profile-tabs">
-        <button class="profile-tab-btn active" data-tab="posts" onclick="switchProfileTab('posts')">{t('posts', lang)}</button>
-        {f'<button class="profile-tab-btn" data-tab="saved" onclick="switchProfileTab(\'saved\')">{t("saved", lang)}</button>' if is_own_profile else ''}
-    </div>
-    """
-    
+    tabs_html = f"""<div class="profile-tabs"><button class="profile-tab-btn active" data-tab="posts" onclick="switchProfileTab('posts')">{t('posts', lang)}</button>{f'<button class="profile-tab-btn" data-tab="saved" onclick="switchProfileTab(\'saved\')">{t("saved", lang)}</button>' if is_own_profile else ''}</div>"""
     content = f"""
     <div class="profile-header">
         <img src="{ava}" class="profile-avatar">
@@ -1818,109 +1525,69 @@ async def view_profile(request: Request, username: str):
         {edit_btn}
     </div>
     {tabs_html}
-    <div id="profile-posts" class="profile-tab-content active">
-        <div class="feed-grid">{posts_html}</div>
-    </div>
+    <div id="profile-posts" class="profile-tab-content active"><div class="feed-grid">{posts_html}</div></div>
     {f'<div id="profile-saved" class="profile-tab-content"><div class="feed-grid">{saved_html}</div></div>' if is_own_profile else ''}
     """
     return HTMLResponse(content=render_layout(content, current_user, request, "profile", f"@{username}"))
 
+@app.get("/{post_id}/{comment_id}", response_class=HTMLResponse)
+async def view_post_with_comment(request: Request, post_id: str, comment_id: str):
+    return await _render_post_page(request, post_id)
+
 @app.get("/{post_id}", response_class=HTMLResponse)
 async def view_post(request: Request, post_id: str):
+    return await _render_post_page(request, post_id)
+
+async def _render_post_page(request: Request, post_id: str):
     user = get_current_user(request)
     lang = get_lang(request)
-    
     post = posts_db.get(post_id)
     if not post: raise HTTPException(404, "Post not found")
-    
     author = users_db.get(post['author'])
     ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-    
     score = get_score(post_id)
     user_vote = votes_db.get((post_id, user['username']), 0) if user else 0
-        
     is_saved = user and post_id in user.get('saved_posts', [])
-    
-    # Back button logic
     referer = request.headers.get("referer", "")
     show_back = False
     if referer:
         base = str(request.base_url).rstrip('/')
         if referer.startswith(base) and request.url.path not in referer:
             show_back = True
-    
     back_html = f'<a href="javascript:history.back()" id="back-btn" style="display:{"flex" if show_back else "none"}; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>'
-    
     delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
-
     if post['images']:
         imgs_html = ""
         for i, img in enumerate(post['images']):
             display = "" if i == 0 else "none"
             imgs_html += f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" onclick="openPanorama(this, {i})">'
-        
         nav_btns = f'<div class="carousel-nav-btn left" onclick="changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         safe_images_json = html.escape(json.dumps(post['images']))
-        media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">
-            {imgs_html}
-            {nav_btns}
-        </div>"""
-    else: 
-        media_html = f'<div class="post-media" style="display:flex; align-items:center; justify-content:center; color:#555; aspect-ratio:4/3;">{SVG_IMAGE}</div>'
-    
-    # Actions row based on user login
+        media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">{imgs_html}{nav_btns}</div>"""
+    else: media_html = f'<div class="post-media" style="display:flex; align-items:center; justify-content:center; color:#555; aspect-ratio:4/3;">{SVG_IMAGE}</div>'
     if user:
         save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
         save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
-        
-        actions_html = f"""
-        <div class="actions-row">
-            <div class="vote-controls">
-                <button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button>
-                <span class="vote-count" id="vote-count">{score}</span>
-                <button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button>
-            </div>
-            <button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button>
-            <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
-            {delete_btn}
-        </div>
-        """
+        actions_html = f"""<div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div>"""
     else:
-        actions_html = f"""
-        <div class="actions-row">
-            <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
-        </div>
-        <div class="login-notice">
-            <a href="/login">{t('login', lang)}</a> · {t('login_to_interact', lang)}
-        </div>
-        """
-    
+        actions_html = f"""<div class="actions-row"><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button></div><div class="login-notice"><a href="/login">{t('login', lang)}</a> · {t('login_to_interact', lang)}</div>"""
     if post.get('allow_comments', True):
-        if user: 
-            comments_input_html = f"""<form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;"><input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;"><button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button></form>"""
-        else: 
-            comments_input_html = f"""<div class="login-notice" style="margin-bottom:20px;"><a href="/login">{t('login', lang)}</a> · {t('login_to_comment', lang)}</div>"""
-    else: 
-        comments_input_html = f'<div style="background:rgba(239,68,68,0.1); color:var(--danger-color); padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; font-weight:500;">{t("comments_disabled", lang)}</div>'
-    
+        if user: comments_input_html = f"""<form onsubmit="submitComment(event, '{post['id']}')" hx-boost="false" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;"><input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;"><button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button></form>"""
+        else: comments_input_html = f"""<div class="login-notice" style="margin-bottom:20px;"><a href="/login">{t('login', lang)}</a> · {t('login_to_comment', lang)}</div>"""
+    else: comments_input_html = f'<div style="background:rgba(239,68,68,0.1); color:var(--danger-color); padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; font-weight:500;">{t("comments_disabled", lang)}</div>'
     post_comments = comments_db.get(post_id, [])
-    
     comments_list_html = ""
     for c in post_comments:
         author_c = users_db.get(c['login'])
         c_display = author_c.get('display_name') if author_c else c['login']
         c_ava = author_c.get('avatar') if author_c and author_c.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['login']}"
         c_text = c['comment_text']
-        
-        del_btn = f'<button onclick="confirmDeleteComment(\'{post_id}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">{t("delete_comment", lang)}</button>' if user and user['username'] == c['login'] else ''
-        comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c_display} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['login']}</span></div><div style="font-size:14px; margin-top:2px;">{c_text}</div></div></div>{del_btn}</div>"""
-    
+        copy_btn = f'<button onclick="copyCommentLink(\'{post_id}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:5px; display:flex; align-items:center;" title="{t("copy_comment_link", lang)}">{SVG_LINK}</button>'
+        del_btn = f'<button onclick="confirmDeleteComment(\'{post_id}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:5px; display:flex; align-items:center;" title="{t("delete_comment", lang)}">{SVG_TRASH}</button>' if user and user['username'] == c['login'] else ''
+        comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c_display} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['login']}</span></div><div style="font-size:14px; margin-top:2px;">{c_text}</div></div></div><div style="display:flex;gap:2px;align-items:flex-start;">{copy_btn}{del_btn}</div></div>"""
     no_comments_style = "display:block;" if len(post_comments) == 0 else "display:none;"
     date_str = post.get('created_at', '')[:16].replace('T', ' ')
-    
-    content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-        {back_html}
-    </div>
+    content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">{back_html}</div>
     <div class="post-view">
         {media_html}
         <div class="post-details">
