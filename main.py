@@ -13,7 +13,7 @@ from datetime import datetime
 
 app = FastAPI(title="sol-id")
 
-# Включаем GZIP для скорости (сжимает ответы сервера)
+# Включаем GZIP для скорости
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -25,7 +25,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 sessions = {} 
 
-# Мидлварь для базовых заголовков безопасности
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -39,7 +38,7 @@ TRANSLATIONS = {
         "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login",
         "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish",
         "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files or paste (Ctrl+V)",
-        "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
+        "upload_limit": "JPEG, PNG, GIF up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
         "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If the account does not exist, it will be created automatically",
         "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts",
@@ -64,7 +63,7 @@ TRANSLATIONS = {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
         "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать",
         "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы или вставьте (Ctrl+V)",
-        "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
+        "upload_limit": "JPEG, PNG, GIF до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
         "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, он будет создан автоматически",
         "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить", "no_posts": "Пока нет постов", "posts": "постов",
@@ -148,7 +147,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v4';
+    const CACHE_NAME = 'solid-cache-v5';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -191,6 +190,15 @@ CSS_STYLES = f"""
 ::-webkit-scrollbar-track{{background:var(--bg-color);}}
 ::-webkit-scrollbar-thumb{{background:#333;border-radius:4px;}}
 ::-webkit-scrollbar-thumb:hover{{background:var(--text-muted);}}
+
+/* Nearest Neighbor для ВСЕХ картинок */
+img {{
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}}
+
 *{{box-sizing:border-box;margin:0;padding:0;font-family:'Manrope',sans-serif;user-select:none;}}
 input,textarea,.selectable{{user-select:text;}}
 body{{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}}
@@ -204,7 +212,7 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .topbar{{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}}
 .topbar-left{{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}}
 .logo{{font-size:22px;font-weight:700;color:var(--accent-color);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
-.logo img{{width:42px;height:38px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;}}
+.logo img{{width:42px;height:38px;object-fit:contain;}}
 .menu-toggle{{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}}
 .menu-toggle:hover{{background:var(--card-bg);color:var(--text-main);}}
 
@@ -248,9 +256,9 @@ a{{color:var(--accent-color);text-decoration:none;}}
 
 /* Баннер eblo.id от края до края */
 .sidebar-bottom-banner{{margin-top:auto;display:block;width:100%;padding:0;transition:opacity .2s;}}
-.sidebar-bottom-banner img{{width:100%;height:auto;display:block;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:0;}}
+.sidebar-bottom-banner img{{width:100%;height:auto;display:block;object-fit:contain;border-radius:0;}}
 .sidebar-bottom-banner:hover{{opacity:0.8;}}
-.app-layout.sidebar-collapsed .sidebar-bottom-banner img{{object-fit:cover;height:100px;}} /* В свернутом виде делаем квадратным */
+.app-layout.sidebar-collapsed .sidebar-bottom-banner img{{object-fit:cover;height:100px;}} 
 
 /* Основной контент */
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}}
@@ -347,13 +355,13 @@ form .action-btn{{height:100%;width:100%;}}
 input:checked+.slider{{background-color:var(--accent-color);}}
 input:checked+.slider:before{{transform:translateX(22px);}}
 
-/* Оверлеи (ПОЧИНЕН ПРОСМОТР КАРТИНОК + ЗУМ) */
+/* Оверлеи */
 .overlay{{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;overflow:hidden;}}
 .overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);transition:transform 0.1s ease-out; cursor:grab;}}
 .overlay img:active{{cursor:grabbing;}}
 .close-overlay{{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10000;line-height:1;}}
 
-/* Модалки (ПОЧИНЕН WELCOME) */
+/* Модалки */
 .modal-box{{background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);width:90%;max-width:400px;display:flex;flex-direction:column;gap:20px;text-align:center;}}
 .modal-box h3{{font-weight:700;font-size:20px;}}
 .modal-box p{{color:var(--text-muted);}}
@@ -607,7 +615,10 @@ function handleSearch(query){
 
 function compressImage(file, maxWidth = 1920, maxHeight = 1920) {
     return new Promise((resolve, reject) => {
+        // Если это GIF, не сжимаем и не трогаем анимацию
+        if (file.type === 'image/gif') return resolve(file);
         if (!file.type.startsWith('image/')) return resolve(file);
+        
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = event => {
@@ -733,6 +744,18 @@ function copyLink(){ navigator.clipboard.writeText(window.location.href); showTo
 
 function loadAvatar(event){
     var file=event.target.files[0]; if(!file)return;
+    
+    // Если это GIF - пропускаем кроппер (canvas убивает анимацию)
+    if (file.type === 'image/gif') {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('avatar-base64').value = e.target.result;
+            document.getElementById('avatar-preview').src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        return;
+    }
+
     var reader=new FileReader();
     reader.onload=function(e){
         var img=new Image();
@@ -1055,7 +1078,6 @@ async def search_posts(request: Request, q: str = ""):
     if not results:
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div style="text-align:center; padding: 60px 20px; color: var(--text-muted); font-size:18px;">{t("nothing_found", lang)}</div></div>'
     else:
-        # Оптимизация: получаем авторов пачкой
         author_usernames = list(set([p['author'] for p in results]))
         res_users = supabase.table("users").select("username, avatar").in_("username", author_usernames).execute()
         users_map = {u['username']: u for u in res_users.data}
@@ -1075,14 +1097,12 @@ async def read_feed(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     
-    # Оптимизация: 1 запрос на посты
     res = supabase.table("posts").select("*").eq("visibility", "feed").order("created_at", desc=True).execute()
     feed_posts = res.data
     
     if not feed_posts:
         content = f'<div style="text-align:center; padding: 80px 20px; color: var(--text-muted);"><h3 style="font-size: 28px; color: #fff; margin-bottom: 15px;">{t("no_posts", lang)}</h3></div>'
     else:
-        # Оптимизация: 1 запрос на авторов
         author_usernames = list(set([p['author'] for p in feed_posts]))
         res_users = supabase.table("users").select("username, avatar").in_("username", author_usernames).execute()
         users_map = {u['username']: u for u in res_users.data}
@@ -1189,7 +1209,6 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     redirect_url = "/?welcome=1" if is_new else "/"
     response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
     
-    # Безопасные куки
     response.set_cookie(key="session_token", value=session_token, httponly=True, samesite="lax")
     return response
 
@@ -1227,7 +1246,7 @@ async def settings_page(request: Request):
                             <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
                         </div>
                         <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
-                        <input type="file" id="avatar-file" name="avatar" accept="image/*" onchange="loadAvatar(event)" style="display:none;">
+                        <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
                         <input type="hidden" name="avatar_base64" id="avatar-base64">
                     </div>
                     <div class="input-group" style="margin-bottom:0;">
@@ -1284,7 +1303,7 @@ async def create_post_page(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
-    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
+    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "write", t('new_post', lang)))
 
 @app.post("/write")
