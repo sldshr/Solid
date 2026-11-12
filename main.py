@@ -5,6 +5,7 @@ import uuid
 import base64
 import html
 import json
+import re
 from typing import List
 from datetime import datetime
 
@@ -34,7 +35,7 @@ TRANSLATIONS = {
         "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
         "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "profile_updated": "Profile updated successfully!",
         "link_only": "Link Only (Hidden)", "val_avail": "Available", "val_p_len": "At least 6 characters",
-        "val_p_latin": "Latin letters, numbers and @#", "val_p_upper": "Contains uppercase letter", "val_p_spec": "Contains @ or #",
+        "val_p_latin": "Latin letters, numbers, and symbols only",
         "welcome_title": "Welcome to sol-id!", "welcome_desc": "sol-id is ebloid, but from AliExpress. A simple, fast, and minimalist social network.",
         "faq_title": "FAQ", "faq_q1": "How to post?", "faq_a1": "Click the '+' button in the top menu.",
         "faq_q2": "How to save?", "faq_a2": "Click the bookmark icon under any post.",
@@ -59,7 +60,7 @@ TRANSLATIONS = {
         "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
         "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "profile_updated": "Профиль успешно обновлен!",
         "link_only": "По ссылке (Скрыт)", "val_avail": "Свободен", "val_p_len": "От 6 символов",
-        "val_p_latin": "Латиница, цифры и @#", "val_p_upper": "Есть заглавная буква", "val_p_spec": "Есть @ или #",
+        "val_p_latin": "Только латиница, цифры и спецсимволы",
         "welcome_title": "Добро пожаловать в sol-id!", "welcome_desc": "sol-id — это ebloid, но с алиэкспресс. Простая, быстрая и минималистичная соцсеть.",
         "faq_title": "FAQ", "faq_q1": "Как выложить пост?", "faq_a1": "Нажмите на кнопку '+' в верхнем меню.",
         "faq_q2": "Как сохранить?", "faq_a2": "Нажмите на иконку закладки под любым постом.",
@@ -222,10 +223,10 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .app-layout.sidebar-collapsed .sidebar a{{justify-content:center;padding:15px 0;width:100%;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
 
-/* Нижняя картинка в сайдбаре (только пк) */
-.sidebar-bottom-img{{margin-top:auto;margin-bottom:20px;display:flex;justify-content:center;width:100%;}}
-.sidebar-bottom-img img{{width:24px;height:34px;image-rendering:pixelated;image-rendering:crisp-edges;transition:transform .2s;}}
-.sidebar-bottom-img img:hover{{transform:scale(1.1);}}
+/* Нижний баннер в сайдбаре (только пк) */
+.sidebar-bottom-banner{{margin-top:auto;display:flex;justify-content:center;align-items:center;width:100%;padding:10px 0;transition:opacity .2s;}}
+.sidebar-bottom-banner img{{width:100%;height:auto;max-height:100px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:8px;}}
+.sidebar-bottom-banner:hover{{opacity:0.8;}}
 
 /* Основной контент */
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}}
@@ -742,18 +743,12 @@ function switchProfileTab(tabId) {
 function validatePassword(val) {
     var itemLen = document.querySelector('[data-rule="p_len"]');
     var itemLatin = document.querySelector('[data-rule="p_latin"]');
-    var itemUpper = document.querySelector('[data-rule="p_upper"]');
-    var itemSpec = document.querySelector('[data-rule="p_spec"]');
 
     if(!itemLen) return;
 
     itemLen.classList.toggle('valid', val.length >= 6);
-    var isLatin = /^[a-zA-Z0-9@@#]+$/.test(val) && val.length > 0;
+    var isLatin = /^[a-zA-Z0-9!@@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+$/.test(val) && val.length > 0;
     itemLatin.classList.toggle('valid', isLatin);
-    var hasUpper = /[A-Z]/.test(val);
-    itemUpper.classList.toggle('valid', hasUpper);
-    var hasSpec = /[@@#]/.test(val);
-    itemSpec.classList.toggle('valid', hasSpec);
 }
 
 // Валидация логина (только уникальность)
@@ -784,6 +779,13 @@ function closeWelcomeModal(){
     window.history.replaceState({}, document.title, window.location.pathname);
 }
 
+function checkWelcome() {
+    if (window.location.search.includes('welcome=1')) {
+        var welcome = document.getElementById('welcome-modal');
+        if(welcome) welcome.style.display = 'flex';
+    }
+}
+
 document.addEventListener('DOMContentLoaded',function(){
     applySidebarState();
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
@@ -794,15 +796,12 @@ document.addEventListener('DOMContentLoaded',function(){
     if(userInp) userInp.addEventListener('input', function() { validateUsername(this.value); });
     if(passInp) passInp.addEventListener('input', function() { validatePassword(this.value); });
 
-    // Показ приветственного окна
-    if (window.location.search.includes('welcome=1')) {
-        var welcome = document.getElementById('welcome-modal');
-        if(welcome) welcome.style.display = 'flex';
-    }
+    checkWelcome();
 });
 
 document.addEventListener('htmx:afterSwap', function(evt) {
     applySidebarState();
+    checkWelcome();
     var carouselImgs=document.querySelectorAll('.carousel-img');
     if(carouselImgs.length>1){
         var currentImg=0;
@@ -833,7 +832,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 
     sidebar_html = ""
     if user:
-        sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a><a href="https://eblo.id" target="_blank" class="sidebar-bottom-img"><img src="{SPRITE_URL}" alt="eblo"></a></div>"""
+        sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a><a href="https://eblo.id" target="_blank" class="sidebar-bottom-banner"><img src="{SPRITE_URL}" alt="eblo.id"></a></div>"""
 
     if user:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a><a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a><a href="javascript:void(0)" onclick="toggleDropdown()" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a></div>"""
@@ -981,7 +980,7 @@ async def login_page(request: Request):
     lang = get_lang(request)
     content = f"""
     <div class="auth-container">
-        <form class="auth-form" action="/login" method="post">
+        <form class="auth-form" action="/login" method="post" hx-boost="false">
             <h2>{t('login', lang)}</h2>
             
             <div class="input-group">
@@ -997,8 +996,6 @@ async def login_page(request: Request):
                 <ul class="val-list">
                     <li class="val-item" data-rule="p_len">{SVG_CROSS}{SVG_CHECK} {t('val_p_len', lang)}</li>
                     <li class="val-item" data-rule="p_latin">{SVG_CROSS}{SVG_CHECK} {t('val_p_latin', lang)}</li>
-                    <li class="val-item" data-rule="p_upper">{SVG_CROSS}{SVG_CHECK} {t('val_p_upper', lang)}</li>
-                    <li class="val-item" data-rule="p_spec">{SVG_CROSS}{SVG_CHECK} {t('val_p_spec', lang)}</li>
                 </ul>
             </div>
             
@@ -1013,8 +1010,11 @@ async def login_page(request: Request):
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...)):
     lang = get_lang(request)
     username = username.strip()
-    user = users_db.get(username)
     
+    if len(password) < 6 or not re.match(r"^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]+$", password):
+        return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">Invalid password format</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
+
+    user = users_db.get(username)
     is_new = False
     if user:
         if not pwd_context.verify(password, user["password"]):
