@@ -33,9 +33,13 @@ TRANSLATIONS = {
         "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply",
         "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
         "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "profile_updated": "Profile updated successfully!",
-        "link_only": "Link Only (Hidden)", "val_latin": "Latin letters only", "val_upper": "Contains uppercase letter",
-        "val_len": "Up to 20 characters", "val_avail": "Available", "val_p_len": "At least 6 characters",
-        "val_p_latin": "Latin letters, numbers and @#", "val_p_upper": "Contains uppercase letter", "val_p_spec": "Contains @ or #"
+        "link_only": "Link Only (Hidden)", "val_avail": "Available", "val_p_len": "At least 6 characters",
+        "val_p_latin": "Latin letters, numbers and @#", "val_p_upper": "Contains uppercase letter", "val_p_spec": "Contains @ or #",
+        "welcome_title": "Welcome to sol-id!", "welcome_desc": "sol-id is ebloid, but from AliExpress. A simple, fast, and minimalist social network.",
+        "faq_title": "FAQ", "faq_q1": "How to post?", "faq_a1": "Click the '+' button in the top menu.",
+        "faq_q2": "How to save?", "faq_a2": "Click the bookmark icon under any post.",
+        "faq_q3": "How to hide a post?", "faq_a3": "When creating, select 'By Link' - only you and those with the link will see it.",
+        "got_it": "Got it!"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -54,9 +58,13 @@ TRANSLATIONS = {
         "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить",
         "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
         "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "profile_updated": "Профиль успешно обновлен!",
-        "link_only": "По ссылке (Скрыт)", "val_latin": "Только латиница", "val_upper": "Есть заглавная буква",
-        "val_len": "До 20 символов", "val_avail": "Свободен", "val_p_len": "От 6 символов",
-        "val_p_latin": "Латиница, цифры и @#", "val_p_upper": "Есть заглавная буква", "val_p_spec": "Есть @ или #"
+        "link_only": "По ссылке (Скрыт)", "val_avail": "Свободен", "val_p_len": "От 6 символов",
+        "val_p_latin": "Латиница, цифры и @#", "val_p_upper": "Есть заглавная буква", "val_p_spec": "Есть @ или #",
+        "welcome_title": "Добро пожаловать в sol-id!", "welcome_desc": "sol-id — это ebloid, но с алиэкспресс. Простая, быстрая и минималистичная соцсеть.",
+        "faq_title": "FAQ", "faq_q1": "Как выложить пост?", "faq_a1": "Нажмите на кнопку '+' в верхнем меню.",
+        "faq_q2": "Как сохранить?", "faq_a2": "Нажмите на иконку закладки под любым постом.",
+        "faq_q3": "Как скрыть пост?", "faq_a3": "При создании выберите 'По ссылке' - его увидишь только ты и те, у кого есть ссылка.",
+        "got_it": "Понятно!"
     }
 }
 
@@ -94,6 +102,7 @@ SVG_CROSS = """<svg class="icon-cross" width="16" height="16" viewBox="0 0 24 24
 SVG_CHECK = """<svg class="icon-check" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 
 LOGO_URL = "https://i.ibb.co/5hLnbhYC/solid-logo.png"
+SPRITE_URL = "https://i.ibb.co/7x55NbD0/solidsprite.png"
 
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
@@ -118,7 +127,7 @@ async def get_manifest():
 async def get_sw():
     sw_code = """
     const CACHE_NAME = 'solid-cache-v3';
-    const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """'];
+    const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
         event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
@@ -139,7 +148,6 @@ async def get_sw():
     """
     return Response(content=sw_code, media_type="application/javascript")
 
-# API для проверки логина
 @app.get("/api/check_username")
 async def api_check_username(q: str = ""):
     if not q: return JSONResponse({"available": False})
@@ -173,7 +181,7 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .topbar{{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}}
 .topbar-left{{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}}
 .logo{{font-size:22px;font-weight:700;color:var(--accent-color);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
-.logo img{{width:42px;height:38px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;}} /* Убран фильтр */
+.logo img{{width:42px;height:38px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;}}
 .menu-toggle{{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}}
 .menu-toggle:hover{{background:var(--card-bg);color:var(--text-main);}}
 
@@ -214,6 +222,11 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .app-layout.sidebar-collapsed .sidebar a{{justify-content:center;padding:15px 0;width:100%;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
 
+/* Нижняя картинка в сайдбаре (только пк) */
+.sidebar-bottom-img{{margin-top:auto;margin-bottom:20px;display:flex;justify-content:center;width:100%;}}
+.sidebar-bottom-img img{{width:24px;height:34px;image-rendering:pixelated;image-rendering:crisp-edges;transition:transform .2s;}}
+.sidebar-bottom-img img:hover{{transform:scale(1.1);}}
+
 /* Основной контент */
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}}
 .auth-container{{display:flex;justify-content:center;align-items:center;flex:1;}}
@@ -240,6 +253,13 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .profile-avatar{{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;}}
 .profile-details h1{{font-size:32px;margin-bottom:5px;font-weight:700;line-height:1.2;}}
 .profile-details p{{color:var(--text-muted);font-size:16px;}}
+
+/* Табы профиля */
+.profile-tabs{{display:flex; gap:20px; border-bottom:1px solid var(--border-color); margin-bottom:25px;}}
+.profile-tab-btn{{background:none; border:none; color:var(--text-muted); font-size:18px; font-weight:700; padding:10px 5px; cursor:pointer; border-bottom:3px solid transparent; transition:all .2s;}}
+.profile-tab-btn.active{{color:#fff; border-bottom-color:var(--accent-color);}}
+.profile-tab-content{{display:none;}}
+.profile-tab-content.active{{display:block;}}
 
 /* Пост */
 .post-view{{display:flex;gap:30px;width:100%;max-width:1400px;margin:0 auto;padding:0 20px;align-items:flex-start;}}
@@ -313,6 +333,16 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 .modal-box p{{color:var(--text-muted);}}
 .modal-actions{{display:flex;gap:10px;}}
 .modal-actions button{{flex:1;padding:12px;justify-content:center;}}
+
+/* Приветственная модалка */
+.welcome-modal-content{{text-align:left; max-width:500px; max-height:80vh; overflow-y:auto; padding-right:10px;}}
+.welcome-modal-content h2{{text-align:center; margin-bottom:15px; color:var(--accent-color);}}
+.welcome-modal-content p{{margin-bottom:20px; line-height:1.5;}}
+.welcome-modal-content .faq-section{{background:var(--bg-color); padding:15px; border-radius:12px; border:1px solid var(--border-color); margin-bottom:20px;}}
+.welcome-modal-content .faq-section h4{{margin-bottom:10px; font-size:16px;}}
+.welcome-modal-content .faq-section ul{{list-style:none; padding:0; display:flex; flex-direction:column; gap:10px;}}
+.welcome-modal-content .faq-section li{{font-size:14px; color:#ddd;}}
+.welcome-modal-content .faq-section li strong{{color:#fff; display:block; margin-bottom:2px;}}
 
 /* Утилиты */
 .toast{{position:fixed;top:80px;right:20px;background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}}
@@ -701,29 +731,37 @@ function switchTab(tabId){
     document.getElementById('tab-'+tabId).style.display='block';
 }
 
-// Валидация логина (СТРОГО ЛАТИНИЦА, БЕЗ ЦИФР)
-var usernameTimeout;
-function validateUsername(val) {
-    var itemLatin = document.querySelector('[data-rule="latin"]');
-    var itemUpper = document.querySelector('[data-rule="upper"]');
-    var itemLen = document.querySelector('[data-rule="len"]');
-    var itemAvail = document.querySelector('[data-rule="avail"]');
-    
-    if(!itemLatin) return; 
+function switchProfileTab(tabId) {
+    document.querySelectorAll('.profile-tab-btn').forEach(btn=>btn.classList.remove('active'));
+    document.querySelectorAll('.profile-tab-content').forEach(el=>el.classList.remove('active'));
+    document.querySelector('[data-tab="'+tabId+'"]').classList.add('active');
+    document.getElementById('profile-'+tabId).classList.add('active');
+}
 
-    // Латиница (только буквы)
-    var isLatin = /^[a-zA-Z]+$/.test(val);
-    itemLatin.classList.toggle('valid', isLatin && val.length > 0);
+// Валидация пароля
+function validatePassword(val) {
+    var itemLen = document.querySelector('[data-rule="p_len"]');
+    var itemLatin = document.querySelector('[data-rule="p_latin"]');
+    var itemUpper = document.querySelector('[data-rule="p_upper"]');
+    var itemSpec = document.querySelector('[data-rule="p_spec"]');
 
-    // Большие буквы
+    if(!itemLen) return;
+
+    itemLen.classList.toggle('valid', val.length >= 6);
+    var isLatin = /^[a-zA-Z0-9@@#]+$/.test(val) && val.length > 0;
+    itemLatin.classList.toggle('valid', isLatin);
     var hasUpper = /[A-Z]/.test(val);
     itemUpper.classList.toggle('valid', hasUpper);
+    var hasSpec = /[@@#]/.test(val);
+    itemSpec.classList.toggle('valid', hasSpec);
+}
 
-    // До 20 символов
-    var isLen = val.length > 0 && val.length <= 20;
-    itemLen.classList.toggle('valid', isLen);
+// Валидация логина (только уникальность)
+var usernameTimeout;
+function validateUsername(val) {
+    var itemAvail = document.querySelector('[data-rule="avail"]');
+    if(!itemAvail) return; 
 
-    // Проверка на занятость
     clearTimeout(usernameTimeout);
     if(val.length > 0) {
         usernameTimeout = setTimeout(async () => {
@@ -740,29 +778,10 @@ function validateUsername(val) {
     }
 }
 
-// Валидация пароля
-function validatePassword(val) {
-    var itemLen = document.querySelector('[data-rule="p_len"]');
-    var itemLatin = document.querySelector('[data-rule="p_latin"]');
-    var itemUpper = document.querySelector('[data-rule="p_upper"]');
-    var itemSpec = document.querySelector('[data-rule="p_spec"]');
-
-    if(!itemLen) return;
-
-    // От 6 символов
-    itemLen.classList.toggle('valid', val.length >= 6);
-
-    // Латиница (буквы + цифры + спецсимволы)
-    var isLatin = /^[a-zA-Z0-9@@#]+$/.test(val) && val.length > 0;
-    itemLatin.classList.toggle('valid', isLatin);
-
-    // Верхний регистр
-    var hasUpper = /[A-Z]/.test(val);
-    itemUpper.classList.toggle('valid', hasUpper);
-
-    // Специальный символ (@ или #)
-    var hasSpec = /[@@#]/.test(val);
-    itemSpec.classList.toggle('valid', hasSpec);
+function closeWelcomeModal(){
+    document.getElementById('welcome-modal').style.display='none';
+    // Убираем параметр из URL без перезагрузки
+    window.history.replaceState({}, document.title, window.location.pathname);
 }
 
 document.addEventListener('DOMContentLoaded',function(){
@@ -772,11 +791,13 @@ document.addEventListener('DOMContentLoaded',function(){
     var userInp = document.getElementById('usernameInput');
     var passInp = document.getElementById('passwordInput');
     
-    if(userInp) {
-        userInp.addEventListener('input', function() { validateUsername(this.value); });
-    }
-    if(passInp) {
-        passInp.addEventListener('input', function() { validatePassword(this.value); });
+    if(userInp) userInp.addEventListener('input', function() { validateUsername(this.value); });
+    if(passInp) passInp.addEventListener('input', function() { validatePassword(this.value); });
+
+    // Показ приветственного окна
+    if (window.location.search.includes('welcome=1')) {
+        var welcome = document.getElementById('welcome-modal');
+        if(welcome) welcome.style.display = 'flex';
     }
 });
 
@@ -812,7 +833,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 
     sidebar_html = ""
     if user:
-        sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a></div>"""
+        sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a><a href="https://eblo.id" target="_blank" class="sidebar-bottom-img"><img src="{SPRITE_URL}" alt="eblo"></a></div>"""
 
     if user:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a><a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a><a href="javascript:void(0)" onclick="toggleDropdown()" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a></div>"""
@@ -848,6 +869,21 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 {f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}
 <div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div>
 <div id="confirm-modal" class="overlay" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div>
+<div id="welcome-modal" class="overlay" onclick="closeWelcomeModal()">
+    <div class="modal-box welcome-modal-content" onclick="event.stopPropagation()">
+        <h2>{t('welcome_title', lang)}</h2>
+        <p>{t('welcome_desc', lang)}</p>
+        <div class="faq-section">
+            <h4>{t('faq_title', lang)}</h4>
+            <ul>
+                <li><strong>{t('faq_q1', lang)}</strong> {t('faq_a1', lang)}</li>
+                <li><strong>{t('faq_q2', lang)}</strong> {t('faq_a2', lang)}</li>
+                <li><strong>{t('faq_q3', lang)}</strong> {t('faq_a3', lang)}</li>
+            </ul>
+        </div>
+        <button class="btn-primary" onclick="closeWelcomeModal()" style="width:100%; justify-content:center; padding:12px; margin-top:10px;">{t('got_it', lang)}</button>
+    </div>
+</div>
 <div id="toast" class="toast"></div>
 {bottom_nav}
 {JS_SCRIPT}
@@ -951,9 +987,6 @@ async def login_page(request: Request):
             <div class="input-group">
                 <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off">
                 <ul class="val-list">
-                    <li class="val-item" data-rule="latin">{SVG_CROSS}{SVG_CHECK} {t('val_latin', lang)}</li>
-                    <li class="val-item" data-rule="upper">{SVG_CROSS}{SVG_CHECK} {t('val_upper', lang)}</li>
-                    <li class="val-item" data-rule="len">{SVG_CROSS}{SVG_CHECK} {t('val_len', lang)}</li>
                     <li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li>
                 </ul>
             </div>
@@ -982,17 +1015,18 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     username = username.strip()
     user = users_db.get(username)
     
+    is_new = False
     if user:
-        # Если пользователь есть, проверяем пароль
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
-        # Если нет, регистрируем (имя = логин)
         users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": []}
+        is_new = True
         
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
-    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    redirect_url = "/?welcome=1" if is_new else "/"
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
     response.set_cookie(key="session_token", value=session_token, httponly=True)
     return response
 
@@ -1193,7 +1227,9 @@ async def view_profile(request: Request, username: str):
     if not profile_user: raise HTTPException(404, "User not found")
     ava = profile_user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={username}"
     
-    if current_user and current_user['username'] == username: 
+    is_own_profile = current_user and current_user['username'] == username
+    
+    if is_own_profile: 
         user_posts = [p for p in posts_db if p['author'] == username]
     else: 
         user_posts = [p for p in posts_db if p['author'] == username and p.get('visibility') == 'feed']
@@ -1211,12 +1247,52 @@ async def view_profile(request: Request, username: str):
             <div class="feed-card-meta"><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
             </div>
         </a>"""
-        
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_posts", lang)}</div>'
     
-    edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if current_user and current_user['username'] == username else ''
+    # Saved posts block
+    saved_html = ""
+    saved_ids = profile_user.get('saved_posts', [])
+    saved_posts_list = [p for p in posts_db if p['id'] in saved_ids]
     
-    content = f"""<div class="profile-header"><img src="{ava}" class="profile-avatar"><div class="profile-details"><h1>{html.escape(profile_user['display_name'])}</h1><p>@{html.escape(username)}</p><p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p></div>{edit_btn}</div><div class="profile-tabs" style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;"><a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a></div><div class="feed-grid">{posts_html}</div>"""
+    for post in saved_posts_list:
+        author = users_db.get(post['author'])
+        a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
+        img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+        date_str = post.get('created_at', '')
+        saved_html += f"""<a href="/{post['id']}" class="feed-card">
+            <div class="feed-card-img-container">{img_html}</div>
+            <div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div>
+            <div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date">{SVG_CALENDAR} {date_str}</div></div>
+            </div>
+        </a>"""
+    if not saved_html: saved_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_saved", lang)}</div>'
+
+    edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
+    
+    # Tabs for profile
+    tabs_html = f"""
+    <div class="profile-tabs">
+        <button class="profile-tab-btn active" data-tab="posts" onclick="switchProfileTab('posts')">{t('posts', lang)}</button>
+        {f'<button class="profile-tab-btn" data-tab="saved" onclick="switchProfileTab(\'saved\')">{t("saved", lang)}</button>' if is_own_profile else ''}
+    </div>
+    """
+    
+    content = f"""
+    <div class="profile-header">
+        <img src="{ava}" class="profile-avatar">
+        <div class="profile-details">
+            <h1>{html.escape(profile_user['display_name'])}</h1>
+            <p>@{html.escape(username)}</p>
+            <p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p>
+        </div>
+        {edit_btn}
+    </div>
+    {tabs_html}
+    <div id="profile-posts" class="profile-tab-content active">
+        <div class="feed-grid">{posts_html}</div>
+    </div>
+    {f'<div id="profile-saved" class="profile-tab-content"><div class="feed-grid">{saved_html}</div></div>' if is_own_profile else ''}
+    """
     return HTMLResponse(content=render_layout(content, current_user, request, "profile", f"@{username}"))
 
 @app.get("/{post_id}", response_class=HTMLResponse)
