@@ -86,6 +86,8 @@ SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke
 SVG_CAMERA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>"""
 SVG_LOCK = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>"""
 SVG_CALENDAR = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>"""
+SVG_CROSS = """<svg class="icon-cross" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>"""
+SVG_CHECK = """<svg class="icon-check" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 
 LOGO_URL = "https://i.ibb.co/5hLnbhYC/solid-logo.png"
 
@@ -111,7 +113,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v2';
+    const CACHE_NAME = 'solid-cache-v3';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -132,6 +134,12 @@ async def get_sw():
     });
     """
     return Response(content=sw_code, media_type="application/javascript")
+
+# API для проверки логина
+@app.get("/api/check_username")
+async def api_check_username(q: str = ""):
+    if not q: return JSONResponse({"available": False})
+    return JSONResponse({"available": q not in users_db})
 
 CSS_STYLES = f"""
 <link rel="icon" type="image/png" href="{LOGO_URL}">
@@ -160,8 +168,8 @@ a{{color:var(--accent-color);text-decoration:none;}}
 /* Верхняя панель */
 .topbar{{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}}
 .topbar-left{{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}}
-.logo{{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
-.logo img{{width:21px;height:19px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;}}
+.logo{{font-size:22px;font-weight:700;color:var(--accent-color);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
+.logo img{{width:42px;height:38px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;filter:invert(32%) sepia(94%) saturate(1922%) hue-rotate(202deg) brightness(96%) contrast(96%);}}
 .menu-toggle{{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}}
 .menu-toggle:hover{{background:var(--card-bg);color:var(--text-main);}}
 
@@ -213,6 +221,15 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .input-group textarea{{resize:none;max-height:250px;overflow-y:auto;}}
 .pass-toggle{{position:absolute;right:15px;top:15px;cursor:pointer;color:var(--text-muted);}}
 .error{{color:var(--danger-color);text-align:center;margin-bottom:15px;font-size:15px;}}
+
+/* Валидация */
+.val-list{{list-style:none;margin-top:8px;padding:0;display:flex;flex-direction:column;gap:4px;}}
+.val-item{{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);transition:color .2s;}}
+.val-item .icon-cross{{display:block;}}
+.val-item .icon-check{{display:none;}}
+.val-item.valid{{color:#22c55e;}}
+.val-item.valid .icon-cross{{display:none;}}
+.val-item.valid .icon-check{{display:block;}}
 
 /* Профиль */
 .profile-header{{margin-bottom:30px;display:flex;align-items:center;gap:25px;position:relative;width:100%;}}
@@ -329,6 +346,7 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     .topbar-center{{position:relative;left:auto;transform:none;max-width:100%;flex:1;margin-left:10px;}}
     .topbar-right{{width:auto;}}
     .logo span{{display:none;}}
+    .logo img{{width:32px;height:28px;}}
     .menu-toggle{{display:none!important;}}
     .search-container{{max-width:100%;width:100%;}}
     .topbar-right .user-menu-container{{display:none!important;}}
@@ -679,9 +697,89 @@ function switchTab(tabId){
     document.getElementById('tab-'+tabId).style.display='block';
 }
 
+// Валидация логина
+var usernameTimeout;
+function validateUsername(val) {
+    var itemLatin = document.querySelector('[data-rule="latin"]');
+    var itemNum = document.querySelector('[data-rule="num"]');
+    var itemUpper = document.querySelector('[data-rule="upper"]');
+    var itemLen = document.querySelector('[data-rule="len"]');
+    var itemAvail = document.querySelector('[data-rule="avail"]');
+    
+    if(!itemLatin) return; // Не на странице логина
+
+    // Латиница (буквы)
+    var isLatin = /^[a-zA-Z]+$/.test(val);
+    itemLatin.classList.toggle('valid', isLatin && val.length > 0);
+
+    // Цифры
+    var hasNum = /\d/.test(val);
+    itemNum.classList.toggle('valid', hasNum);
+
+    // Большие буквы
+    var hasUpper = /[A-Z]/.test(val);
+    itemUpper.classList.toggle('valid', hasUpper);
+
+    // До 20 символов
+    var isLen = val.length > 0 && val.length <= 20;
+    itemLen.classList.toggle('valid', isLen);
+
+    // Проверка на занятость
+    clearTimeout(usernameTimeout);
+    if(val.length > 0) {
+        usernameTimeout = setTimeout(async () => {
+            try {
+                var res = await fetch('/api/check_username?q=' + encodeURIComponent(val));
+                var data = await res.json();
+                itemAvail.classList.toggle('valid', data.available);
+            } catch (e) {
+                console.error(e);
+            }
+        }, 500);
+    } else {
+        itemAvail.classList.remove('valid');
+    }
+}
+
+// Валидация пароля
+function validatePassword(val) {
+    var itemLen = document.querySelector('[data-rule="p_len"]');
+    var itemLatin = document.querySelector('[data-rule="p_latin"]');
+    var itemUpper = document.querySelector('[data-rule="p_upper"]');
+    var itemSpec = document.querySelector('[data-rule="p_spec"]');
+
+    if(!itemLen) return;
+
+    // От 6 символов
+    itemLen.classList.toggle('valid', val.length >= 6);
+
+    // Латиница (буквы + цифры + спецсимволы, но только разрешенные)
+    var isLatin = /^[a-zA-Z0-9@@#]+$/.test(val) && val.length > 0;
+    itemLatin.classList.toggle('valid', isLatin);
+
+    // Верхний регистр
+    var hasUpper = /[A-Z]/.test(val);
+    itemUpper.classList.toggle('valid', hasUpper);
+
+    // Специальный символ (@ или #)
+    var hasSpec = /[@@#]/.test(val);
+    itemSpec.classList.toggle('valid', hasSpec);
+}
+
 document.addEventListener('DOMContentLoaded',function(){
     applySidebarState();
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
+
+    // Навешиваем слушатели на поля логина/пароля
+    var userInp = document.getElementById('usernameInput');
+    var passInp = document.getElementById('passwordInput');
+    
+    if(userInp) {
+        userInp.addEventListener('input', function() { validateUsername(this.value); });
+    }
+    if(passInp) {
+        passInp.addEventListener('input', function() { validatePassword(this.value); });
+    }
 });
 
 document.addEventListener('htmx:afterSwap', function(evt) {
@@ -730,7 +828,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     <div class="topbar">
         <div class="topbar-left">
             {f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}
-            <a href="/" class="logo"><img src="{LOGO_URL}" alt="Logo" style="image-rendering:pixelated;image-rendering:crisp-edges;"> <span>sol-id</span></a>
+            <a href="/" class="logo"><img src="{LOGO_URL}" alt="Logo"> <span>sol-id</span></a>
         </div>
         <div class="topbar-center">
             <div class="search-container">
@@ -847,7 +945,42 @@ async def saved_posts(request: Request):
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     lang = get_lang(request)
-    content = f"""<div class="auth-container"><form class="auth-form" action="/login" method="post"><h2>{t('login', lang)}</h2><div class="input-group"><input type="text" name="username" placeholder="{t('username', lang)}" required></div><div class="input-group"><input type="text" name="display_name" placeholder="{t('display_name', lang)} (Only for new accounts)"></div><div class="input-group"><input type="password" name="password" placeholder="{t('password', lang)}" required><span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span></div><p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;">{t('login_hint', lang)}</p><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login', lang)}</button></form></div>"""
+    content = f"""
+    <div class="auth-container">
+        <form class="auth-form" action="/login" method="post">
+            <h2>{t('login', lang)}</h2>
+            
+            <div class="input-group">
+                <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off">
+                <ul class="val-list">
+                    <li class="val-item" data-rule="latin">{SVG_CROSS}{SVG_CHECK} Только латиница</li>
+                    <li class="val-item" data-rule="num">{SVG_CROSS}{SVG_CHECK} Содержит цифры</li>
+                    <li class="val-item" data-rule="upper">{SVG_CROSS}{SVG_CHECK} Содержит большие буквы</li>
+                    <li class="val-item" data-rule="len">{SVG_CROSS}{SVG_CHECK} До 20 символов</li>
+                    <li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} Свободен</li>
+                </ul>
+            </div>
+            
+            <div class="input-group" style="margin-top:15px;">
+                <input type="text" name="display_name" placeholder="{t('display_name', lang)} (Необязательно)">
+            </div>
+            
+            <div class="input-group" style="margin-top:15px;">
+                <input type="password" name="password" id="passwordInput" placeholder="{t('password', lang)}" required>
+                <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
+                <ul class="val-list">
+                    <li class="val-item" data-rule="p_len">{SVG_CROSS}{SVG_CHECK} От 6 символов</li>
+                    <li class="val-item" data-rule="p_latin">{SVG_CROSS}{SVG_CHECK} Только латиница и разрешенные символы</li>
+                    <li class="val-item" data-rule="p_upper">{SVG_CROSS}{SVG_CHECK} Есть заглавная буква</li>
+                    <li class="val-item" data-rule="p_spec">{SVG_CROSS}{SVG_CHECK} Есть @ или #</li>
+                </ul>
+            </div>
+            
+            <p style="color:var(--text-muted); font-size:13px; margin-top:20px; margin-bottom:15px;">{t('login_hint', lang)}</p>
+            <button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:14px;">{SVG_USER} {t('login', lang)}</button>
+        </form>
+    </div>
+    """
     return HTMLResponse(content=render_layout(content, None, request, "login", t('login', lang)))
 
 @app.post("/login")
@@ -859,9 +992,9 @@ async def login_user(request: Request, username: str = Form(...), password: str 
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
-        if not display_name.strip():
-            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
-        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": display_name.strip(), "avatar": None, "saved_posts": []}
+        # Если имя не введено, берем логин
+        final_display_name = display_name.strip() if display_name.strip() else username
+        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": final_display_name, "avatar": None, "saved_posts": []}
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
