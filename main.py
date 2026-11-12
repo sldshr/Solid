@@ -16,18 +16,19 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-# --- SUPABASE ---
+# --- SUPABASE SETUP ---
 SUPABASE_URL = "https://xipbsydkqsumcrjlpnbq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpcGJzeWRrcXN1bWNyamxwbmJxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjE1MDY5MSwiZXhwIjoyMTA3NzI2NjkxfQ.164h9z3jb_4ZaVia0xrssWmXveVCHoEDwPD_Um5fDY0"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 sessions = {}
 
-# --- IN-MEMORY CACHE (загрузка в оперативку) ---
+# --- IN-MEMORY CACHE ---
 users_db = {}
 posts_db = {}
 votes_db = {}
 scores_cache = {}
+comments_db = {}  # post_id -> list of comments
 
 def rebuild_scores():
     scores_cache.clear()
@@ -38,7 +39,7 @@ def get_score(post_id):
     return scores_cache.get(post_id, 0)
 
 def load_all_from_supabase():
-    global users_db, posts_db, votes_db
+    global users_db, posts_db, votes_db, comments_db
     try:
         res = supabase.table("users").select("*").execute()
         users_db = {u['username']: u for u in res.data}
@@ -60,8 +61,20 @@ def load_all_from_supabase():
         print("Error loading votes:", e)
         votes_db = {}
     
+    try:
+        res = supabase.table("comments").select("*").execute()
+        comments_db = {}
+        for c in res.data:
+            pid = c['post_id']
+            if pid not in comments_db:
+                comments_db[pid] = []
+            comments_db[pid].append(c)
+    except Exception as e:
+        print("Error loading comments:", e)
+        comments_db = {}
+    
     rebuild_scores()
-    print(f"Loaded: {len(users_db)} users, {len(posts_db)} posts, {len(votes_db)} votes")
+    print(f"Loaded: {len(users_db)} users, {len(posts_db)} posts, {len(votes_db)} votes, {len(comments_db)} comment threads")
 
 @app.on_event("startup")
 async def startup_event():
@@ -188,7 +201,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v6';
+    const CACHE_NAME = 'solid-cache-v7';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -391,9 +404,74 @@ form .action-btn{{height:100%;width:100%;}}
 input:checked+.slider{{background-color:var(--accent-color);}}
 input:checked+.slider:before{{transform:translateX(22px);}}
 
+/* Photo Viewer */
+#photo-viewer{{
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.95);
+    z-index: 9999;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    touch-action: none;
+}}
+#photo-viewer-img{{
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    cursor: grab;
+    transition: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}}
+.photo-viewer-controls{{
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 10001;
+}}
+.photo-viewer-btn{{
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 20px;
+    backdrop-filter: blur(4px);
+}}
+.photo-viewer-btn:hover{{
+    background: rgba(255,255,255,0.2);
+}}
+.photo-viewer-close{{
+    position: absolute;
+    top: 15px; right: 20px;
+    font-size: 40px; color: #fff;
+    cursor: pointer;
+    background: none;
+    border: none;
+    z-index: 10001;
+    line-height: 1;
+}}
+.photo-nav-prev, .photo-nav-next{{
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10001;
+}}
+.photo-nav-prev{{ left: 15px; }}
+.photo-nav-next{{ right: 15px; }}
+
 .overlay{{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;overflow:hidden;}}
-.overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);transition:transform 0.1s ease-out; cursor:grab;}}
-.overlay img:active{{cursor:grabbing;}}
+.overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);}}
 .close-overlay{{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10000;line-height:1;}}
 
 .modal-box{{background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);width:90%;max-width:400px;display:flex;flex-direction:column;gap:20px;text-align:center;}}
@@ -546,164 +624,174 @@ var filesList=[];
 var currentImage=null;
 var currentZoom=1;
 
-// --- ЗУМ, ПАНОРАМА И СВАЙПЫ ---
-var panoImg = null;
-var panoImages = [];
-var panoIndex = 0;
-var panoScale = 1;
-var panoX = 0, panoY = 0;
-var isDragging = false;
-var startX, startY, startTouchX, startTouchY;
-var initialPinchDistance = 0;
-var swipeThreshold = 50;
+// --- PHOTO VIEWER STATE ---
+var pvState = {
+    images: [],
+    index: 0,
+    scale: 1,
+    tx: 0,
+    ty: 0,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    touchStartX: 0,
+    touchStartY: 0,
+    initialPinchDist: 0,
+    isPinching: false
+};
 
 function openPanorama(imgElement, index) {
-    var img = document.getElementById('panorama-img');
-    var pano = document.getElementById('panorama');
-    
     var container = document.getElementById('post-media-container');
     if (container && container.dataset.images) {
         try {
-            panoImages = JSON.parse(container.dataset.images);
-            panoIndex = index !== undefined ? index : 0;
+            pvState.images = JSON.parse(container.dataset.images);
         } catch(e) {
-            panoImages = [imgElement.src];
-            panoIndex = 0;
+            pvState.images = [imgElement.src];
         }
     } else {
-        panoImages = [imgElement.src];
-        panoIndex = 0;
+        pvState.images = [imgElement.src];
     }
-
-    if(img) {
-        img.src = panoImages[panoIndex];
-        panoImg = img;
-        panoScale = 1;
-        panoX = 0; panoY = 0;
-        updatePanoTransform();
+    pvState.index = index || 0;
+    pvState.scale = 1;
+    pvState.tx = 0;
+    pvState.ty = 0;
+    
+    var overlay = document.getElementById('photo-viewer');
+    var img = document.getElementById('photo-viewer-img');
+    if (img) {
+        img.src = pvState.images[pvState.index];
+        img.style.transform = 'translate(0px, 0px) scale(1)';
     }
-    if(pano) pano.style.display='flex';
+    if (overlay) overlay.style.display = 'flex';
 }
 
 function closePanorama() {
-    var pano = document.getElementById('panorama');
-    if(pano) pano.style.display='none';
+    var overlay = document.getElementById('photo-viewer');
+    if (overlay) overlay.style.display = 'none';
 }
 
 function updatePanoTransform() {
-    if(panoImg) {
-        panoImg.style.transform = 'translate(' + panoX + 'px, ' + panoY + 'px) scale(' + panoScale + ')';
+    var img = document.getElementById('photo-viewer-img');
+    if (img) {
+        img.style.transform = 'translate(' + pvState.tx + 'px, ' + pvState.ty + 'px) scale(' + pvState.scale + ')';
     }
 }
 
-function changePanoImg(dir) {
-    if(panoImages.length <= 1) return;
-    panoIndex = (panoIndex + dir + panoImages.length) % panoImages.length;
-    if(panoImg) {
-        panoImg.src = panoImages[panoIndex];
-        panoScale = 1; panoX = 0; panoY = 0;
-        updatePanoTransform();
-    }
+function photoZoom(delta) {
+    pvState.scale = Math.max(0.5, Math.min(8, pvState.scale + delta));
+    updatePanoTransform();
+}
+
+function photoReset() {
+    pvState.scale = 1;
+    pvState.tx = 0;
+    pvState.ty = 0;
+    updatePanoTransform();
+}
+
+function photoNext() {
+    pvState.index = (pvState.index + 1) % pvState.images.length;
+    var img = document.getElementById('photo-viewer-img');
+    if (img) img.src = pvState.images[pvState.index];
+    photoReset();
+}
+
+function photoPrev() {
+    pvState.index = (pvState.index - 1 + pvState.images.length) % pvState.images.length;
+    var img = document.getElementById('photo-viewer-img');
+    if (img) img.src = pvState.images[pvState.index];
+    photoReset();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    var pano = document.getElementById('panorama');
-    if(pano) {
-        pano.addEventListener('wheel', function(e) {
-            e.preventDefault();
-            if(!panoImg) return;
-            var delta = e.deltaY > 0 ? -0.1 : 0.1;
-            panoScale = Math.max(1, Math.min(5, panoScale + delta));
+    var viewer = document.getElementById('photo-viewer');
+    var img = document.getElementById('photo-viewer-img');
+    if (!viewer || !img) return;
+
+    // Mouse wheel zoom
+    viewer.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        photoZoom(e.deltaY > 0 ? -0.2 : 0.2);
+    }, { passive: false });
+
+    // Mouse drag
+    viewer.addEventListener('mousedown', function(e) {
+        if (e.target === img) {
+            pvState.isDragging = true;
+            pvState.startX = e.clientX - pvState.tx;
+            pvState.startY = e.clientY - pvState.ty;
+            img.style.cursor = 'grabbing';
+        }
+    });
+
+    window.addEventListener('mousemove', function(e) {
+        if (pvState.isDragging) {
+            pvState.tx = e.clientX - pvState.startX;
+            pvState.ty = e.clientY - pvState.startY;
             updatePanoTransform();
-        });
+        }
+    });
 
-        pano.addEventListener('mousedown', function(e) {
-            if(e.target === panoImg) {
-                isDragging = true;
-                startX = e.clientX - panoX;
-                startY = e.clientY - panoY;
-                panoImg.style.cursor = 'grabbing';
-            }
-        });
+    window.addEventListener('mouseup', function() {
+        if (pvState.isDragging) {
+            pvState.isDragging = false;
+            img.style.cursor = 'grab';
+        }
+    });
 
-        window.addEventListener('mousemove', function(e) {
-            if(isDragging && panoImg) {
-                panoX = e.clientX - startX;
-                panoY = e.clientY - startY;
-                updatePanoTransform();
-            }
-        });
+    // Touch events
+    viewer.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 1) {
+            pvState.isDragging = true;
+            pvState.startX = e.touches[0].clientX - pvState.tx;
+            pvState.startY = e.touches[0].clientY - pvState.ty;
+            pvState.touchStartX = e.touches[0].clientX;
+            pvState.touchStartY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+            pvState.isDragging = false;
+            pvState.isPinching = true;
+            pvState.initialPinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        }
+    }, { passive: true });
 
-        window.addEventListener('mouseup', function() {
-            if(isDragging) {
-                isDragging = false;
-                if(panoImg) panoImg.style.cursor = 'grab';
-            }
-        });
+    viewer.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        if (e.touches.length === 2 && pvState.isPinching) {
+            var dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            var factor = dist / pvState.initialPinchDist;
+            pvState.scale = Math.max(0.5, Math.min(8, pvState.scale * factor));
+            pvState.initialPinchDist = dist;
+            updatePanoTransform();
+        } else if (e.touches.length === 1 && pvState.isDragging) {
+            pvState.tx = e.touches[0].clientX - pvState.startX;
+            pvState.ty = e.touches[0].clientY - pvState.startY;
+            updatePanoTransform();
+        }
+    }, { passive: false });
 
-        pano.addEventListener('touchstart', function(e) {
-            if(e.target === panoImg) {
-                if(e.touches.length === 1) {
-                    isDragging = true;
-                    startTouchX = e.touches[0].clientX;
-                    startTouchY = e.touches[0].clientY;
-                    startX = e.touches[0].clientX - panoX;
-                    startY = e.touches[0].clientY - panoY;
-                } else if (e.touches.length === 2) {
-                    isDragging = false;
-                    initialPinchDistance = Math.hypot(
-                        e.touches[0].clientX - e.touches[1].clientX,
-                        e.touches[0].clientY - e.touches[1].clientY
-                    );
+    viewer.addEventListener('touchend', function(e) {
+        if (pvState.isDragging && e.changedTouches.length === 1) {
+            var dx = e.changedTouches[0].clientX - pvState.touchStartX;
+            var dy = e.changedTouches[0].clientY - pvState.touchStartY;
+            
+            if (pvState.scale <= 1.05 && pvState.images.length > 1) {
+                if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+                    if (dx > 0) photoPrev(); else photoNext();
                 }
             }
-        }, {passive: false});
-
-        pano.addEventListener('touchmove', function(e) {
-            e.preventDefault();
-            if(!panoImg) return;
-
-            if(e.touches.length === 2) {
-                var currentDistance = Math.hypot(
-                    e.touches[0].clientX - e.touches[1].clientX,
-                    e.touches[0].clientY - e.touches[1].clientY
-                );
-                if(initialPinchDistance > 0) {
-                    var scaleFactor = currentDistance / initialPinchDistance;
-                    panoScale = Math.max(1, Math.min(5, panoScale * scaleFactor));
-                    updatePanoTransform();
-                }
-                initialPinchDistance = currentDistance;
-            } else if (isDragging && e.touches.length === 1) {
-                var dx = e.touches[0].clientX - startX;
-                var dy = e.touches[0].clientY - startY;
-                if(panoScale === 1 && Math.abs(e.touches[0].clientX - startTouchX) > 10) {
-                    panoX = dx;
-                } else {
-                    panoX = dx; panoY = dy;
-                }
-                updatePanoTransform();
-            }
-        }, {passive: false});
-
-        pano.addEventListener('touchend', function(e) {
-            if(isDragging && e.changedTouches.length === 1) {
-                var endX = e.changedTouches[0].clientX;
-                var diffX = endX - startTouchX;
-                
-                if(panoScale === 1 && Math.abs(diffX) > swipeThreshold) {
-                    if(diffX > 0) changePanoImg(-1);
-                    else changePanoImg(1);
-                } else {
-                    if(panoScale === 1) { panoX = 0; updatePanoTransform(); }
-                }
-            }
-            isDragging = false;
-            initialPinchDistance = 0;
-        });
-    }
+        }
+        pvState.isDragging = false;
+        pvState.isPinching = false;
+    });
 });
 
+// --- ОСТАЛЬНАЯ ЛОГИКА ---
 function applySidebarState(){
     var layout=document.querySelector('.app-layout');
     if(!layout)return;
@@ -1000,7 +1088,7 @@ async function submitComment(e,postId){
         if(noMsg) noMsg.style.display='none';
         
         var list=document.getElementById('comments-list');
-        var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;
+        var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.login;
         
         var div=document.createElement('div'); 
         div.id='comment-'+data.comment.id;
@@ -1017,7 +1105,7 @@ async function submitComment(e,postId){
         
         var nameDiv = document.createElement('div');
         nameDiv.style.cssText = 'font-weight:700;font-size:14px;';
-        nameDiv.innerHTML = data.comment.display_name + ' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@' + data.comment.author + '</span>';
+        nameDiv.innerHTML = data.comment.display_name + ' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@' + data.comment.login + '</span>';
         
         var contentDiv = document.createElement('div');
         contentDiv.style.cssText = 'font-size:14px;margin-top:2px;';
@@ -1205,7 +1293,24 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     </div>
 </div>
 {f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}
-<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div>
+
+<!-- Photo Viewer -->
+<div id="photo-viewer">
+    <button class="photo-viewer-close" onclick="closePanorama()">&times;</button>
+    <button class="photo-viewer-btn photo-nav-prev" onclick="photoPrev()" style="position:absolute; left:15px; top:50%; transform:translateY(-50%); width:48px; height:48px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+    <button class="photo-viewer-btn photo-nav-next" onclick="photoNext()" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); width:48px; height:48px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+    <img id="photo-viewer-img" src="" onclick="event.stopPropagation()">
+    <div class="photo-viewer-controls">
+        <button class="photo-viewer-btn" onclick="photoZoom(-0.3)">-</button>
+        <button class="photo-viewer-btn" onclick="photoReset()" style="font-size:12px; width:auto; padding:0 16px; border-radius:20px;">Сброс</button>
+        <button class="photo-viewer-btn" onclick="photoZoom(0.3)">+</button>
+    </div>
+</div>
+
 <div id="confirm-modal" class="overlay" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div>
 <div id="welcome-modal" class="overlay" onclick="closeWelcomeModal()">
     <div class="modal-box welcome-modal-content" onclick="event.stopPropagation()">
@@ -1532,13 +1637,12 @@ async def vote_post(post_id: str, action: str, request: Request):
     
     if action == 'up':
         if old_vote == 1:
-            # remove vote
             votes_db.pop((post_id, username), None)
             delta = -1
             new_vote = 0
             supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
         else:
-            delta = 1 - old_vote  # 0->1 => +1, -1->1 => +2
+            delta = 1 - old_vote
             votes_db[(post_id, username)] = 1
             new_vote = 1
             supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": 1}).execute()
@@ -1549,7 +1653,7 @@ async def vote_post(post_id: str, action: str, request: Request):
             new_vote = 0
             supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
         else:
-            delta = -1 - old_vote  # 0->-1 => -1, +1->-1 => -2
+            delta = -1 - old_vote
             votes_db[(post_id, username)] = -1
             new_vote = -1
             supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": -1}).execute()
@@ -1582,14 +1686,34 @@ async def add_comment(post_id: str, request: Request, text: str = Form(...)):
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
     if post_id not in posts_db: return JSONResponse({"error": "Not found"}, status_code=404)
-    post = posts_db[post_id]
-    if not post.get('allow_comments', True): return JSONResponse({"error": "Comments disabled"}, status_code=403)
+    if not posts_db[post_id].get('allow_comments', True): return JSONResponse({"error": "Comments disabled"}, status_code=403)
     
-    comment = {"id": str(uuid.uuid4())[:6], "author": user['username'], "display_name": html.escape(user['display_name']), "avatar": user.get('avatar'), "text": html.escape(text)}
-    post['comments'].append(comment)
+    new_comment_id = str(uuid.uuid4())[:8]
+    new_comment = {
+        "id": new_comment_id,
+        "post_id": post_id,
+        "login": user['username'],
+        "comment_text": html.escape(text)
+    }
+    supabase.table("comments").insert(new_comment).execute()
     
-    supabase.table("posts").update({"comments": post['comments']}).eq("id", post_id).execute()
-    return JSONResponse({"comment": comment, "total_comments": len(post['comments']), "is_author": True})
+    if post_id not in comments_db:
+        comments_db[post_id] = []
+    comments_db[post_id].append(new_comment)
+    
+    author = users_db.get(user['username'])
+    display_name = author.get('display_name') if author else user['username']
+    avatar = author.get('avatar') if author else None
+    
+    resp_comment = {
+        "id": new_comment_id,
+        "login": user['username'],
+        "display_name": display_name,
+        "avatar": avatar,
+        "text": html.escape(text)
+    }
+    
+    return JSONResponse({"comment": resp_comment, "total_comments": len(comments_db[post_id]), "is_author": True})
 
 @app.delete("/api/comment/{post_id}/{comment_id}")
 async def delete_comment(post_id: str, comment_id: str, request: Request):
@@ -1597,15 +1721,16 @@ async def delete_comment(post_id: str, comment_id: str, request: Request):
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
     
     if post_id not in posts_db: return JSONResponse({"error": "Not found"}, status_code=404)
-    post = posts_db[post_id]
     
-    comment = next((c for c in post['comments'] if c['id'] == comment_id), None)
+    post_comments = comments_db.get(post_id, [])
+    comment = next((c for c in post_comments if c['id'] == comment_id), None)
     if not comment: return JSONResponse({"error": "Comment not found"}, status_code=404)
-    if comment['author'] != user['username']: return JSONResponse({"error": "Forbidden"}, status_code=403)
+    if comment['login'] != user['username']: return JSONResponse({"error": "Forbidden"}, status_code=403)
     
-    post['comments'] = [c for c in post['comments'] if c['id'] != comment_id]
-    supabase.table("posts").update({"comments": post['comments']}).eq("id", post_id).execute()
-    return JSONResponse({"success": True, "total_comments": len(post['comments'])})
+    supabase.table("comments").delete().eq("id", comment_id).execute()
+    comments_db[post_id] = [c for c in post_comments if c['id'] != comment_id]
+    
+    return JSONResponse({"success": True, "total_comments": len(comments_db[post_id])})
 
 @app.post("/delete/{post_id}")
 async def delete_post(post_id: str, request: Request):
@@ -1616,6 +1741,7 @@ async def delete_post(post_id: str, request: Request):
         supabase.table("posts").delete().eq("id", post_id).execute()
         del posts_db[post_id]
         scores_cache.pop(post_id, None)
+        comments_db.pop(post_id, None)
         
         for key in list(votes_db.keys()):
             if key[0] == post_id:
@@ -1715,6 +1841,16 @@ async def view_post(request: Request, post_id: str):
         
     is_saved = user and post_id in user.get('saved_posts', [])
     
+    # Back button logic
+    referer = request.headers.get("referer", "")
+    show_back = False
+    if referer:
+        base = str(request.base_url).rstrip('/')
+        if referer.startswith(base) and request.url.path not in referer:
+            show_back = True
+    
+    back_html = f'<a href="javascript:history.back()" id="back-btn" style="display:{"flex" if show_back else "none"}; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>'
+    
     delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
@@ -1751,6 +1887,9 @@ async def view_post(request: Request, post_id: str):
         """
     else:
         actions_html = f"""
+        <div class="actions-row">
+            <button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>
+        </div>
         <div class="login-notice">
             <a href="/login">{t('login', lang)}</a> · {t('login_to_interact', lang)}
         </div>
@@ -1764,17 +1903,23 @@ async def view_post(request: Request, post_id: str):
     else: 
         comments_input_html = f'<div style="background:rgba(239,68,68,0.1); color:var(--danger-color); padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; font-weight:500;">{t("comments_disabled", lang)}</div>'
     
-    comments_list_html = ""
-    for c in post['comments']:
-        c_ava = c.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['author']}"
-        del_btn = f'<button onclick="confirmDeleteComment(\'{post["id"]}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">{t("delete_comment", lang)}</button>' if user and user['username'] == c['author'] else ''
-        comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div><div style="font-size:14px; margin-top:2px;">{c['text']}</div></div></div>{del_btn}</div>"""
+    post_comments = comments_db.get(post_id, [])
     
-    no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
+    comments_list_html = ""
+    for c in post_comments:
+        author_c = users_db.get(c['login'])
+        c_display = author_c.get('display_name') if author_c else c['login']
+        c_ava = author_c.get('avatar') if author_c and author_c.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['login']}"
+        c_text = c['comment_text']
+        
+        del_btn = f'<button onclick="confirmDeleteComment(\'{post_id}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">{t("delete_comment", lang)}</button>' if user and user['username'] == c['login'] else ''
+        comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c_display} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['login']}</span></div><div style="font-size:14px; margin-top:2px;">{c_text}</div></div></div>{del_btn}</div>"""
+    
+    no_comments_style = "display:block;" if len(post_comments) == 0 else "display:none;"
     date_str = post.get('created_at', '')[:16].replace('T', ' ')
     
     content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-        <a href="/" style="display:flex; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>
+        {back_html}
     </div>
     <div class="post-view">
         {media_html}
@@ -1792,7 +1937,7 @@ async def view_post(request: Request, post_id: str):
                 {actions_html}
             </div>
             <div class="comments-section">
-                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>
+                <h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post_comments)}</span>)</h3>
                 {comments_input_html}
                 <div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
                 <div id="comments-list">{comments_list_html}</div>
