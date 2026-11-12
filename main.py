@@ -150,7 +150,8 @@ TRANSLATIONS = {
         "got_it": "Got it!", "invalid_pass_format": "Invalid password format", "idea_by": "Idea: eblo.id",
         "login_to_interact": "Log in to vote, save, and comment", "reset": "Reset", "copy_comment_link": "Copy comment link",
         "new_posts_available": "New posts available. Refresh?", "refresh": "Refresh", "gif_too_large": "GIF is too large (max 5MB)",
-        "just_now": "just now", "min_ago": "min ago", "hr_ago": "h ago", "yesterday": "yesterday", "days_ago": "d ago"
+        "just_now": "just now", "min_ago": "min ago", "hr_ago": "h ago", "yesterday": "yesterday", "days_ago": "d ago",
+        "account": "Account", "appearance": "Appearance", "published": "Published!", "publishing": "Publishing..."
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -178,7 +179,8 @@ TRANSLATIONS = {
         "got_it": "Понятно!", "invalid_pass_format": "Неверный формат пароля", "idea_by": "Идея: eblo.id",
         "login_to_interact": "Войдите, чтобы оценивать, сохранять и комментировать", "reset": "Сброс", "copy_comment_link": "Скопировать ссылку на комментарий",
         "new_posts_available": "Есть новые посты. Обновить?", "refresh": "Обновить", "gif_too_large": "GIF слишком большой (макс. 5MB)",
-        "just_now": "только что", "min_ago": "мин назад", "hr_ago": "ч назад", "yesterday": "вчера", "days_ago": "дн назад"
+        "just_now": "только что", "min_ago": "мин назад", "hr_ago": "ч назад", "yesterday": "вчера", "days_ago": "дн назад",
+        "account": "Аккаунт", "appearance": "Оформление", "published": "Опубликовано!", "publishing": "Публикация..."
     }
 }
 
@@ -214,6 +216,7 @@ SVG_LOCK = """<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke
 SVG_CALENDAR = """<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>"""
 SVG_CROSS = """<svg class="icon-cross" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>"""
 SVG_CHECK = """<svg class="icon-check" style="display:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
+SVG_CHECK_SAVE = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 
 LOGO_URL = "https://i.ibb.co/5hLnbhYC/solid-logo.png"
 SPRITE_URL = "https://i.ibb.co/7x55NbD0/solidsprite.png"
@@ -254,7 +257,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v9';
+    const CACHE_NAME = 'solid-cache-v10';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -324,6 +327,8 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .btn-primary{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;z-index:10;}
 .btn-primary:hover{opacity:.9;}
 .btn-primary:disabled{opacity:0.5;cursor:not-allowed;}
+.btn-spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:btnspin .7s linear infinite;vertical-align:middle;}
+@keyframes btnspin{to{transform:rotate(360deg);}}
 .user-menu-container{position:relative;}
 .user-menu-btn{display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px;border-radius:50%;border:none;outline:none;}
 .user-menu-btn:hover{background:var(--card-bg);}
@@ -474,18 +479,41 @@ input:checked+.slider:before{transform:translateX(22px);}
 .mobile-profile-header{display:flex;align-items:center;gap:15px;margin-bottom:10px;padding-bottom:15px;border-bottom:1px solid var(--border-color);}
 .mobile-profile-header img{width:50px;height:50px;border-radius:50%!important;object-fit:cover;}
 .mobile-menu-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;}
-.editor-card{background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:30px;display:flex;flex-direction:column;gap:15px;width:100%;max-width:600px;margin:0 auto;}
 .avatar-edit-container{position:relative;width:120px;height:120px;margin:0 auto;cursor:pointer;border-radius:50%;overflow:hidden;border:2px solid var(--border-color);}
 .avatar-edit-container:hover{border-color:var(--accent-color);}
 .avatar-edit-container img{width:100%;height:100%;object-fit:cover;}
 .avatar-edit-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#fff;opacity:0;transition:opacity .2s;}
 .avatar-edit-container:hover .avatar-edit-overlay{opacity:1;}
-.tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border-color);padding-bottom:10px;width:100%;}
-.tab-btn{background:none;border:none;color:var(--text-muted);font-size:16px;font-weight:500;cursor:pointer;padding:10px 15px;border-radius:8px;}
-.tab-btn.active{color:var(--accent-color);background:var(--card-bg);}
 .mobile-only{display:none!important;}
 .desktop-only{display:flex!important;}
 .new-posts-banner{display:none;position:sticky;top:80px;z-index:50;background:var(--accent-color);color:#fff;padding:12px 20px;border-radius:8px;text-align:center;cursor:pointer;font-weight:700;margin-bottom:20px;box-shadow:0 4px 15px rgba(59,130,246,0.4);align-items:center;justify-content:center;gap:8px;}
+
+/* ============ SETTINGS MODAL ============ */
+.settings-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;animation:stFade .2s ease;}
+@keyframes stFade{from{opacity:0;}to{opacity:1;}}
+.settings-modal{position:relative;background:var(--card-bg);border:1px solid var(--border-color);border-radius:16px;width:100%;max-width:960px;height:82vh;max-height:720px;display:grid;grid-template-columns:1fr 3fr;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.7);}
+.settings-close{position:absolute;top:10px;right:12px;font-size:30px;color:var(--text-muted);cursor:pointer;background:none;border:none;z-index:10;line-height:1;width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:8px;transition:background .2s,color .2s;}
+.settings-close:hover{background:var(--bg-color);color:var(--text-main);}
+.settings-back-btn{display:none;position:absolute;top:10px;left:12px;z-index:10;background:none;border:none;color:var(--text-muted);cursor:pointer;width:38px;height:38px;align-items:center;justify-content:center;border-radius:8px;transition:background .2s,color .2s;}
+.settings-back-btn:hover{background:var(--bg-color);color:var(--text-main);}
+.settings-nav{background:var(--bg-color);border-right:1px solid var(--border-color);padding:55px 0 18px;display:flex;flex-direction:column;overflow-y:auto;}
+.settings-nav-title{font-size:18px;font-weight:700;padding:0 18px 14px;color:var(--text-main);}
+.settings-nav-list{display:flex;flex-direction:column;gap:2px;padding:0 10px;}
+.settings-nav-item{padding:12px 14px;color:var(--text-muted);cursor:pointer;font-weight:500;font-size:15px;display:flex;align-items:center;gap:12px;transition:background .2s,color .2s;border-radius:8px;}
+.settings-nav-item:hover{background:var(--card-bg);color:var(--text-main);}
+.settings-nav-item.active{color:var(--accent-color);background:var(--card-bg);font-weight:700;}
+.settings-nav-item svg{flex-shrink:0;}
+.settings-nav-spacer{flex:1;}
+.settings-logout{margin:10px 14px 0;padding:12px;border-radius:8px;background:rgba(239,68,68,0.1);color:var(--danger-color);cursor:pointer;font-weight:600;text-align:center;font-size:14px;border:1px solid rgba(239,68,68,0.25);display:flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;transition:background .2s;}
+.settings-logout:hover{background:rgba(239,68,68,0.2);}
+.settings-content{padding:40px 35px 25px;overflow-y:auto;position:relative;}
+.settings-section{display:block;}
+.settings-section-title{font-size:22px;font-weight:700;margin-bottom:20px;color:var(--text-main);}
+.settings-field{margin-bottom:18px;}
+.settings-field label{font-size:14px;color:var(--text-muted);margin-bottom:8px;display:block;font-weight:500;}
+.settings-field input[type="text"]{width:100%;padding:12px 14px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;color:#fff;font-size:15px;outline:none;}
+.settings-field input[type="text"]:focus{border-color:var(--accent-color);}
+
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}}
 @media(max-width:900px){
     .app-layout{display:flex;flex-direction:column;width:100%;min-height:100vh;overflow-x:hidden;}
@@ -514,9 +542,6 @@ input:checked+.slider:before{transform:translateX(22px);}
     .feed-card-img-container{width:100%;height:auto;aspect-ratio:4/3;}
     .feed-card-info{padding:15px;width:100%;}
     .feed-card-meta{flex-wrap:wrap;gap:10px;}
-    .editor-card{width:100%!important;max-width:100%!important;padding:20px 15px!important;margin:0!important;border-radius:0;border-left:none;border-right:none;}
-    .tabs{padding:0 15px;margin-bottom:0;border-bottom:none;}
-    .tab-content{padding:15px;}
     .create-layout{flex-direction:column;width:100%!important;padding:15px;gap:15px;}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
@@ -536,6 +561,20 @@ input:checked+.slider:before{transform:translateX(22px);}
     .auth-container{padding:15px;}
     .auth-form{width:100%;max-width:100%;padding:20px;}
     .new-posts-banner{top:70px;margin:15px;}
+
+    /* SETTINGS MOBILE — bottom sheet */
+    .settings-backdrop{padding:0;align-items:flex-end;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);}
+    .settings-modal{grid-template-columns:1fr;max-width:100%;width:100%;height:92vh;max-height:92vh;border-radius:20px 20px 0 0;border-bottom:none;display:flex;flex-direction:column;animation:stSlideUp .3s ease;}
+    @keyframes stSlideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+    .settings-nav{width:100%;border-right:none;padding:50px 0 20px;flex:1;overflow-y:auto;}
+    .settings-nav-list{padding:0 14px;gap:4px;}
+    .settings-nav-item{padding:16px 16px;font-size:16px;background:var(--card-bg);border:1px solid var(--border-color);}
+    .settings-nav-item.active{border-color:var(--accent-color);}
+    .settings-content{width:100%;flex:1;padding:60px 20px 30px;display:none;}
+    .settings-modal.mobile-section-open .settings-nav{display:none;}
+    .settings-modal.mobile-section-open .settings-content{display:block;}
+    .settings-modal.mobile-section-open .settings-back-btn{display:flex;}
+    .settings-close{top:10px;right:12px;}
 }
 </style>
 """
@@ -588,8 +627,7 @@ setInterval(updateDates, 30000);
 // ============ IMAGE COMPRESSION ============
 async function compressImage(file) {
     if (!file || !file.type) return null;
-
-    // GIFs: never compress (would turn into static image, destroying animation)
+    // GIFs: never compress (preserves animation)
     if (file.type === 'image/gif') {
         if (file.size > 5 * 1024 * 1024) {
             showToast(window.TRANSLATIONS.gif_too_large || 'GIF too large');
@@ -597,23 +635,18 @@ async function compressImage(file) {
         }
         return file;
     }
-
     if (!file.type.startsWith('image/')) return file;
-
     if (window.imageCompression) {
         try {
             var compressed = await imageCompression(file, {
                 maxSizeMB: 1.2, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.85
             });
-            // Ensure we always return a proper File (never a raw Blob) — DataTransfer requires File
             if (compressed instanceof File) return compressed;
             if (compressed instanceof Blob) {
                 return new File([compressed], file.name || 'image.jpg', { type: compressed.type || file.type || 'image/jpeg' });
             }
             return file;
-        } catch(e) {
-            console.warn('Compression failed:', e);
-        }
+        } catch(e) { console.warn('Compression failed:', e); }
     }
     return file;
 }
@@ -710,8 +743,10 @@ function toggleSidebar() {
 
 function toggleDropdown() {
     if (window.innerWidth <= 900) {
-        document.getElementById('mobileProfileMenu').classList.add('open');
-        document.getElementById('mobileMenuOverlay').style.display = 'block';
+        var m = document.getElementById('mobileProfileMenu');
+        var o = document.getElementById('mobileMenuOverlay');
+        if (m) m.classList.add('open');
+        if (o) o.style.display = 'block';
     } else {
         var dropdown = document.getElementById("user-dropdown");
         if (dropdown) dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
@@ -776,11 +811,8 @@ async function handleFiles(input) {
         try {
             var compressed = await compressImage(newFiles[i]);
             if (!compressed) continue;
-            // Final safety net — DataTransfer.items.add() requires File
             filesList.push(ensureFile(compressed, newFiles[i].name));
-        } catch(e) {
-            showToast(e.message || 'Error');
-        }
+        } catch(e) { showToast(e.message || 'Error'); }
     }
     input.value = '';
     updateInputAndRender();
@@ -795,16 +827,13 @@ function removeFile(index, event) {
 function updateInputAndRender() {
     var dt = new DataTransfer();
     filesList.forEach(function(f, i) {
-        // Ensure everything in filesList is a File (defensive)
-        if (!(f instanceof File)) {
-            filesList[i] = ensureFile(f);
-        }
+        if (!(f instanceof File)) { filesList[i] = ensureFile(f); }
         dt.items.add(filesList[i]);
     });
     var fileInput = document.getElementById('file-input');
     if (fileInput) fileInput.files = dt.files;
     var previewContainer = document.getElementById('file-list');
-    if (!previewContainer) return;
+    if (!previewContainer) { updatePublishState(); return; }
     previewContainer.innerHTML = '';
     var dropText = document.getElementById('dropzone-text');
     if (filesList.length === 0) { if (dropText) dropText.style.display = 'flex'; }
@@ -823,6 +852,19 @@ function updateInputAndRender() {
             reader.readAsDataURL(file);
         });
     }
+    updatePublishState();
+}
+
+function updatePublishState() {
+    var btn = document.getElementById('publish-btn');
+    if (!btn) return;
+    var titleEl = document.querySelector('input[name="title"]');
+    var contentEl = document.querySelector('textarea[name="content"]');
+    var hasTitle = titleEl && titleEl.value.trim().length > 0;
+    var hasContent = contentEl && contentEl.value.trim().length > 0;
+    var hasFiles = filesList.length > 0;
+    var canPublish = hasTitle && (hasContent || hasFiles);
+    btn.disabled = !canPublish;
 }
 
 document.addEventListener('paste', async function(e) {
@@ -846,7 +888,9 @@ document.addEventListener('paste', async function(e) {
 });
 
 function setVisibility(val) {
-    document.getElementById('vis-input').value = val;
+    var vis = document.getElementById('vis-input');
+    if (!vis) return;
+    vis.value = val;
     var btnFeed = document.getElementById('btn-feed'), btnLink = document.getElementById('btn-link');
     if (val === 'feed') {
         btnFeed.style.borderColor = 'var(--accent-color)'; btnFeed.style.color = 'var(--accent-color)';
@@ -883,17 +927,37 @@ function copyCommentLink(postId, commentId) {
     showToast(window.TRANSLATIONS.link_copied);
 }
 
+// ============ AVATAR (GIF preserved) ============
 function loadAvatar(event) {
     var file = event.target.files[0];
     if (!file) return;
+
+    // GIFs: skip crop entirely to preserve animation
+    if (file.type === 'image/gif') {
+        if (file.size > 5 * 1024 * 1024) {
+            showToast(window.TRANSLATIONS.gif_too_large || 'GIF too large');
+            event.target.value = '';
+            return;
+        }
+        var gifReader = new FileReader();
+        gifReader.onload = function(e) {
+            document.getElementById('avatar-base64').value = e.target.result;
+            document.getElementById('avatar-preview').src = e.target.result;
+        };
+        gifReader.readAsDataURL(file);
+        return;
+    }
+
     var reader = new FileReader();
     reader.onload = function(e) {
         var img = new Image();
         img.onload = function() {
             currentImage = img; currentZoom = 1;
-            document.getElementById('zoom-slider').value = 1;
+            var slider = document.getElementById('zoom-slider');
+            if (slider) slider.value = 1;
             drawCropCanvas();
-            document.getElementById('crop-modal').style.display = 'flex';
+            var cm = document.getElementById('crop-modal');
+            if (cm) cm.style.display = 'flex';
         };
         img.src = e.target.result;
     };
@@ -902,7 +966,9 @@ function loadAvatar(event) {
 
 function drawCropCanvas() {
     if (!currentImage) return;
-    var canvas = document.getElementById('crop-canvas'), ctx = canvas.getContext('2d');
+    var canvas = document.getElementById('crop-canvas');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     var scale = Math.max(canvas.width/currentImage.width, canvas.height/currentImage.height) * currentZoom;
     var x = (canvas.width - currentImage.width*scale)/2, y = (canvas.height - currentImage.height*scale)/2;
@@ -911,6 +977,7 @@ function drawCropCanvas() {
 
 function applyCrop() {
     var canvas = document.getElementById('crop-canvas');
+    if (!canvas) return;
     var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     document.getElementById('avatar-base64').value = dataUrl;
     document.getElementById('avatar-preview').src = dataUrl;
@@ -924,6 +991,32 @@ function updateCharCount(el) {
     counter.textContent = len + ' / 2500';
     counter.classList.toggle('near', len >= 2000 && len < 2500);
     counter.classList.toggle('full', len >= 2500);
+}
+
+// ============ PUBLISH (loading + toast) ============
+function handlePublishSubmit(form) {
+    var btn = document.getElementById('publish-btn');
+    if (!btn) return true;
+    if (btn.disabled) return false;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> ' + (window.TRANSLATIONS.publishing || 'Publishing...');
+    return true;
+}
+
+// ============ SETTINGS MODAL ============
+function selectSettingsSection(name) {
+    document.querySelectorAll('.settings-nav-item').forEach(function(el){ el.classList.toggle('active', el.dataset.section === name); });
+    document.querySelectorAll('.settings-section').forEach(function(el){ el.style.display = 'none'; });
+    var sec = document.getElementById('settings-section-' + name);
+    if (sec) sec.style.display = 'block';
+    if (window.innerWidth <= 900) {
+        var modal = document.getElementById('settings-modal');
+        if (modal) modal.classList.add('mobile-section-open');
+    }
+}
+function settingsBackToNav() {
+    var modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.remove('mobile-section-open');
 }
 
 async function vote(postId, action) {
@@ -1049,13 +1142,6 @@ function confirmDeletePost(e, postId) {
     });
 }
 
-function switchTab(tabId) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-    document.querySelector('[data-tab="' + tabId + '"]').classList.add('active');
-    document.getElementById('tab-' + tabId).style.display = 'block';
-}
-
 function switchProfileTab(tabId) {
     document.querySelectorAll('.profile-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.profile-tab-content').forEach(el => el.classList.remove('active'));
@@ -1089,7 +1175,8 @@ function validateUsername(val) {
 }
 
 function closeWelcomeModal() {
-    document.getElementById('welcome-modal').style.display = 'none';
+    var w = document.getElementById('welcome-modal');
+    if (w) w.style.display = 'none';
     window.history.replaceState({}, document.title, window.location.pathname);
 }
 
@@ -1127,29 +1214,19 @@ function setupSSE() {
     if (eventSource) eventSource.close();
     eventSource = new EventSource('/api/sse');
     eventSource.onmessage = function(e) {
-        try {
-            var msg = JSON.parse(e.data);
-            handleSSE(msg);
-        } catch(err) { }
+        try { var msg = JSON.parse(e.data); handleSSE(msg); } catch(err) { }
     };
-    eventSource.onerror = function() {
-        setTimeout(setupSSE, 5000);
-    };
+    eventSource.onerror = function() { setTimeout(setupSSE, 5000); };
 }
 
 function handleSSE(msg) {
     var postId = window.CURRENT_POST_ID;
-
     if (msg.type === 'new_post') {
         if (window.location.pathname === '/' && !refreshBannerVisible) {
             var banner = document.getElementById('new-posts-banner');
-            if (banner) {
-                banner.style.display = 'flex';
-                refreshBannerVisible = true;
-            }
+            if (banner) { banner.style.display = 'flex'; refreshBannerVisible = true; }
         }
     }
-
     if (msg.type === 'new_comment' && postId && msg.post_id === postId) {
         if (!document.getElementById('comment-' + msg.comment.id)) {
             var list = document.getElementById('comments-list');
@@ -1160,12 +1237,10 @@ function handleSSE(msg) {
             if (cCount) cCount.innerText = msg.total_comments;
         }
     }
-
     if (msg.type === 'vote_update' && postId && msg.post_id === postId) {
         var count = document.getElementById('vote-count');
         if (count) count.innerText = msg.score;
     }
-
     if (msg.type === 'delete_comment' && postId && msg.post_id === postId) {
         var el = document.getElementById('comment-' + msg.comment_id);
         if (el) el.remove();
@@ -1176,15 +1251,12 @@ function handleSSE(msg) {
             if (noMsg) noMsg.style.display = 'block';
         }
     }
-
     if (msg.type === 'delete_post' && window.location.pathname === '/' + msg.post_id) {
         window.location.href = '/';
     }
 }
 
-function refreshFeed() {
-    window.location.reload();
-}
+function refreshFeed() { window.location.reload(); }
 
 document.addEventListener('DOMContentLoaded', function() {
     applySidebarState();
@@ -1193,9 +1265,15 @@ document.addEventListener('DOMContentLoaded', function() {
     scrollToCommentIfNeeded();
     updateDates();
     setupSSE();
-    // Initialize char counter if textarea exists and has a value
     var ta = document.querySelector('textarea[name="content"]');
     if (ta) updateCharCount(ta);
+    updatePublishState();
+
+    // Published toast
+    if (window.location.search.indexOf('published=1') !== -1) {
+        setTimeout(function(){ showToast(window.TRANSLATIONS.published || 'Published!'); }, 350);
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+    }
 });
 
 document.addEventListener('htmx:afterSwap', function(evt) {
@@ -1452,6 +1530,7 @@ async def logout(request: Request):
     response.delete_cookie("session_token")
     return response
 
+# ============ SETTINGS (MODAL / BOTTOM SHEET) ============
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     user = get_current_user(request)
@@ -1459,45 +1538,56 @@ async def settings_page(request: Request):
     if not user: return RedirectResponse(url="/login")
     avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
     updated = request.query_params.get("updated")
-    toast_script = f"<script>setTimeout(()=>showToast('{t('profile_updated', lang)}'), 100);</script>" if updated else ""
+    toast_script = f"<script>setTimeout(function(){{showToast('{t('profile_updated', lang)}');}}, 350);</script>" if updated else ""
     content = f"""
-    <div style="max-width: 800px; margin: 0 auto; width: 100%;">
-        <h2 style="margin-bottom: 25px; font-weight: 700; font-size: 28px; padding: 15px 15px 0 15px;">{t('settings', lang)}</h2>
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="profile" onclick="switchTab('profile')">{t('profile', lang)}</button>
-            <button class="tab-btn" data-tab="language" onclick="switchTab('language')">{t('language', lang)}</button>
-        </div>
-        <div id="tab-profile" class="tab-content" style="display:block;">
-            <div class="editor-card">
-                <form action="/settings/profile" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" style="display:flex; flex-direction:column; gap:15px; width: 100%;">
-                    <div style="text-align:center;">
-                        <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
-                            <img id="avatar-preview" src="{avatar_url}">
-                            <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
-                        </div>
-                        <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
-                        <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
-                        <input type="hidden" name="avatar_base64" id="avatar-base64">
-                    </div>
-                    <div class="input-group" style="margin-bottom:0;">
-                        <label style="font-size:15px; color:var(--text-muted); margin-bottom:8px; display:block; font-weight:500;">{t('display_name', lang)}</label>
-                        <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required style="padding:14px;">
-                    </div>
-                    <button type="submit" class="btn-primary" style="justify-content:center; padding:14px; margin-top:5px;">{SVG_SETTINGS} {t('save', lang)}</button>
-                </form>
+    <div class="settings-backdrop" onclick="if(event.target===this) window.location.href='/'">
+        <div class="settings-modal" id="settings-modal">
+            <button class="settings-close" onclick="window.location.href='/'">&times;</button>
+            <button class="settings-back-btn" id="settings-back-btn" onclick="settingsBackToNav()">{SVG_BACK}</button>
+            <div class="settings-nav">
+                <div class="settings-nav-title">{t('settings', lang)}</div>
+                <div class="settings-nav-list">
+                    <div class="settings-nav-item active" data-section="account" onclick="selectSettingsSection('account')">{SVG_USER} <span>{t('account', lang)}</span></div>
+                    <div class="settings-nav-item" data-section="appearance" onclick="selectSettingsSection('appearance')">{SVG_LANG} <span>{t('appearance', lang)}</span></div>
+                </div>
+                <div class="settings-nav-spacer"></div>
+                <button class="settings-logout" onclick="confirmLogout(event)">{SVG_LOGOUT} {t('logout', lang)}</button>
             </div>
-        </div>
-        <div id="tab-language" class="tab-content" style="display:none; padding: 0 15px;">
-            <div style="background: var(--card-bg); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color);">
-                <div style="display:flex; gap:10px;">
-                    <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
-                    <a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
+            <div class="settings-content">
+                <div id="settings-section-account" class="settings-section">
+                    <div class="settings-section-title">{t('account', lang)}</div>
+                    <form action="/settings/profile" method="post" enctype="multipart/form-data" hx-boost="false" style="display:flex;flex-direction:column;gap:16px;">
+                        <div style="text-align:center;">
+                            <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
+                                <img id="avatar-preview" src="{avatar_url}">
+                                <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
+                            </div>
+                            <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
+                            <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
+                            <input type="hidden" name="avatar_base64" id="avatar-base64">
+                        </div>
+                        <div class="settings-field">
+                            <label>{t('display_name', lang)}</label>
+                            <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required>
+                        </div>
+                        <button type="submit" class="btn-primary" style="justify-content:center; padding:13px; gap:8px;">{SVG_CHECK_SAVE} {t('save', lang)}</button>
+                    </form>
+                </div>
+                <div id="settings-section-appearance" class="settings-section" style="display:none;">
+                    <div class="settings-section-title">{t('appearance', lang)}</div>
+                    <div class="settings-field">
+                        <label>{t('language', lang)}</label>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
+                            <a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    <div id="crop-modal" class="overlay">
-        <div class="crop-container" onclick="event.stopPropagation()">
+    <div id="crop-modal" class="overlay" onclick="this.style.display='none'">
+        <div class="crop-container" onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:14px;align-items:center;max-width:340px;width:100%;">
             <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
             <canvas id="crop-canvas" width="300" height="300" class="crop-canvas" style="border-radius:50%;border:2px solid var(--accent-color);background:#000;width:100%;max-width:250px;aspect-ratio:1;"></canvas>
             <div class="crop-controls" style="display:flex;flex-direction:column;width:100%;gap:10px;">
@@ -1530,7 +1620,7 @@ async def create_post_page(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
-    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 2500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="2500" oninput="updateCharCount(this)" style="min-height:140px; padding:14px;"></textarea><div class="char-counter" id="char-count">0 / 2500</div></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
+    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-boost="false" onsubmit="return handlePublishSubmit(this)" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required oninput="updatePublishState()" style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 2500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="2500" oninput="updateCharCount(this); updatePublishState();" style="min-height:140px; padding:14px;"></textarea><div class="char-counter" id="char-count">0 / 2500</div></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" id="publish-btn" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;" disabled>{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "write", t('new_post', lang)))
 
 @app.post("/write")
@@ -1555,7 +1645,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     posts_db[post_id] = new_post
     if visibility == 'feed':
         sse_send({"type": "new_post", "post_id": post_id})
-    return RedirectResponse(url=f"/{post_id}", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=f"/{post_id}?published=1", status_code=status.HTTP_302_FOUND)
 
 @app.post("/api/vote/{post_id}/{action}")
 async def vote_post(post_id: str, action: str, request: Request):
