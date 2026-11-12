@@ -57,7 +57,7 @@ TRANSLATIONS = {
         "faq_title": "FAQ", "faq_q1": "How to post?", "faq_a1": "Click the '+' button in the top menu.",
         "faq_q2": "How to save?", "faq_a2": "Click the bookmark icon under any post.",
         "faq_q3": "How to hide a post?", "faq_a3": "When creating, select 'By Link' - only you and those with the link will see it.",
-        "got_it": "Got it!", "invalid_pass_format": "Invalid password format"
+        "got_it": "Got it!", "invalid_pass_format": "Invalid password format", "idea_by": "Idea: eblo.id"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -82,7 +82,7 @@ TRANSLATIONS = {
         "faq_title": "FAQ", "faq_q1": "Как выложить пост?", "faq_a1": "Нажмите на кнопку '+' в верхнем меню.",
         "faq_q2": "Как сохранить?", "faq_a2": "Нажмите на иконку закладки под любым постом.",
         "faq_q3": "Как скрыть пост?", "faq_a3": "При создании выберите 'По ссылке' - его увидишь только ты и те, у кого есть ссылка.",
-        "got_it": "Понятно!", "invalid_pass_format": "Неверный формат пароля"
+        "got_it": "Понятно!", "invalid_pass_format": "Неверный формат пароля", "idea_by": "Идея: eblo.id"
     }
 }
 
@@ -255,10 +255,12 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
 
 /* Баннер eblo.id от края до края */
-.sidebar-bottom-banner{{margin-top:auto;display:block;width:100%;padding:0;transition:opacity .2s;}}
+.sidebar-bottom-banner{{margin-top:auto;display:flex;flex-direction:column;align-items:center;width:100%;padding:0;transition:opacity .2s;text-decoration:none;}}
 .sidebar-bottom-banner img{{width:100%;height:auto;display:block;object-fit:contain;border-radius:0;}}
+.sidebar-bottom-banner .banner-text{{font-size:12px;color:var(--text-muted);margin-top:5px;margin-bottom:10px;text-align:center;}}
 .sidebar-bottom-banner:hover{{opacity:0.8;}}
 .app-layout.sidebar-collapsed .sidebar-bottom-banner img{{object-fit:cover;height:100px;}} 
+.app-layout.sidebar-collapsed .sidebar-bottom-banner .banner-text{{display:none;}}
 
 /* Основной контент */
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}}
@@ -470,18 +472,24 @@ var filesList=[];
 var currentImage=null;
 var currentZoom=1;
 
-// --- ЛОГИКА ЗУМА И ПЕРЕМЕЩЕНИЯ КАРТИНКИ ---
+// --- ЗУМ, ПАНОРАМА И СВАЙПЫ ---
 var panoImg = null;
+var panoImages = [];
+var panoIndex = 0;
 var panoScale = 1;
 var panoX = 0, panoY = 0;
 var isDragging = false;
-var startX, startY;
+var startX, startY, startTouchX, startTouchY;
+var initialPinchDistance = 0;
+var swipeThreshold = 50;
 
-function openPanorama(src) {
+function openPanorama(src, imagesJson, index) {
     var img = document.getElementById('panorama-img');
     var pano = document.getElementById('panorama');
     if(img) {
-        img.src = src;
+        panoImages = imagesJson ? JSON.parse(imagesJson) : [src];
+        panoIndex = index !== undefined ? index : 0;
+        img.src = panoImages[panoIndex];
         panoImg = img;
         panoScale = 1;
         panoX = 0; panoY = 0;
@@ -501,17 +509,29 @@ function updatePanoTransform() {
     }
 }
 
+function changePanoImg(dir) {
+    if(panoImages.length <= 1) return;
+    panoIndex = (panoIndex + dir + panoImages.length) % panoImages.length;
+    if(panoImg) {
+        panoImg.src = panoImages[panoIndex];
+        panoScale = 1; panoX = 0; panoY = 0;
+        updatePanoTransform();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     var pano = document.getElementById('panorama');
     if(pano) {
+        // Зум колесиком мыши
         pano.addEventListener('wheel', function(e) {
             e.preventDefault();
             if(!panoImg) return;
             var delta = e.deltaY > 0 ? -0.1 : 0.1;
-            panoScale = Math.max(0.5, Math.min(5, panoScale + delta));
+            panoScale = Math.max(1, Math.min(5, panoScale + delta));
             updatePanoTransform();
         });
 
+        // Перетаскивание (ПК)
         pano.addEventListener('mousedown', function(e) {
             if(e.target === panoImg) {
                 isDragging = true;
@@ -536,25 +556,68 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        var touchStartX = 0, touchStartY = 0;
+        // Касания (Свайпы и зум на мобилке)
         pano.addEventListener('touchstart', function(e) {
-            if(e.target === panoImg && e.touches.length === 1) {
-                isDragging = true;
-                touchStartX = e.touches[0].clientX - panoX;
-                touchStartY = e.touches[0].clientY - panoY;
+            if(e.target === panoImg) {
+                if(e.touches.length === 1) {
+                    isDragging = true;
+                    startTouchX = e.touches[0].clientX;
+                    startTouchY = e.touches[0].clientY;
+                    startX = e.touches[0].clientX - panoX;
+                    startY = e.touches[0].clientY - panoY;
+                } else if (e.touches.length === 2) {
+                    isDragging = false;
+                    initialPinchDistance = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                }
             }
-        });
+        }, {passive: false});
 
         pano.addEventListener('touchmove', function(e) {
-            if(isDragging && panoImg && e.touches.length === 1) {
-                panoX = e.touches[0].clientX - touchStartX;
-                panoY = e.touches[0].clientY - touchStartY;
+            e.preventDefault();
+            if(!panoImg) return;
+
+            if(e.touches.length === 2) {
+                var currentDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                if(initialPinchDistance > 0) {
+                    var scaleFactor = currentDistance / initialPinchDistance;
+                    panoScale = Math.max(1, Math.min(5, panoScale * scaleFactor));
+                    updatePanoTransform();
+                }
+                initialPinchDistance = currentDistance;
+            } else if (isDragging && e.touches.length === 1) {
+                var dx = e.touches[0].clientX - startX;
+                var dy = e.touches[0].clientY - startY;
+                if(panoScale === 1 && Math.abs(e.touches[0].clientX - startTouchX) > 10) {
+                    // Если не увеличено, тянем для свайпа
+                    panoX = dx;
+                } else {
+                    panoX = dx; panoY = dy;
+                }
                 updatePanoTransform();
             }
-        });
+        }, {passive: false});
 
-        pano.addEventListener('touchend', function() {
+        pano.addEventListener('touchend', function(e) {
+            if(isDragging && e.changedTouches.length === 1) {
+                var endX = e.changedTouches[0].clientX;
+                var diffX = endX - startTouchX;
+                
+                if(panoScale === 1 && Math.abs(diffX) > swipeThreshold) {
+                    if(diffX > 0) changePanoImg(-1);
+                    else changePanoImg(1);
+                } else {
+                    // Возвращаем на место, если это был не свайп или мы просто панорамировали
+                    if(panoScale === 1) { panoX = 0; updatePanoTransform(); }
+                }
+            }
             isDragging = false;
+            initialPinchDistance = 0;
         });
     }
 });
@@ -615,7 +678,6 @@ function handleSearch(query){
 
 function compressImage(file, maxWidth = 1920, maxHeight = 1920) {
     return new Promise((resolve, reject) => {
-        // Если это GIF, не сжимаем и не трогаем анимацию
         if (file.type === 'image/gif') return resolve(file);
         if (!file.type.startsWith('image/')) return resolve(file);
         
@@ -745,7 +807,6 @@ function copyLink(){ navigator.clipboard.writeText(window.location.href); showTo
 function loadAvatar(event){
     var file=event.target.files[0]; if(!file)return;
     
-    // Если это GIF - пропускаем кроппер (canvas убивает анимацию)
     if (file.type === 'image/gif') {
         var reader = new FileReader();
         reader.onload = function(e) {
@@ -928,13 +989,6 @@ function checkWelcome() {
 document.addEventListener('DOMContentLoaded',function(){
     applySidebarState();
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
-
-    var userInp = document.getElementById('usernameInput');
-    var passInp = document.getElementById('passwordInput');
-    
-    if(userInp) userInp.addEventListener('input', function() { validateUsername(this.value); });
-    if(passInp) passInp.addEventListener('input', function() { validatePassword(this.value); });
-
     checkWelcome();
 });
 
@@ -971,7 +1025,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 
     sidebar_html = ""
     if user:
-        sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a><a href="https://eblo.id" target="_blank" class="sidebar-bottom-banner"><img src="{SPRITE_URL}" alt="eblo.id"></a></div>"""
+        sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a><a href="https://eblo.id" target="_blank" class="sidebar-bottom-banner"><img src="{SPRITE_URL}" alt="eblo.id"><div class="banner-text">{t('idea_by', lang)}</div></a></div>"""
 
     if user:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a><a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a><a href="javascript:void(0)" onclick="toggleDropdown()" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a></div>"""
@@ -1157,14 +1211,14 @@ async def login_page(request: Request):
             <h2>{t('login', lang)}</h2>
             
             <div class="input-group">
-                <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off">
+                <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off" oninput="validateUsername(this.value)">
                 <ul class="val-list">
                     <li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li>
                 </ul>
             </div>
             
             <div class="input-group" style="margin-top:15px;">
-                <input type="password" name="password" id="passwordInput" placeholder="{t('password', lang)}" required>
+                <input type="password" name="password" id="passwordInput" placeholder="{t('password', lang)}" required oninput="validatePassword(this.value)">
                 <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
                 <ul class="val-list">
                     <li class="val-item" data-rule="p_len">{SVG_CROSS}{SVG_CHECK} {t('val_p_len', lang)}</li>
@@ -1536,7 +1590,8 @@ async def view_post(request: Request, post_id: str):
     delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
 
     if post['images']:
-        imgs = "".join([f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src)">' for i, img in enumerate(post['images'])])
+        imgs_array = json.dumps(post['images'])
+        imgs = "".join([f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{"" if i==0 else "none"};" class="carousel-img" onclick="openPanorama(this.src, \'{imgs_array}\', {i})">' for i, img in enumerate(post['images'])])
         nav_btns = f'<div class="carousel-nav-btn left" onclick="changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         media_html = f"""<div class="post-media" style="position:relative;">
             {imgs}
