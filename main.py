@@ -203,6 +203,12 @@ input,textarea,.selectable{{user-select:text;}}
 body{{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}}
 a{{color:var(--accent-color);text-decoration:none;}}
 
+/* Кликабельность на мобилках */
+button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
+    touch-action: manipulation;
+    position: relative;
+}}
+
 /* Сетка */
 .app-layout{{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}}
 .app-layout.sidebar-collapsed{{grid-template-columns:80px 1fr;}}
@@ -227,7 +233,7 @@ a{{color:var(--accent-color);text-decoration:none;}}
 
 .topbar-right{{display:flex;align-items:center;justify-content:flex-end;gap:15px;flex-shrink:0;width:auto;}}
 
-.btn-primary{{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;}}
+.btn-primary{{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;z-index:10;}}
 .btn-primary:hover{{opacity:.9;}}
 .btn-primary:disabled{{opacity:0.5;cursor:not-allowed;}}
 .user-menu-container{{position:relative;}}
@@ -262,7 +268,7 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .app-layout.sidebar-collapsed .sidebar-bottom-banner .banner-text{{display:none;}}
 
 /* Основной контент */
-.main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;}}
+.main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;position:relative;z-index:1;}}
 .auth-container{{display:flex;justify-content:center;align-items:center;flex:1;}}
 .auth-form{{background-color:var(--card-bg);padding:40px;border-radius:16px;width:100%;max-width:450px;border:1px solid var(--border-color);}}
 .auth-form h2{{text-align:center;margin-bottom:25px;font-weight:700;font-size:24px;}}
@@ -284,9 +290,10 @@ a{{color:var(--accent-color);text-decoration:none;}}
 
 /* Профиль */
 .profile-header{{margin-bottom:30px;display:flex;align-items:center;gap:25px;position:relative;width:100%;}}
-.profile-avatar{{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;}}
+.profile-avatar{{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;flex-shrink:0;}}
 .profile-details h1{{font-size:32px;margin-bottom:5px;font-weight:700;line-height:1.2;}}
 .profile-details p{{color:var(--text-muted);font-size:16px;}}
+.profile-edit-btn-wrapper{{margin-left:auto;}}
 
 /* Табы профиля */
 .profile-tabs{{display:flex; gap:20px; border-bottom:1px solid var(--border-color); margin-bottom:25px;}}
@@ -312,12 +319,12 @@ a{{color:var(--accent-color);text-decoration:none;}}
 
 /* Кнопки */
 .actions-row{{display:flex;align-items:center;gap:10px;margin-top:10px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}}
-.vote-controls{{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;}}
-.vote-btn{{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s;height:100%;}}
+.vote-controls{{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;position:relative;z-index:5;}}
+.vote-btn{{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s;height:100%;position:relative;z-index:6;}}
 .vote-btn.active-up{{color:var(--accent-color);}}
 .vote-btn.active-down{{color:var(--danger-color);}}
 .vote-count{{font-weight:700;font-size:18px;min-width:20px;text-align:center;line-height:1;}}
-.action-btn{{background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-muted);padding:0 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;height:40px;transition:background .2s;}}
+.action-btn{{background:var(--bg-color);border:1px solid var(--border-color);color:var(--text-muted);padding:0 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none;height:40px;transition:background .2s;position:relative;z-index:5;}}
 .action-btn:hover{{background:#333;color:#fff;}}
 .action-btn svg{{width:20px;height:20px;}}
 form .action-btn{{height:100%;width:100%;}}
@@ -329,7 +336,7 @@ form .action-btn{{height:100%;width:100%;}}
 .feed-grid{{display:grid;grid-template-columns:repeat(4, 1fr);gap:20px;width:100%;}}
 @media (max-width:1600px){{.feed-grid{{grid-template-columns:repeat(3, 1fr);}}}}
 @media (max-width:1200px){{.feed-grid{{grid-template-columns:repeat(2, 1fr);}}}}
-.feed-card{{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;transition:border-color .2s;width:100%;}}
+.feed-card{{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;transition:border-color .2s;width:100%;z-index:2;}}
 .feed-card:hover{{border-color:#444;}}
 .feed-card-img-container{{width:100%;height:240px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}}
 .feed-card-img-container img{{width:100%;height:100%;object-fit:cover;}}
@@ -420,17 +427,63 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     .topbar-right .user-menu-container{{display:none!important;}}
     .sidebar{{display:none;}}
     
-    .main-content{{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;}}
+    .main-content{{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;position:relative;z-index:1;}}
     .bottom-nav{{display:flex;}}
     
-    .profile-header{{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;}}
-    .profile-avatar{{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 0 15px 0;}}
-    .profile-details{{display:flex;flex-direction:column;align-items:center;width:100%;}}
-    .profile-details h1{{font-size:24px;text-align:center;margin-bottom:5px;word-break:break-word;}}
-    .profile-details p{{font-size:14px;text-align:center;}}
-    .profile-header > div:last-child{{position:absolute;top:20px;right:15px;margin:0!important;}}
+    /* БЕЗОПАСНЫЙ ПРОФИЛЬ НА МОБИЛКЕ */
+    .profile-header{{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        text-align:center;
+        padding:30px 15px;
+        margin:0;
+        width:100%;
+        position:relative;
+        box-sizing:border-box;
+        gap:15px;
+    }}
+    .profile-avatar{{
+        width:100px!important;
+        height:100px!important;
+        border-radius:50%!important;
+        object-fit:cover;
+        margin:0 auto!important;
+        display:block;
+        flex-shrink:0;
+        position:relative;
+        z-index:1;
+    }}
+    .profile-details{{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        width:100%;
+        position:relative;
+        z-index:1;
+    }}
+    .profile-details h1{{
+        font-size:24px;
+        margin-bottom:5px;
+        word-break:break-word;
+        line-height:1.2;
+    }}
+    .profile-details p{{
+        font-size:14px;
+        color:var(--text-muted);
+        margin-bottom:4px;
+    }}
+    .profile-edit-btn-wrapper{{
+        position:absolute;
+        top:15px;
+        right:15px;
+        margin:0!important;
+        z-index:50;
+    }}
     .profile-tabs{{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}}
     
+    /* ЛЕНТА ОТ КРАЯ ДО КРАЯ */
     .feed-grid{{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}}
     .feed-card{{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}}
     .feed-card:hover{{border-bottom-color:var(--border-color);}}
@@ -448,12 +501,12 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     
     .post-view{{display:flex;flex-direction:column;padding:0;gap:15px;height:auto;width:100%;}}
     .post-header-actions{{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}}
-    .post-media{{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);}}
-    .carousel-nav-btn{{top:45%;width:36px;height:36px;}}
-    .post-details{{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;padding:15px;}}
+    .post-media{{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}}
+    .carousel-nav-btn{{top:45%;width:36px;height:36px;z-index:10;}}
+    .post-details{{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;padding:15px;position:relative;z-index:1;}}
     .post-title{{font-size:22px;}}
-    .actions-row{{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;}}
-    .comments-section{{width:100%;padding:15px 0;border-top:1px solid var(--border-color);flex:none;}}
+    .actions-row{{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;position:relative;z-index:10;}}
+    .comments-section{{width:100%;padding:15px 0;border-top:1px solid var(--border-color);flex:none;position:relative;z-index:1;}}
     
     .toast{{top:20px;left:50%;right:auto;transform:translateX(-50%);}}
     .toast.show{{transform:translateX(-50%) translateY(10px);}}
@@ -655,8 +708,10 @@ function toggleDropdown(){
 }
 
 function closeMobileMenu(){
-    document.getElementById('mobileProfileMenu').classList.remove('open');
-    document.getElementById('mobileMenuOverlay').style.display='none';
+    var menu=document.getElementById('mobileProfileMenu');
+    var overlay=document.getElementById('mobileMenuOverlay');
+    if(menu)menu.classList.remove('open');
+    if(overlay)overlay.style.display='none';
 }
 
 function togglePassword(el){
@@ -1008,6 +1063,7 @@ document.addEventListener('DOMContentLoaded',function(){
 
 document.addEventListener('htmx:afterSwap', function(evt) {
     applySidebarState();
+    closeMobileMenu();
     checkWelcome();
     var carouselImgs=document.querySelectorAll('.carousel-img');
     if(carouselImgs.length>1){
@@ -1550,7 +1606,7 @@ async def view_profile(request: Request, username: str):
             </a>"""
     if not saved_html: saved_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_saved", lang)}</div>'
 
-    edit_btn = f'<div><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
+    edit_btn = f'<div class="profile-edit-btn-wrapper"><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
     
     tabs_html = f"""
     <div class="profile-tabs">
