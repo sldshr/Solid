@@ -190,7 +190,6 @@ CSS_STYLES = f"""
 ::-webkit-scrollbar-thumb{{background:#333;border-radius:4px;}}
 ::-webkit-scrollbar-thumb:hover{{background:var(--text-muted);}}
 
-/* Nearest Neighbor для ВСЕХ картинок */
 img {{
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-crisp-edges;
@@ -203,17 +202,14 @@ input,textarea,.selectable{{user-select:text;}}
 body{{background-color:var(--bg-color);color:var(--text-main);font-size:16px;min-height:100vh;overflow-x:hidden;}}
 a{{color:var(--accent-color);text-decoration:none;}}
 
-/* Кликабельность на мобилках */
 button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
     touch-action: manipulation;
     position: relative;
 }}
 
-/* Сетка */
 .app-layout{{display:grid;grid-template-columns:260px 1fr;min-height:100vh;width:100%;}}
 .app-layout.sidebar-collapsed{{grid-template-columns:80px 1fr;}}
 
-/* Верхняя панель */
 .topbar{{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}}
 .topbar-left{{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}}
 .logo{{font-size:22px;font-weight:700;color:var(--accent-color);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
@@ -221,7 +217,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .menu-toggle{{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}}
 .menu-toggle:hover{{background:var(--card-bg);color:var(--text-main);}}
 
-/* Поиск в центре */
 .topbar-center{{position:absolute;left:50%;transform:translateX(-50%);width:100%;max-width:500px;display:flex;justify-content:center;z-index:10;}}
 .search-container{{width:100%;position:relative;}}
 .search-input{{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 15px 8px 36px;border-radius:8px;color:#fff;font-size:14px;outline:none;}}
@@ -250,7 +245,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .dropdown-item:hover{{background:#2a2a2a;}}
 .dropdown-item.danger{{color:var(--danger-color);border-top:1px solid var(--border-color);}}
 
-/* Сайдбар */
 .sidebar{{grid-column:1;position:sticky;top:70px;border-right:1px solid var(--border-color);padding:20px 0;display:flex;flex-direction:column;gap:8px;height:calc(100vh - 70px);overflow-y:auto;transition:padding .3s;}}
 .sidebar a{{color:var(--text-muted);padding:12px 25px;display:flex;align-items:center;gap:15px;font-size:16px;font-weight:500;transition:all .2s;white-space:nowrap;overflow:hidden;}}
 .sidebar a:hover:not(.active),.sidebar a.active{{color:var(--text-main);background-color:var(--card-bg);}}
@@ -259,7 +253,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .app-layout.sidebar-collapsed .sidebar a{{justify-content:center;padding:15px 0;width:100%;}}
 .app-layout.sidebar-collapsed .sidebar a span{{display:none;}}
 
-/* Баннер eblo.id от края до края */
 .sidebar-bottom-banner{{margin-top:auto;display:flex;flex-direction:column;align-items:center;width:100%;padding:0;transition:opacity .2s;text-decoration:none;}}
 .sidebar-bottom-banner img{{width:100%;height:auto;display:block;object-fit:contain;border-radius:0;}}
 .sidebar-bottom-banner .banner-text{{font-size:12px;color:var(--text-muted);margin-top:5px;margin-bottom:10px;text-align:center;}}
@@ -267,7 +260,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .app-layout.sidebar-collapsed .sidebar-bottom-banner img{{object-fit:cover;height:100px;}} 
 .app-layout.sidebar-collapsed .sidebar-bottom-banner .banner-text{{display:none;}}
 
-/* Основной контент */
 .main-content{{grid-column:2;padding:30px;display:flex;flex-direction:column;min-height:calc(100vh - 70px);width:100%;max-width:100%;position:relative;z-index:1;}}
 .auth-container{{display:flex;justify-content:center;align-items:center;flex:1;}}
 .auth-form{{background-color:var(--card-bg);padding:40px;border-radius:16px;width:100%;max-width:450px;border:1px solid var(--border-color);}}
@@ -279,7 +271,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .pass-toggle{{position:absolute;right:15px;top:15px;cursor:pointer;color:var(--text-muted);}}
 .error{{color:var(--danger-color);text-align:center;margin-bottom:15px;font-size:15px;}}
 
-/* Валидация */
 .val-list{{list-style:none;margin-top:8px;padding:0;display:flex;flex-direction:column;gap:4px;}}
 .val-item{{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);transition:color .2s;}}
 .val-item .icon-cross{{display:block;}}
@@ -288,21 +279,18 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .val-item.valid .icon-cross{{display:none;}}
 .val-item.valid .icon-check{{display:block;}}
 
-/* Профиль */
 .profile-header{{margin-bottom:30px;display:flex;align-items:center;gap:25px;position:relative;width:100%;}}
 .profile-avatar{{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;flex-shrink:0;}}
 .profile-details h1{{font-size:32px;margin-bottom:5px;font-weight:700;line-height:1.2;}}
 .profile-details p{{color:var(--text-muted);font-size:16px;}}
 .profile-edit-btn-wrapper{{margin-left:auto;}}
 
-/* Табы профиля */
 .profile-tabs{{display:flex; gap:20px; border-bottom:1px solid var(--border-color); margin-bottom:25px;}}
 .profile-tab-btn{{background:none; border:none; color:var(--text-muted); font-size:18px; font-weight:700; padding:10px 5px; cursor:pointer; border-bottom:3px solid transparent; transition:all .2s;}}
 .profile-tab-btn.active{{color:#fff; border-bottom-color:var(--accent-color);}}
 .profile-tab-content{{display:none;}}
 .profile-tab-content.active{{display:block;}}
 
-/* Пост */
 .post-view{{display:flex;gap:30px;width:100%;max-width:1400px;margin:0 auto;padding:0 20px;align-items:flex-start;}}
 .post-media{{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}}
 .post-media img{{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}}
@@ -317,7 +305,6 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .post-title{{font-size:26px;font-weight:700;margin-bottom:10px;}}
 .post-desc{{color:#ccc;font-size:16px;margin-bottom:15px;white-space:pre-wrap;line-height:1.5;}}
 
-/* Кнопки */
 .actions-row{{display:flex;align-items:center;gap:10px;margin-top:10px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}}
 .vote-controls{{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;position:relative;z-index:5;}}
 .vote-btn{{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s;height:100%;position:relative;z-index:6;}}
@@ -329,10 +316,8 @@ button, a, .action-btn, .btn-primary, .feed-card, .carousel-nav-btn {{
 .action-btn svg{{width:20px;height:20px;}}
 form .action-btn{{height:100%;width:100%;}}
 
-/* Комментарии */
 .comments-section{{flex:1;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}}
 
-/* Лента (4 колонки на ПК) */
 .feed-grid{{display:grid;grid-template-columns:repeat(4, 1fr);gap:20px;width:100%;}}
 @media (max-width:1600px){{.feed-grid{{grid-template-columns:repeat(3, 1fr);}}}}
 @media (max-width:1200px){{.feed-grid{{grid-template-columns:repeat(2, 1fr);}}}}
@@ -349,7 +334,6 @@ form .action-btn{{height:100%;width:100%;}}
 .feed-card-remove-btn:hover{{background:var(--danger-color);}}
 .post-badge{{position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.75);color:var(--accent-color);padding:6px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:10;border:1px solid var(--accent-color);box-shadow:0 2px 5px rgba(0,0,0,0.5);}}
 
-/* Создание поста */
 .create-layout{{display:flex;gap:30px;width:100%;}}
 .dropzone{{flex:2;border:2px dashed var(--border-color);border-radius:16px;padding:50px;text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;cursor:pointer;width:100%;}}
 .dropzone.dragover{{border-color:var(--accent-color);background:rgba(59,130,246,.05);}}
@@ -363,13 +347,11 @@ form .action-btn{{height:100%;width:100%;}}
 input:checked+.slider{{background-color:var(--accent-color);}}
 input:checked+.slider:before{{transform:translateX(22px);}}
 
-/* Оверлеи */
 .overlay{{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;overflow:hidden;}}
 .overlay img{{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.5);transition:transform 0.1s ease-out; cursor:grab;}}
 .overlay img:active{{cursor:grabbing;}}
 .close-overlay{{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10000;line-height:1;}}
 
-/* Модалки */
 .modal-box{{background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);width:90%;max-width:400px;display:flex;flex-direction:column;gap:20px;text-align:center;}}
 .modal-box h3{{font-weight:700;font-size:20px;}}
 .modal-box p{{color:var(--text-muted);}}
@@ -385,7 +367,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 .welcome-modal-content .faq-section li{{font-size:14px; color:#ddd; line-height: 1.4;}}
 .welcome-modal-content .faq-section li strong{{color:#fff; display:block; margin-bottom:2px;}}
 
-/* Утилиты */
 .toast{{position:fixed;top:80px;right:20px;background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}}
 .toast.show{{opacity:1;transform:translateY(10px);}}
 .bottom-nav{{display:none;position:fixed;bottom:0;left:0;width:100%;background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);border-top:1px solid var(--border-color);justify-content:space-around;padding:12px 0;padding-bottom:max(12px, env(safe-area-inset-bottom));z-index:100;}}
@@ -398,7 +379,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 .mobile-profile-header img{{width:50px;height:50px;border-radius:50%!important;object-fit:cover;}}
 .mobile-menu-overlay{{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;}}
 
-/* Настройки */
 .editor-card{{background:var(--card-bg);border-radius:16px;border:1px solid var(--border-color);padding:30px;display:flex;flex-direction:column;gap:15px;width:100%;max-width:600px;margin:0 auto;}}
 .avatar-edit-container{{position:relative;width:120px;height:120px;margin:0 auto;cursor:pointer;border-radius:50%;overflow:hidden;border:2px solid var(--border-color);}}
 .avatar-edit-container:hover{{border-color:var(--accent-color);}}
@@ -430,7 +410,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     .main-content{{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;position:relative;z-index:1;}}
     .bottom-nav{{display:flex;}}
     
-    /* БЕЗОПАСНЫЙ ПРОФИЛЬ НА МОБИЛКЕ */
     .profile-header{{
         display:flex;
         flex-direction:column;
@@ -483,7 +462,6 @@ input:checked+.slider:before{{transform:translateX(22px);}}
     }}
     .profile-tabs{{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}}
     
-    /* ЛЕНТА ОТ КРАЯ ДО КРАЯ */
     .feed-grid{{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}}
     .feed-card{{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}}
     .feed-card:hover{{border-bottom-color:var(--border-color);}}
@@ -518,7 +496,7 @@ input:checked+.slider:before{{transform:translateX(22px);}}
 </style>
 """
 
-JS_SCRIPT = """
+JS_SCRIPT = r"""
 <script>
 var filesList=[];
 var currentImage=null;
@@ -732,13 +710,29 @@ function handleSearch(query){
         var res=await fetch('/api/search?q='+encodeURIComponent(query));
         var data=await res.json();
         if(data.results&&data.results.length>0){
-            dropdown.innerHTML = data.results.map(function(p) {
-                return '<a href="/'+p.id+'" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">'+p.title+'</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@'+p.author+'</div></a>';
-            }).join('');
+            dropdown.innerHTML = '';
+            data.results.forEach(function(p) {
+                var a = document.createElement('a');
+                a.href = '/' + p.id;
+                a.className = 'search-dropdown-item';
+                
+                var titleDiv = document.createElement('div');
+                titleDiv.style.cssText = 'font-weight:700;font-size:14px;';
+                titleDiv.innerText = p.title;
+                
+                var authorDiv = document.createElement('div');
+                authorDiv.style.cssText = 'color:var(--text-muted);font-size:12px;margin-left:auto;';
+                authorDiv.innerText = '@' + p.author;
+                
+                a.appendChild(titleDiv);
+                a.appendChild(authorDiv);
+                dropdown.appendChild(a);
+            });
+            dropdown.style.display='block';
         }else{ 
             dropdown.innerHTML = '<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">'+window.TRANSLATIONS.nothing_found+'</div>'; 
+            dropdown.style.display='block';
         }
-        dropdown.style.display='block';
     },300);
 }
 
@@ -956,22 +950,54 @@ async function submitComment(e,postId){
     var formData=new FormData(); formData.append('text',text);
     var res=await fetch('/api/comment/'+postId,{method:'POST',body:formData}); var data=await res.json();
     if(data.error)return showToast(data.error);
+    
     if(data.comment){
-        input.value=''; document.getElementById('no-comments-msg').style.display='none';
+        input.value=''; 
+        var noMsg = document.getElementById('no-comments-msg');
+        if(noMsg) noMsg.style.display='none';
+        
         var list=document.getElementById('comments-list');
         var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;
-        var div=document.createElement('div'); div.id='comment-'+data.comment.id;
+        
+        var div=document.createElement('div'); 
+        div.id='comment-'+data.comment.id;
         div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
-        div.innerHTML = '<div style="display:flex;gap:10px;">' +
-                '<img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">' +
-                '<div>' +
-                    '<div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div>' +
-                    '<div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div>' +
-                '</div>' +
-            '</div>' +
-            '<button onclick="confirmDeleteComment(\''+postId+'\', \''+data.comment.id+'\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">'+window.TRANSLATIONS.delete+'</button>';
+        
+        var leftDiv = document.createElement('div');
+        leftDiv.style.cssText = 'display:flex;gap:10px;';
+        
+        var img = document.createElement('img');
+        img.src = ava;
+        img.style.cssText = 'width:32px;height:32px;border-radius:50%;object-fit:cover;';
+        
+        var textDiv = document.createElement('div');
+        
+        var nameDiv = document.createElement('div');
+        nameDiv.style.cssText = 'font-weight:700;font-size:14px;';
+        nameDiv.innerHTML = data.comment.display_name + ' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@' + data.comment.author + '</span>';
+        
+        var contentDiv = document.createElement('div');
+        contentDiv.style.cssText = 'font-size:14px;margin-top:2px;';
+        contentDiv.innerText = data.comment.text; 
+        
+        textDiv.appendChild(nameDiv);
+        textDiv.appendChild(contentDiv);
+        
+        leftDiv.appendChild(img);
+        leftDiv.appendChild(textDiv);
+        
+        var delBtn = document.createElement('button');
+        delBtn.style.cssText = 'background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;';
+        delBtn.innerText = window.TRANSLATIONS.delete;
+        delBtn.onclick = function() { confirmDeleteComment(postId, data.comment.id); };
+        
+        div.appendChild(leftDiv);
+        div.appendChild(delBtn);
+        
         list.appendChild(div);
-        document.getElementById('comment-count').innerText=data.total_comments;
+        
+        var cCount = document.getElementById('comment-count');
+        if(cCount) cCount.innerText=data.total_comments;
     }
 }
 
@@ -979,9 +1005,16 @@ function confirmDeleteComment(postId,commentId){
     showConfirm(window.TRANSLATIONS.delete, window.TRANSLATIONS.delete_comment_confirm, async function(){
         var res=await fetch('/api/comment/'+postId+'/'+commentId,{method:'DELETE'}); var data=await res.json();
         if(data.success){
-            document.getElementById('comment-'+commentId).remove();
-            document.getElementById('comment-count').innerText=data.total_comments;
-            if(data.total_comments===0) document.getElementById('no-comments-msg').style.display='block';
+            var el = document.getElementById('comment-'+commentId);
+            if(el) el.remove();
+            
+            var cCount=document.getElementById('comment-count');
+            if(cCount) cCount.innerText=data.total_comments;
+            
+            if(data.total_comments===0) {
+                var noMsg = document.getElementById('no-comments-msg');
+                if(noMsg) noMsg.style.display='block';
+            }
         }else{ showToast(data.error||'Error'); }
     });
 }
@@ -1018,7 +1051,7 @@ function validatePassword(val) {
     if(!itemLen) return;
 
     itemLen.classList.toggle('valid', val.length >= 6);
-    var isLatin = /^[a-zA-Z0-9!@@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+$/.test(val) && val.length > 0;
+    var isLatin = /^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+$/.test(val) && val.length > 0;
     itemLatin.classList.toggle('valid', isLatin);
 }
 
