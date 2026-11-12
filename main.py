@@ -191,6 +191,38 @@ def get_lang(request: Request):
 def t(key, lang):
     return TRANSLATIONS[lang].get(key, key)
 
+def _parse_iso(iso_str):
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+def format_date_relative(iso_str, lang):
+    if not iso_str: return ""
+    dt = _parse_iso(iso_str)
+    if not dt: return ""
+    now = datetime.now(timezone.utc)
+    sec = (now - dt).total_seconds()
+    if sec < 0: sec = 0
+    if sec < 60: return t("just_now", lang)
+    if sec < 3600: return f"{int(sec // 60)} {t('min_ago', lang)}"
+    if sec < 86400: return f"{int(sec // 3600)} {t('hr_ago', lang)}"
+    if sec < 172800: return t("yesterday", lang)
+    if sec < 604800: return f"{int(sec // 86400)} {t('days_ago', lang)}"
+    return dt.strftime("%d.%m.%Y") if lang == "ru" else dt.strftime("%m/%d/%Y")
+
+def format_date_absolute(iso_str, lang):
+    if not iso_str: return ""
+    dt = _parse_iso(iso_str)
+    if not dt: return ""
+    local = dt.astimezone()
+    if lang == "ru":
+        return local.strftime("%d.%m.%Y, %H:%M")
+    return local.strftime("%m/%d/%Y, %I:%M %p")
+
 SVG_UP = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
 SVG_DOWN = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
 SVG_FEED = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
@@ -238,7 +270,6 @@ def generate_post_id(visibility):
     return str(uuid.uuid4())[:6]
 
 def render_card_media(post):
-    """Render post media for feed/profile cards. If no images — show text description."""
     if post.get('images'):
         return f'<img src="{post["images"][0]}" loading="lazy">'
     desc = (post.get('content') or '').strip()
@@ -257,7 +288,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v10';
+    const CACHE_NAME = 'solid-cache-v11';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -293,7 +324,6 @@ CSS_STYLES = """
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <script src="https://unpkg.com/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
 <style>
 :root{--bg-color:#0a0a0a;--card-bg:#151515;--text-main:#f8fafc;--text-muted:#94a3b8;--accent-color:#3b82f6;--border-color:#262626;--danger-color:#ef4444;}
@@ -388,7 +418,8 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .post-view.no-media .post-desc{font-size:18px;line-height:1.7;color:#e2e8f0;}
 .post-media{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
 .post-media img{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}
-.carousel-nav-btn{position:absolute;top:40%;transform:translateY(-50%);background:rgba(0,0,0,0.6);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
+.carousel-nav-btn{position:absolute;top:40%;transform:translateY(-50%);background:rgba(0,0,0,0.65);color:#fff;width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
+.carousel-nav-btn svg{width:44px;height:44px;}
 .carousel-nav-btn:hover{background:rgba(0,0,0,0.9);}
 .carousel-nav-btn.left{left:15px;}
 .carousel-nav-btn.right{right:15px;}
@@ -446,10 +477,12 @@ input:checked+.slider:before{transform:translateX(22px);}
 #photo-viewer{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.95);z-index:9999;display:none;justify-content:center;align-items:center;overflow:hidden;touch-action:none;}
 #photo-viewer-img{max-width:100%;max-height:100%;object-fit:contain;cursor:grab;transition:none;user-select:none;-webkit-user-drag:none;}
 .photo-viewer-controls{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:10001;}
-.photo-viewer-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);color:#fff;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;backdrop-filter:blur(4px);}
+.photo-viewer-btn{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);color:#fff;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;backdrop-filter:blur(4px);}
+.photo-viewer-btn svg{width:28px;height:28px;}
 .photo-viewer-btn:hover{background:rgba(255,255,255,0.2);}
 .photo-viewer-close{position:absolute;top:15px;right:20px;font-size:40px;color:#fff;cursor:pointer;background:none;border:none;z-index:10001;line-height:1;}
-.photo-nav-prev,.photo-nav-next{position:absolute;top:50%;transform:translateY(-50%);z-index:10001;}
+.photo-nav-prev,.photo-nav-next{position:absolute;top:50%;transform:translateY(-50%);z-index:10001;width:96px!important;height:96px!important;}
+.photo-nav-prev svg,.photo-nav-next svg{width:52px!important;height:52px!important;}
 .photo-nav-prev{left:15px;}
 .photo-nav-next{right:15px;}
 .overlay{display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.95);z-index:9999;justify-content:center;align-items:center;flex-direction:column;padding:20px;overflow:hidden;}
@@ -549,7 +582,8 @@ input:checked+.slider:before{transform:translateX(22px);}
     .post-view.no-media{padding:0;}
     .post-header-actions{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}
     .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}
-    .carousel-nav-btn{top:45%;width:36px;height:36px;z-index:10;}
+    .carousel-nav-btn{top:45%;width:56px;height:56px;z-index:10;}
+    .carousel-nav-btn svg{width:30px;height:30px;}
     .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;padding:15px;position:relative;z-index:1;}
     .post-title{font-size:22px;}
     .actions-row{flex-wrap:wrap;gap:10px;margin-top:15px;margin-bottom:15px;padding:0;position:relative;z-index:10;}
@@ -575,6 +609,8 @@ input:checked+.slider:before{transform:translateX(22px);}
     .settings-modal.mobile-section-open .settings-content{display:block;}
     .settings-modal.mobile-section-open .settings-back-btn{display:flex;}
     .settings-close{top:10px;right:12px;}
+    .photo-nav-prev,.photo-nav-next{width:72px!important;height:72px!important;}
+    .photo-nav-prev svg,.photo-nav-next svg{width:40px!important;height:40px!important;}
 }
 </style>
 """
@@ -596,7 +632,7 @@ function formatRelativeDate(iso, lang) {
         var diffMin = Math.floor(diffSec / 60);
         var diffHour = Math.floor(diffMin / 60);
         var diffDay = Math.floor(diffHour / 24);
-        var T = window.TRANSLATIONS;
+        var T = window.TRANSLATIONS || {};
         if (diffSec < 60) return T.just_now || 'just now';
         if (diffMin < 60) return diffMin + ' ' + (T.min_ago || 'min ago');
         if (diffHour < 24) return diffHour + ' ' + (T.hr_ago || 'h ago');
@@ -608,15 +644,18 @@ function formatRelativeDate(iso, lang) {
 }
 
 function updateDates() {
-    var lang = document.documentElement.lang || 'ru';
+    var lang = window.CURRENT_LANG || 'ru';
     document.querySelectorAll('[data-iso]').forEach(function(el) {
         var iso = el.getAttribute('data-iso');
         if (!iso) return;
         if (el.getAttribute('data-absolute') === 'true') {
             var d = new Date(iso);
-            el.textContent = d.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', {
-                day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
-            });
+            if (isNaN(d.getTime())) return;
+            if (lang === 'ru') {
+                el.textContent = d.toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            } else {
+                el.textContent = d.toLocaleString('en-US', {month:'2-digit',day:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+            }
         } else {
             el.textContent = formatRelativeDate(iso, lang);
         }
@@ -627,7 +666,6 @@ setInterval(updateDates, 30000);
 // ============ IMAGE COMPRESSION ============
 async function compressImage(file) {
     if (!file || !file.type) return null;
-    // GIFs: never compress (preserves animation)
     if (file.type === 'image/gif') {
         if (file.size > 5 * 1024 * 1024) {
             showToast(window.TRANSLATIONS.gif_too_large || 'GIF too large');
@@ -660,6 +698,13 @@ function ensureFile(blobOrFile, fallbackName) {
 // ============ PHOTO VIEWER ============
 var pvState = { images: [], index: 0, scale: 1, tx: 0, ty: 0, isDragging: false, startX: 0, startY: 0, touchStartX: 0, touchStartY: 0, initialPinchDist: 0, isPinching: false };
 
+function isViewerOpen() {
+    var pv = document.getElementById('photo-viewer');
+    if (!pv) return false;
+    var d = pv.style.display;
+    return d === 'flex';
+}
+
 function openPanorama(imgElement, index) {
     var container = document.getElementById('post-media-container');
     if (container && container.dataset.images) {
@@ -689,43 +734,103 @@ function photoReset() { pvState.scale = 1; pvState.tx = 0; pvState.ty = 0; updat
 function photoNext() { pvState.index = (pvState.index + 1) % pvState.images.length; var img = document.getElementById('photo-viewer-img'); if (img) img.src = pvState.images[pvState.index]; photoReset(); }
 function photoPrev() { pvState.index = (pvState.index - 1 + pvState.images.length) % pvState.images.length; var img = document.getElementById('photo-viewer-img'); if (img) img.src = pvState.images[pvState.index]; photoReset(); }
 
+// Global wheel/mouse/keyboard handlers for the photo viewer
 document.addEventListener('DOMContentLoaded', function() {
-    var viewer = document.getElementById('photo-viewer');
-    var img = document.getElementById('photo-viewer-img');
-    if (!viewer || !img) return;
-    viewer.addEventListener('wheel', function(e) { e.preventDefault(); photoZoom(e.deltaY > 0 ? -0.2 : 0.2); }, { passive: false });
-    viewer.addEventListener('mousedown', function(e) {
-        if (e.target === img) { pvState.isDragging = true; pvState.startX = e.clientX - pvState.tx; pvState.startY = e.clientY - pvState.ty; img.style.cursor = 'grabbing'; }
-    });
-    window.addEventListener('mousemove', function(e) {
-        if (pvState.isDragging) { pvState.tx = e.clientX - pvState.startX; pvState.ty = e.clientY - pvState.startY; updatePanoTransform(); }
-    });
-    window.addEventListener('mouseup', function() { if (pvState.isDragging) { pvState.isDragging = false; img.style.cursor = 'grab'; } });
-    viewer.addEventListener('touchstart', function(e) {
-        if (e.touches.length === 1) { pvState.isDragging = true; pvState.startX = e.touches[0].clientX - pvState.tx; pvState.startY = e.touches[0].clientY - pvState.ty; pvState.touchStartX = e.touches[0].clientX; pvState.touchStartY = e.touches[0].clientY; }
-        else if (e.touches.length === 2) { pvState.isDragging = false; pvState.isPinching = true; pvState.initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
-    }, { passive: true });
-    viewer.addEventListener('touchmove', function(e) {
+    // Wheel zoom (attached on document so survives any DOM changes)
+    document.addEventListener('wheel', function(e) {
+        if (!isViewerOpen()) return;
+        var pv = document.getElementById('photo-viewer');
+        if (!pv.contains(e.target)) return;
         e.preventDefault();
-        if (e.touches.length === 2 && pvState.isPinching) {
-            var dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            pvState.scale = Math.max(0.5, Math.min(8, pvState.scale * (dist / pvState.initialPinchDist)));
-            pvState.initialPinchDist = dist; updatePanoTransform();
-        } else if (e.touches.length === 1 && pvState.isDragging) {
-            pvState.tx = e.touches[0].clientX - pvState.startX; pvState.ty = e.touches[0].clientY - pvState.startY; updatePanoTransform();
-        }
+        photoZoom(e.deltaY > 0 ? -0.25 : 0.25);
     }, { passive: false });
-    viewer.addEventListener('touchend', function(e) {
-        if (pvState.isDragging && e.changedTouches.length === 1) {
-            var dx = e.changedTouches[0].clientX - pvState.touchStartX;
-            var dy = e.changedTouches[0].clientY - pvState.touchStartY;
-            if (pvState.scale <= 1.05 && pvState.images.length > 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-                if (dx > 0) photoPrev(); else photoNext();
-            }
+
+    // Mouse drag (any button)
+    document.addEventListener('mousedown', function(e) {
+        if (!isViewerOpen()) return;
+        var img = document.getElementById('photo-viewer-img');
+        var pv = document.getElementById('photo-viewer');
+        if (!img || !pv.contains(e.target)) return;
+        if (e.target.tagName === 'BUTTON') return;
+        pvState.isDragging = true;
+        pvState.startX = e.clientX - pvState.tx;
+        pvState.startY = e.clientY - pvState.ty;
+        img.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+        if (!pvState.isDragging) return;
+        pvState.tx = e.clientX - pvState.startX;
+        pvState.ty = e.clientY - pvState.startY;
+        updatePanoTransform();
+    });
+    document.addEventListener('mouseup', function() {
+        if (pvState.isDragging) {
+            pvState.isDragging = false;
+            var img = document.getElementById('photo-viewer-img');
+            if (img) img.style.cursor = 'grab';
         }
-        pvState.isDragging = false; pvState.isPinching = false;
+    });
+
+    // Keyboard
+    document.addEventListener('keydown', function(e) {
+        if (!isViewerOpen()) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); photoPrev(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); photoNext(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closePanorama(); }
+        else if (e.key === '+' || e.key === '=') { e.preventDefault(); photoZoom(0.25); }
+        else if (e.key === '-') { e.preventDefault(); photoZoom(-0.25); }
     });
 });
+
+// Touch handlers (delegated on document)
+document.addEventListener('touchstart', function(e) {
+    if (!isViewerOpen()) return;
+    var pv = document.getElementById('photo-viewer');
+    if (!pv.contains(e.target)) return;
+    if (e.touches.length === 1) {
+        pvState.isDragging = true;
+        pvState.startX = e.touches[0].clientX - pvState.tx;
+        pvState.startY = e.touches[0].clientY - pvState.ty;
+        pvState.touchStartX = e.touches[0].clientX;
+        pvState.touchStartY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+        pvState.isDragging = false;
+        pvState.isPinching = true;
+        pvState.initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }
+}, { passive: true });
+
+document.addEventListener('touchmove', function(e) {
+    if (!isViewerOpen()) return;
+    var pv = document.getElementById('photo-viewer');
+    if (!pv.contains(e.target)) return;
+    if (e.touches.length === 2 && pvState.isPinching) {
+        e.preventDefault();
+        var dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        pvState.scale = Math.max(0.5, Math.min(8, pvState.scale * (dist / pvState.initialPinchDist)));
+        pvState.initialPinchDist = dist;
+        updatePanoTransform();
+    } else if (e.touches.length === 1 && pvState.isDragging) {
+        e.preventDefault();
+        pvState.tx = e.touches[0].clientX - pvState.startX;
+        pvState.ty = e.touches[0].clientY - pvState.startY;
+        updatePanoTransform();
+    }
+}, { passive: false });
+
+document.addEventListener('touchend', function(e) {
+    if (!isViewerOpen()) return;
+    if (pvState.isDragging && e.changedTouches.length === 1) {
+        var dx = e.changedTouches[0].clientX - pvState.touchStartX;
+        var dy = e.changedTouches[0].clientY - pvState.touchStartY;
+        if (pvState.scale <= 1.05 && pvState.images.length > 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0) photoPrev(); else photoNext();
+        }
+    }
+    pvState.isDragging = false;
+    pvState.isPinching = false;
+}, { passive: true });
 
 function applySidebarState() {
     var layout = document.querySelector('.app-layout');
@@ -931,8 +1036,6 @@ function copyCommentLink(postId, commentId) {
 function loadAvatar(event) {
     var file = event.target.files[0];
     if (!file) return;
-
-    // GIFs: skip crop entirely to preserve animation
     if (file.type === 'image/gif') {
         if (file.size > 5 * 1024 * 1024) {
             showToast(window.TRANSLATIONS.gif_too_large || 'GIF too large');
@@ -947,7 +1050,6 @@ function loadAvatar(event) {
         gifReader.readAsDataURL(file);
         return;
     }
-
     var reader = new FileReader();
     reader.onload = function(e) {
         var img = new Image();
@@ -993,7 +1095,6 @@ function updateCharCount(el) {
     counter.classList.toggle('full', len >= 2500);
 }
 
-// ============ PUBLISH (loading + toast) ============
 function handlePublishSubmit(form) {
     var btn = document.getElementById('publish-btn');
     if (!btn) return true;
@@ -1004,6 +1105,24 @@ function handlePublishSubmit(form) {
 }
 
 // ============ SETTINGS MODAL ============
+function openSettingsModal() {
+    var b = document.getElementById('settings-backdrop');
+    if (!b) return;
+    b.style.display = 'flex';
+    selectSettingsSection('account');
+    var m = document.getElementById('settings-modal');
+    if (m && window.innerWidth <= 900) m.classList.remove('mobile-section-open');
+}
+function closeSettingsModal() {
+    var b = document.getElementById('settings-backdrop');
+    if (b) b.style.display = 'none';
+    var m = document.getElementById('settings-modal');
+    if (m) m.classList.remove('mobile-section-open');
+    if (window.location.search.indexOf('settings=1') !== -1) {
+        var clean = window.location.pathname;
+        window.history.replaceState({}, document.title, clean);
+    }
+}
 function selectSettingsSection(name) {
     document.querySelectorAll('.settings-nav-item').forEach(function(el){ el.classList.toggle('active', el.dataset.section === name); });
     document.querySelectorAll('.settings-section').forEach(function(el){ el.style.display = 'none'; });
@@ -1019,34 +1138,68 @@ function settingsBackToNav() {
     if (modal) modal.classList.remove('mobile-section-open');
 }
 
+// ============ OPTIMISTIC VOTE ============
 async function vote(postId, action) {
-    var upBtn = document.getElementById('btn-up'), downBtn = document.getElementById('btn-down');
-    if (upBtn) upBtn.disabled = true;
-    if (downBtn) downBtn.disabled = true;
-    var res = await fetch('/api/vote/' + postId + '/' + action, { method: 'POST' });
-    var data = await res.json();
-    if (upBtn) upBtn.disabled = false;
-    if (downBtn) downBtn.disabled = false;
-    if (data.error) return showToast(data.error);
+    var upBtn = document.getElementById('btn-up');
+    var downBtn = document.getElementById('btn-down');
     var count = document.getElementById('vote-count');
-    if (count) count.innerText = data.score;
-    if (upBtn) upBtn.className = 'vote-btn ' + (data.user_vote === 1 ? 'active-up' : '');
-    if (downBtn) downBtn.className = 'vote-btn ' + (data.user_vote === -1 ? 'active-down' : '');
+    var currentVote = 0;
+    if (upBtn && upBtn.classList.contains('active-up')) currentVote = 1;
+    else if (downBtn && downBtn.classList.contains('active-down')) currentVote = -1;
+    var currentScore = parseInt(count ? count.innerText : '0') || 0;
+    var newVote = (action === 'up') ? (currentVote === 1 ? 0 : 1) : (currentVote === -1 ? 0 : -1);
+    var delta = newVote - currentVote;
+    // Optimistic update
+    if (count) count.innerText = currentScore + delta;
+    if (upBtn) upBtn.className = 'vote-btn ' + (newVote === 1 ? 'active-up' : '');
+    if (downBtn) downBtn.className = 'vote-btn ' + (newVote === -1 ? 'active-down' : '');
+    // Send
+    try {
+        var res = await fetch('/api/vote/' + postId + '/' + action, { method: 'POST' });
+        var data = await res.json();
+        if (data.error) {
+            showToast(data.error);
+            if (count) count.innerText = currentScore;
+            if (upBtn) upBtn.className = 'vote-btn ' + (currentVote === 1 ? 'active-up' : '');
+            if (downBtn) downBtn.className = 'vote-btn ' + (currentVote === -1 ? 'active-down' : '');
+            return;
+        }
+        if (count) count.innerText = data.score;
+        if (upBtn) upBtn.className = 'vote-btn ' + (data.user_vote === 1 ? 'active-up' : '');
+        if (downBtn) downBtn.className = 'vote-btn ' + (data.user_vote === -1 ? 'active-down' : '');
+    } catch(e) {
+        if (count) count.innerText = currentScore;
+    }
 }
 
+// ============ OPTIMISTIC SAVE ============
 async function toggleSave(postId, redirectToSaved) {
+    var btn = document.getElementById('btn-save');
+    var wasSaved = btn && btn.getAttribute('data-saved') === '1';
+    if (btn && !redirectToSaved) {
+        if (wasSaved) {
+            btn.innerHTML = window.SVG_SAVE;
+            btn.style.color = ''; btn.style.borderColor = '';
+            btn.setAttribute('data-saved', '0');
+        } else {
+            btn.innerHTML = window.SVG_SAVED;
+            btn.style.color = 'var(--accent-color)'; btn.style.borderColor = 'var(--accent-color)';
+            btn.setAttribute('data-saved', '1');
+        }
+    }
     var res = await fetch('/api/save/' + postId, { method: 'POST' });
     var data = await res.json();
-    if (data.error) return showToast(data.error);
+    if (data.error) { showToast(data.error); return; }
     if (redirectToSaved) { window.location.reload(); return; }
-    var btn = document.getElementById('btn-save');
     if (btn) {
         if (data.saved) {
             btn.innerHTML = window.SVG_SAVED;
             btn.style.color = 'var(--accent-color)'; btn.style.borderColor = 'var(--accent-color)';
+            btn.setAttribute('data-saved', '1');
         } else {
             btn.innerHTML = window.SVG_SAVE;
             btn.style.color = ''; btn.style.borderColor = '';
+            btn.setAttribute('data-saved', '0');
         }
     }
 }
@@ -1090,6 +1243,7 @@ function buildCommentDOM(comment, postId, isAuthor) {
     return div;
 }
 
+// ============ OPTIMISTIC COMMENT ============
 async function submitComment(e, postId) {
     e.preventDefault();
     e.stopPropagation();
@@ -1098,42 +1252,62 @@ async function submitComment(e, postId) {
     if (!input) return;
     var text = input.value.trim();
     if (!text) return;
+
+    var tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    var tempComment = {
+        id: tempId,
+        login: window.CURRENT_USERNAME || 'me',
+        display_name: window.CURRENT_DISPLAY_NAME || '',
+        avatar: window.CURRENT_AVATAR || null,
+        text: text
+    };
+    var noMsg = document.getElementById('no-comments-msg');
+    if (noMsg) noMsg.style.display = 'none';
+    var list = document.getElementById('comments-list');
+    if (list) list.appendChild(buildCommentDOM(tempComment, postId, true));
+    input.value = '';
+
     var formData = new FormData();
     formData.append('text', text);
     var res = await fetch('/api/comment/' + postId, { method: 'POST', body: formData });
     var data = await res.json();
-    if (data.error) return showToast(data.error);
-    if (data.comment) {
-        input.value = '';
-        var noMsg = document.getElementById('no-comments-msg');
-        if (noMsg) noMsg.style.display = 'none';
-        var list = document.getElementById('comments-list');
-        if (!document.getElementById('comment-' + data.comment.id) && list) {
-            list.appendChild(buildCommentDOM(data.comment, postId, true));
-        }
-        var cCount = document.getElementById('comment-count');
-        if (cCount) cCount.innerText = data.total_comments;
+    var tempEl = document.getElementById('comment-' + tempId);
+    if (data.error) {
+        if (tempEl) tempEl.remove();
+        showToast(data.error);
+        return;
     }
+    if (tempEl) tempEl.remove();
+    if (data.comment && list && !document.getElementById('comment-' + data.comment.id)) {
+        list.appendChild(buildCommentDOM(data.comment, postId, true));
+    }
+    var cCount = document.getElementById('comment-count');
+    if (cCount) cCount.innerText = data.total_comments;
 }
 
 function confirmDeleteComment(postId, commentId) {
     showConfirm(window.TRANSLATIONS.delete, window.TRANSLATIONS.delete_comment_confirm, async function() {
+        var el = document.getElementById('comment-' + commentId);
+        var parent = el ? el.parentNode : null;
+        var nextSibling = el ? el.nextSibling : null;
+        if (el) el.remove();
         var res = await fetch('/api/comment/' + postId + '/' + commentId, { method: 'DELETE' });
         var data = await res.json();
         if (data.success) {
-            var el = document.getElementById('comment-' + commentId);
-            if (el) el.remove();
             var cCount = document.getElementById('comment-count');
             if (cCount) cCount.innerText = data.total_comments;
             if (data.total_comments === 0) {
                 var noMsg = document.getElementById('no-comments-msg');
                 if (noMsg) noMsg.style.display = 'block';
             }
-        } else { showToast(data.error || 'Error'); }
+        } else {
+            showToast(data.error || 'Error');
+            if (parent) parent.insertBefore(el, nextSibling);
+        }
     });
 }
 
-function confirmLogout(e) { e.preventDefault(); showConfirm(window.TRANSLATIONS.logout, window.TRANSLATIONS.logout_confirm, () => window.location.href = '/logout'); }
+function confirmLogout(e) { if (e) e.preventDefault(); showConfirm(window.TRANSLATIONS.logout, window.TRANSLATIONS.logout_confirm, () => window.location.href = '/logout'); }
 
 function confirmDeletePost(e, postId) {
     e.preventDefault();
@@ -1269,27 +1443,93 @@ document.addEventListener('DOMContentLoaded', function() {
     if (ta) updateCharCount(ta);
     updatePublishState();
 
-    // Published toast
+    // Settings modal from URL
+    if (window.location.search.indexOf('settings=1') !== -1) {
+        setTimeout(openSettingsModal, 50);
+    }
+
+    // Toast after published
     if (window.location.search.indexOf('published=1') !== -1) {
         setTimeout(function(){ showToast(window.TRANSLATIONS.published || 'Published!'); }, 350);
-        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+        try {
+            var url = window.location.pathname;
+            window.history.replaceState({}, document.title, url);
+        } catch(e) {}
     }
-});
 
-document.addEventListener('htmx:afterSwap', function(evt) {
-    applySidebarState();
-    closeMobileMenu();
-    checkWelcome();
-    scrollToCommentIfNeeded();
-    updateDates();
-    var carouselImgs = document.querySelectorAll('.carousel-img');
-    if (carouselImgs.length > 1) {
-        var currentImg = 0;
-        window.showImg = function(idx) { carouselImgs.forEach((img, i) => img.style.display = i === idx ? 'block' : 'none'); };
-        window.changeImg = function(dir) { currentImg = (currentImg + dir + carouselImgs.length) % carouselImgs.length; window.showImg(currentImg); };
+    // Toast after settings updated
+    if (window.location.search.indexOf('updated=1') !== -1) {
+        setTimeout(function(){ showToast(window.TRANSLATIONS.profile_updated || 'Profile updated!'); }, 350);
     }
 });
 </script>
+"""
+
+def render_settings_modal(user, lang, current_path):
+    if not user: return ""
+    avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
+    return f"""
+<div id="settings-backdrop" class="settings-backdrop" style="display:none;" onclick="if(event.target===this) closeSettingsModal()">
+    <div class="settings-modal" id="settings-modal">
+        <button class="settings-close" onclick="closeSettingsModal()">&times;</button>
+        <button class="settings-back-btn" id="settings-back-btn" onclick="settingsBackToNav()">{SVG_BACK}</button>
+        <div class="settings-nav">
+            <div class="settings-nav-title">{t('settings', lang)}</div>
+            <div class="settings-nav-list">
+                <div class="settings-nav-item active" data-section="account" onclick="selectSettingsSection('account')">{SVG_USER} <span>{t('account', lang)}</span></div>
+                <div class="settings-nav-item" data-section="appearance" onclick="selectSettingsSection('appearance')">{SVG_LANG} <span>{t('appearance', lang)}</span></div>
+            </div>
+            <div class="settings-nav-spacer"></div>
+            <button class="settings-logout" onclick="confirmLogout(event)">{SVG_LOGOUT} {t('logout', lang)}</button>
+        </div>
+        <div class="settings-content">
+            <div id="settings-section-account" class="settings-section">
+                <div class="settings-section-title">{t('account', lang)}</div>
+                <form action="/settings/profile" method="post" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:16px;">
+                    <input type="hidden" name="next" value="{html.escape(current_path)}">
+                    <div style="text-align:center;">
+                        <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
+                            <img id="avatar-preview" src="{avatar_url}">
+                            <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
+                        </div>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
+                        <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
+                        <input type="hidden" name="avatar_base64" id="avatar-base64">
+                    </div>
+                    <div class="settings-field">
+                        <label>{t('display_name', lang)}</label>
+                        <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required>
+                    </div>
+                    <button type="submit" class="btn-primary" style="justify-content:center; padding:13px; gap:8px;">{SVG_CHECK_SAVE} {t('save', lang)}</button>
+                </form>
+            </div>
+            <div id="settings-section-appearance" class="settings-section" style="display:none;">
+                <div class="settings-section-title">{t('appearance', lang)}</div>
+                <div class="settings-field">
+                    <label>{t('language', lang)}</label>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <a href="/set_lang/en?next={html.escape(current_path)}" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
+                        <a href="/set_lang/ru?next={html.escape(current_path)}" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="crop-modal" class="overlay" style="z-index:12000;" onclick="this.style.display='none'">
+    <div class="crop-container" onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:14px;align-items:center;max-width:340px;width:100%;">
+        <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
+        <canvas id="crop-canvas" width="300" height="300" class="crop-canvas" style="border-radius:50%;border:2px solid var(--accent-color);background:#000;width:100%;max-width:250px;aspect-ratio:1;"></canvas>
+        <div class="crop-controls" style="display:flex;flex-direction:column;width:100%;gap:10px;">
+            <label style="font-size:14px; color:var(--text-muted);">{t('zoom', lang)}</label>
+            <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" oninput="currentZoom = parseFloat(this.value); drawCropCanvas();" style="width:100%;">
+        </div>
+        <div style="display:flex; gap:10px; width:100%;">
+            <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center; height:44px;">{t('cancel', lang)}</button>
+            <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">{t('apply', lang)}</button>
+        </div>
+    </div>
+</div>
 """
 
 def render_layout(content_html, user, request: Request, active_page="feed", title_text="", post_id_for_client=""):
@@ -1299,10 +1539,25 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
     page_title = f"sol-id | {title_text}" if title_text else "sol-id"
-    translations_json = f"""<script>window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang], ensure_ascii=False)}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`; window.SVG_LINK = `{SVG_LINK}`; window.SVG_TRASH = `{SVG_TRASH}`; window.CURRENT_POST_ID = {json.dumps(post_id_for_client)};</script>"""
+    current_path = request.url.path
+    username_js = json.dumps(user['username']) if user else 'null'
+    display_name_js = json.dumps(user['display_name']) if user else 'null'
+    avatar_js = json.dumps(avatar_url) if user else 'null'
+    translations_json = (
+        f"<script>"
+        f"window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang], ensure_ascii=False)}; "
+        f"window.CURRENT_LANG = {json.dumps(lang)}; "
+        f"window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`; "
+        f"window.SVG_LINK = `{SVG_LINK}`; window.SVG_TRASH = `{SVG_TRASH}`; "
+        f"window.CURRENT_POST_ID = {json.dumps(post_id_for_client)}; "
+        f"window.CURRENT_USERNAME = {username_js}; "
+        f"window.CURRENT_DISPLAY_NAME = {display_name_js}; "
+        f"window.CURRENT_AVATAR = {avatar_js};"
+        f"</script>"
+    )
 
     if user:
-        nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
+        nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="javascript:void(0)" onclick="openSettingsModal()" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
         nav_right = f"""<a href="/login" class="btn-primary desktop-only" style="padding:8px 16px;">{SVG_USER} <span>{t('login', lang)}</span></a>"""
     lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
@@ -1316,8 +1571,10 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     else:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/login" class="{'active' if active_page == 'login' else ''}">{SVG_USER}</a></div>"""
 
+    settings_modal_html = render_settings_modal(user, lang, current_path) if user else ""
+
     html_content = f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}</head>
-<body hx-boost="true" hx-target="body" hx-swap="outerHTML show:window:top">
+<body>
 {translations_json}
 <div class="app-layout">
     <div class="topbar">
@@ -1345,15 +1602,15 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
         {content_html}
     </div>
 </div>
-{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}
+{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="javascript:void(0)" onclick="closeMobileMenu(); openSettingsModal();" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}
 
 <div id="photo-viewer">
     <button class="photo-viewer-close" onclick="closePanorama()">&times;</button>
-    <button class="photo-viewer-btn photo-nav-prev" onclick="photoPrev()" style="position:absolute; left:15px; top:50%; transform:translateY(-50%); width:48px; height:48px;">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    <button class="photo-viewer-btn photo-nav-prev" onclick="photoPrev()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
     </button>
-    <button class="photo-viewer-btn photo-nav-next" onclick="photoNext()" style="position:absolute; right:15px; top:50%; transform:translateY(-50%); width:48px; height:48px;">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    <button class="photo-viewer-btn photo-nav-next" onclick="photoNext()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
     </button>
     <img id="photo-viewer-img" src="" onclick="event.stopPropagation()">
     <div class="photo-viewer-controls">
@@ -1363,8 +1620,8 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     </div>
 </div>
 
-<div id="confirm-modal" class="overlay" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div>
-<div id="welcome-modal" class="overlay" onclick="closeWelcomeModal()">
+<div id="confirm-modal" class="overlay" style="z-index:11000;" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div>
+<div id="welcome-modal" class="overlay" style="z-index:11000;" onclick="closeWelcomeModal()">
     <div class="modal-box welcome-modal-content" onclick="event.stopPropagation()">
         <h2>{t('welcome_title', lang)}</h2>
         <p>{t('welcome_desc', lang)}</p>
@@ -1380,6 +1637,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     </div>
 </div>
 <div id="toast" class="toast"></div>
+{settings_modal_html}
 {bottom_nav}
 {JS_SCRIPT}
 </body></html>"""
@@ -1429,7 +1687,8 @@ async def search_posts(request: Request, q: str = ""):
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             media_html = render_card_media(post)
             date_iso = post.get('created_at', '')
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
+            date_text = format_date_relative(date_iso, lang)
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div></div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
 
@@ -1449,7 +1708,8 @@ async def read_feed(request: Request):
             score = get_score(post['id'])
             arrow_icon = SVG_DOWN if score < 0 else SVG_UP
             date_iso = post.get('created_at', '')
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date" data-iso="{date_iso}"></div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
+            date_text = format_date_relative(date_iso, lang)
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date" data-iso="{date_iso}">{date_text}</div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('feed', lang)))
 
@@ -1469,7 +1729,8 @@ async def saved_posts(request: Request):
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             media_html = render_card_media(post)
             date_iso = post.get('created_at', '')
-            cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a></div>"""
+            date_text = format_date_relative(date_iso, lang)
+            cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a></div>"""
         content = f'<h2 style="margin-bottom:25px; padding:15px 15px 0 15px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "saved", t('saved', lang)))
 
@@ -1478,7 +1739,7 @@ async def login_page(request: Request):
     lang = get_lang(request)
     content = f"""
     <div class="auth-container">
-        <form class="auth-form" action="/login" method="post" hx-boost="false">
+        <form class="auth-form" action="/login" method="post">
             <h2>{t('login', lang)}</h2>
             <div class="input-group">
                 <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off" oninput="validateUsername(this.value)">
@@ -1530,82 +1791,12 @@ async def logout(request: Request):
     response.delete_cookie("session_token")
     return response
 
-# ============ SETTINGS (MODAL / BOTTOM SHEET) ============
-@app.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request):
-    user = get_current_user(request)
-    lang = get_lang(request)
-    if not user: return RedirectResponse(url="/login")
-    avatar_url = user.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username']}"
-    updated = request.query_params.get("updated")
-    toast_script = f"<script>setTimeout(function(){{showToast('{t('profile_updated', lang)}');}}, 350);</script>" if updated else ""
-    content = f"""
-    <div class="settings-backdrop" onclick="if(event.target===this) window.location.href='/'">
-        <div class="settings-modal" id="settings-modal">
-            <button class="settings-close" onclick="window.location.href='/'">&times;</button>
-            <button class="settings-back-btn" id="settings-back-btn" onclick="settingsBackToNav()">{SVG_BACK}</button>
-            <div class="settings-nav">
-                <div class="settings-nav-title">{t('settings', lang)}</div>
-                <div class="settings-nav-list">
-                    <div class="settings-nav-item active" data-section="account" onclick="selectSettingsSection('account')">{SVG_USER} <span>{t('account', lang)}</span></div>
-                    <div class="settings-nav-item" data-section="appearance" onclick="selectSettingsSection('appearance')">{SVG_LANG} <span>{t('appearance', lang)}</span></div>
-                </div>
-                <div class="settings-nav-spacer"></div>
-                <button class="settings-logout" onclick="confirmLogout(event)">{SVG_LOGOUT} {t('logout', lang)}</button>
-            </div>
-            <div class="settings-content">
-                <div id="settings-section-account" class="settings-section">
-                    <div class="settings-section-title">{t('account', lang)}</div>
-                    <form action="/settings/profile" method="post" enctype="multipart/form-data" hx-boost="false" style="display:flex;flex-direction:column;gap:16px;">
-                        <div style="text-align:center;">
-                            <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
-                                <img id="avatar-preview" src="{avatar_url}">
-                                <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
-                            </div>
-                            <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
-                            <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
-                            <input type="hidden" name="avatar_base64" id="avatar-base64">
-                        </div>
-                        <div class="settings-field">
-                            <label>{t('display_name', lang)}</label>
-                            <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required>
-                        </div>
-                        <button type="submit" class="btn-primary" style="justify-content:center; padding:13px; gap:8px;">{SVG_CHECK_SAVE} {t('save', lang)}</button>
-                    </form>
-                </div>
-                <div id="settings-section-appearance" class="settings-section" style="display:none;">
-                    <div class="settings-section-title">{t('appearance', lang)}</div>
-                    <div class="settings-field">
-                        <label>{t('language', lang)}</label>
-                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                            <a href="/set_lang/en?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
-                            <a href="/set_lang/ru?next=/settings" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div id="crop-modal" class="overlay" onclick="this.style.display='none'">
-        <div class="crop-container" onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:14px;align-items:center;max-width:340px;width:100%;">
-            <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
-            <canvas id="crop-canvas" width="300" height="300" class="crop-canvas" style="border-radius:50%;border:2px solid var(--accent-color);background:#000;width:100%;max-width:250px;aspect-ratio:1;"></canvas>
-            <div class="crop-controls" style="display:flex;flex-direction:column;width:100%;gap:10px;">
-                <label style="font-size:14px; color:var(--text-muted);">{t('zoom', lang)}</label>
-                <input type="range" id="zoom-slider" min="1" max="3" step="0.05" value="1" oninput="currentZoom = parseFloat(this.value); drawCropCanvas();" style="width:100%;">
-            </div>
-            <div style="display:flex; gap:10px; width:100%;">
-                <button type="button" onclick="document.getElementById('crop-modal').style.display='none'" class="action-btn" style="flex:1; justify-content:center; height:44px;">{t('cancel', lang)}</button>
-                <button type="button" onclick="applyCrop()" class="btn-primary" style="flex:1; justify-content:center;">{t('apply', lang)}</button>
-            </div>
-        </div>
-    </div>
-    {toast_script}
-    """
-    return HTMLResponse(content=render_layout(content, user, request, "settings", t('settings', lang)))
+@app.get("/settings")
+async def settings_redirect(request: Request):
+    return RedirectResponse(url="/?settings=1", status_code=status.HTTP_302_FOUND)
 
 @app.post("/settings/profile")
-async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None)):
+async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None), next: str = Form("/")):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
     update_data = {"display_name": html.escape(display_name)}
@@ -1613,14 +1804,16 @@ async def update_profile(request: Request, display_name: str = Form(...), avatar
     elif avatar and avatar.filename: update_data["avatar"] = await image_to_base64(avatar)
     supabase.table("users").update(update_data).eq("username", user['username']).execute()
     for k, v in update_data.items(): users_db[user['username']][k] = v
-    return RedirectResponse(url="/settings?updated=1", status_code=status.HTTP_302_FOUND)
+    if not next or not next.startswith("/") or next.startswith("//"):
+        next = "/"
+    return RedirectResponse(url=f"{next}?settings=1&updated=1", status_code=status.HTTP_302_FOUND)
 
 @app.get("/write", response_class=HTMLResponse)
 async def create_post_page(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
-    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-boost="false" onsubmit="return handlePublishSubmit(this)" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required oninput="updatePublishState()" style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 2500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="2500" oninput="updateCharCount(this); updatePublishState();" style="min-height:140px; padding:14px;"></textarea><div class="char-counter" id="char-count">0 / 2500</div></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" id="publish-btn" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;" disabled>{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
+    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" onsubmit="return handlePublishSubmit(this)" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required oninput="updatePublishState()" style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 2500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="2500" oninput="updateCharCount(this); updatePublishState();" style="min-height:140px; padding:14px;"></textarea><div class="char-counter" id="char-count">0 / 2500</div></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" id="publish-btn" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;" disabled>{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "write", t('new_post', lang)))
 
 @app.post("/write")
@@ -1749,7 +1942,8 @@ async def view_profile(request: Request, username: str):
         media_html = render_card_media(post)
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
         date_iso = post.get('created_at', '')
-        posts_html += f"""<a href="/{post['id']}" class="feed-card">{badge}<div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
+        date_text = format_date_relative(date_iso, lang)
+        posts_html += f"""<a href="/{post['id']}" class="feed-card">{badge}<div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_posts", lang)}</div>'
     saved_html = ""
     saved_ids = profile_user.get('saved_posts', [])
@@ -1760,9 +1954,10 @@ async def view_profile(request: Request, username: str):
             a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             media_html = render_card_media(post)
             date_iso = post.get('created_at', '')
-            saved_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
+            date_text = format_date_relative(date_iso, lang)
+            saved_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
     if not saved_html: saved_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_saved", lang)}</div>'
-    edit_btn = f'<div class="profile-edit-btn-wrapper"><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
+    edit_btn = f'<div class="profile-edit-btn-wrapper"><a href="javascript:void(0)" onclick="openSettingsModal()" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
     tabs_html = f"""<div class="profile-tabs"><button class="profile-tab-btn active" data-tab="posts" onclick="switchProfileTab('posts')">{t('posts', lang)}</button>{f'<button class="profile-tab-btn" data-tab="saved" onclick="switchProfileTab(\'saved\')">{t("saved", lang)}</button>' if is_own_profile else ''}</div>"""
     content = f"""
     <div class="profile-header">
@@ -1812,7 +2007,7 @@ async def _render_post_page(request: Request, post_id: str):
         for i, img in enumerate(post['images']):
             display = "" if i == 0 else "none"
             imgs_html += f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" onclick="openPanorama(this, {i})">'
-        nav_btns = f'<div class="carousel-nav-btn left" onclick="changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
+        nav_btns = f'<div class="carousel-nav-btn left" onclick="event.stopPropagation(); changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="event.stopPropagation(); changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         safe_images_json = html.escape(json.dumps(post['images']))
         media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">{imgs_html}{nav_btns}</div>"""
     else:
@@ -1820,11 +2015,12 @@ async def _render_post_page(request: Request, post_id: str):
     if user:
         save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
         save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
-        actions_html = f"""<div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div>"""
+        saved_attr = "1" if is_saved else "0"
+        actions_html = f"""<div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" data-saved="{saved_attr}" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div>"""
     else:
         actions_html = f"""<div class="actions-row"><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button></div><div class="login-notice"><a href="/login">{t('login', lang)}</a> · {t('login_to_interact', lang)}</div>"""
     if post.get('allow_comments', True):
-        if user: comments_input_html = f"""<form onsubmit="submitComment(event, '{post['id']}')" hx-boost="false" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;"><input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;"><button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button></form>"""
+        if user: comments_input_html = f"""<form onsubmit="submitComment(event, '{post['id']}')" style="background:var(--bg-color); padding:12px; border-radius:8px; margin-bottom:20px; border: 1px solid var(--border-color); display:flex; gap:10px;"><input type="text" id="comment-input" placeholder="{t('write_comment', lang)}" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:15px;"><button type="submit" class="btn-primary" style="padding:5px 15px;">{t('send', lang)}</button></form>"""
         else: comments_input_html = f"""<div class="login-notice" style="margin-bottom:20px;"><a href="/login">{t('login', lang)}</a> · {t('login_to_comment', lang)}</div>"""
     else: comments_input_html = f'<div style="background:rgba(239,68,68,0.1); color:var(--danger-color); padding:15px; border-radius:8px; margin-bottom:20px; text-align:center; font-weight:500;">{t("comments_disabled", lang)}</div>'
     post_comments = comments_db.get(post_id, [])
@@ -1839,13 +2035,14 @@ async def _render_post_page(request: Request, post_id: str):
         comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c_display} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['login']}</span></div><div style="font-size:14px; margin-top:2px;">{c_text}</div></div></div><div style="display:flex;gap:2px;align-items:flex-start;">{copy_btn}{del_btn}</div></div>"""
     no_comments_style = "display:block;" if len(post_comments) == 0 else "display:none;"
     date_iso = post.get('created_at', '')
+    date_abs = format_date_absolute(date_iso, lang)
     details_html = f"""<div class="post-details">
             <div class="post-top-info">
                 <div class="post-author">
                     <a href="/@{post['author']}"><img src="{ava}"></a>
                     <div>
                         <a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a>
-                        <div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])} • <span data-iso="{date_iso}" data-absolute="true"></span></div>
+                        <div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])} • <span data-iso="{date_iso}" data-absolute="true">{date_abs}</span></div>
                     </div>
                 </div>
                 <div class="post-title selectable">{html.escape(post['title'])}</div>
