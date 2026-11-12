@@ -22,7 +22,7 @@ TRANSLATIONS = {
         "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files or paste (Ctrl+V)",
         "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
-        "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
+        "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If the account does not exist, it will be created automatically",
         "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts",
         "search_results": "Search results", "nothing_found": "Nothing found", "no_saved": "You have no saved posts",
         "wrong_pass": "Wrong password", "need_name": "Display name is required for registration", "choose_files": "Choose files",
@@ -33,7 +33,9 @@ TRANSLATIONS = {
         "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply",
         "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
         "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "profile_updated": "Profile updated successfully!",
-        "link_only": "Link Only (Hidden)"
+        "link_only": "Link Only (Hidden)", "val_latin": "Latin letters only", "val_upper": "Contains uppercase letter",
+        "val_len": "Up to 20 characters", "val_avail": "Available", "val_p_len": "At least 6 characters",
+        "val_p_latin": "Latin letters, numbers and @#", "val_p_upper": "Contains uppercase letter", "val_p_spec": "Contains @ or #"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -41,7 +43,7 @@ TRANSLATIONS = {
         "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы или вставьте (Ctrl+V)",
         "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
-        "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
+        "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, он будет создан автоматически",
         "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить", "no_posts": "Пока нет постов", "posts": "постов",
         "search_results": "Результаты поиска", "nothing_found": "Ничего не найдено", "no_saved": "У вас пока нет избранных постов",
         "wrong_pass": "Неверный пароль", "need_name": "Для регистрации нужно указать имя", "choose_files": "Выбрать файлы",
@@ -52,7 +54,9 @@ TRANSLATIONS = {
         "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить",
         "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
         "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "profile_updated": "Профиль успешно обновлен!",
-        "link_only": "По ссылке (Скрыт)"
+        "link_only": "По ссылке (Скрыт)", "val_latin": "Только латиница", "val_upper": "Есть заглавная буква",
+        "val_len": "До 20 символов", "val_avail": "Свободен", "val_p_len": "От 6 символов",
+        "val_p_latin": "Латиница, цифры и @#", "val_p_upper": "Есть заглавная буква", "val_p_spec": "Есть @ или #"
     }
 }
 
@@ -169,7 +173,7 @@ a{{color:var(--accent-color);text-decoration:none;}}
 .topbar{{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}}
 .topbar-left{{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}}
 .logo{{font-size:22px;font-weight:700;color:var(--accent-color);display:flex;align-items:center;gap:10px;white-space:nowrap;}}
-.logo img{{width:42px;height:38px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;filter:invert(32%) sepia(94%) saturate(1922%) hue-rotate(202deg) brightness(96%) contrast(96%);}}
+.logo img{{width:42px;height:38px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;}} /* Убран фильтр */
 .menu-toggle{{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}}
 .menu-toggle:hover{{background:var(--card-bg);color:var(--text-main);}}
 
@@ -451,7 +455,7 @@ function handleSearch(query){
         var data=await res.json();
         if(data.results&&data.results.length>0){
             dropdown.innerHTML=data.results.map(p=>`<a href="/${p.id}" class="search-dropdown-item"><div style="font-weight:700;font-size:14px;">${p.title}</div><div style="color:var(--text-muted);font-size:12px;margin-left:auto;">@${p.author}</div></a>`).join('');
-        }else{ dropdown.innerHTML='<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">Ничего не найдено</div>'; }
+        }else{ dropdown.innerHTML='<div style="padding:15px;color:var(--text-muted);font-size:14px;text-align:center;">'+window.TRANSLATIONS.nothing_found+'</div>'; }
         dropdown.style.display='block';
     },300);
 }
@@ -697,24 +701,19 @@ function switchTab(tabId){
     document.getElementById('tab-'+tabId).style.display='block';
 }
 
-// Валидация логина
+// Валидация логина (СТРОГО ЛАТИНИЦА, БЕЗ ЦИФР)
 var usernameTimeout;
 function validateUsername(val) {
     var itemLatin = document.querySelector('[data-rule="latin"]');
-    var itemNum = document.querySelector('[data-rule="num"]');
     var itemUpper = document.querySelector('[data-rule="upper"]');
     var itemLen = document.querySelector('[data-rule="len"]');
     var itemAvail = document.querySelector('[data-rule="avail"]');
     
-    if(!itemLatin) return; // Не на странице логина
+    if(!itemLatin) return; 
 
-    // Латиница (буквы)
+    // Латиница (только буквы)
     var isLatin = /^[a-zA-Z]+$/.test(val);
     itemLatin.classList.toggle('valid', isLatin && val.length > 0);
-
-    // Цифры
-    var hasNum = /\d/.test(val);
-    itemNum.classList.toggle('valid', hasNum);
 
     // Большие буквы
     var hasUpper = /[A-Z]/.test(val);
@@ -753,7 +752,7 @@ function validatePassword(val) {
     // От 6 символов
     itemLen.classList.toggle('valid', val.length >= 6);
 
-    // Латиница (буквы + цифры + спецсимволы, но только разрешенные)
+    // Латиница (буквы + цифры + спецсимволы)
     var isLatin = /^[a-zA-Z0-9@@#]+$/.test(val) && val.length > 0;
     itemLatin.classList.toggle('valid', isLatin);
 
@@ -770,7 +769,6 @@ document.addEventListener('DOMContentLoaded',function(){
     applySidebarState();
     if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
 
-    // Навешиваем слушатели на поля логина/пароля
     var userInp = document.getElementById('usernameInput');
     var passInp = document.getElementById('passwordInput');
     
@@ -953,26 +951,21 @@ async def login_page(request: Request):
             <div class="input-group">
                 <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off">
                 <ul class="val-list">
-                    <li class="val-item" data-rule="latin">{SVG_CROSS}{SVG_CHECK} Только латиница</li>
-                    <li class="val-item" data-rule="num">{SVG_CROSS}{SVG_CHECK} Содержит цифры</li>
-                    <li class="val-item" data-rule="upper">{SVG_CROSS}{SVG_CHECK} Содержит большие буквы</li>
-                    <li class="val-item" data-rule="len">{SVG_CROSS}{SVG_CHECK} До 20 символов</li>
-                    <li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} Свободен</li>
+                    <li class="val-item" data-rule="latin">{SVG_CROSS}{SVG_CHECK} {t('val_latin', lang)}</li>
+                    <li class="val-item" data-rule="upper">{SVG_CROSS}{SVG_CHECK} {t('val_upper', lang)}</li>
+                    <li class="val-item" data-rule="len">{SVG_CROSS}{SVG_CHECK} {t('val_len', lang)}</li>
+                    <li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li>
                 </ul>
-            </div>
-            
-            <div class="input-group" style="margin-top:15px;">
-                <input type="text" name="display_name" placeholder="{t('display_name', lang)} (Необязательно)">
             </div>
             
             <div class="input-group" style="margin-top:15px;">
                 <input type="password" name="password" id="passwordInput" placeholder="{t('password', lang)}" required>
                 <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
                 <ul class="val-list">
-                    <li class="val-item" data-rule="p_len">{SVG_CROSS}{SVG_CHECK} От 6 символов</li>
-                    <li class="val-item" data-rule="p_latin">{SVG_CROSS}{SVG_CHECK} Только латиница и разрешенные символы</li>
-                    <li class="val-item" data-rule="p_upper">{SVG_CROSS}{SVG_CHECK} Есть заглавная буква</li>
-                    <li class="val-item" data-rule="p_spec">{SVG_CROSS}{SVG_CHECK} Есть @ или #</li>
+                    <li class="val-item" data-rule="p_len">{SVG_CROSS}{SVG_CHECK} {t('val_p_len', lang)}</li>
+                    <li class="val-item" data-rule="p_latin">{SVG_CROSS}{SVG_CHECK} {t('val_p_latin', lang)}</li>
+                    <li class="val-item" data-rule="p_upper">{SVG_CROSS}{SVG_CHECK} {t('val_p_upper', lang)}</li>
+                    <li class="val-item" data-rule="p_spec">{SVG_CROSS}{SVG_CHECK} {t('val_p_spec', lang)}</li>
                 </ul>
             </div>
             
@@ -984,17 +977,19 @@ async def login_page(request: Request):
     return HTMLResponse(content=render_layout(content, None, request, "login", t('login', lang)))
 
 @app.post("/login")
-async def login_user(request: Request, username: str = Form(...), password: str = Form(...), display_name: str = Form("")):
+async def login_user(request: Request, username: str = Form(...), password: str = Form(...)):
     lang = get_lang(request)
     username = username.strip()
     user = users_db.get(username)
+    
     if user:
+        # Если пользователь есть, проверяем пароль
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
-        # Если имя не введено, берем логин
-        final_display_name = display_name.strip() if display_name.strip() else username
-        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": final_display_name, "avatar": None, "saved_posts": []}
+        # Если нет, регистрируем (имя = логин)
+        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": []}
+        
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
