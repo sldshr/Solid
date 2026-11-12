@@ -1,14 +1,10 @@
-from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Form, HTTPException, status, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from passlib.context import CryptContext
 import uuid
 import base64
 import html
-import time
-import secrets
-import io
-from PIL import Image
-from typing import List, Dict
+from typing import List
 
 app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -18,17 +14,14 @@ sessions = {}
 posts_db = [] 
 
 admin_pwd = pwd_context.hash("admin")
-users_db["admin"] = {
-    "username": "admin", "password": admin_pwd, "display_name": "Administrator", 
-    "avatar": None, "saved_posts": [], "notifications": [], "unread_count": 0
-}
+users_db["admin"] = {"username": "admin", "password": admin_pwd, "display_name": "Administrator", "avatar": None, "saved_posts": []}
 
 TRANSLATIONS = {
     "en": {
         "feed": "Feed", "saved": "Saved", "profile": "Profile", "settings": "Settings", "logout": "Logout", "login": "Login",
         "new_post": "New Post", "search_placeholder": "Search...", "title": "Title", "description": "Description", "publish": "Publish",
         "visibility": "Who can see", "in_feed": "In Feed", "by_link": "By Link", "upload_hint": "Drop files here or click to upload",
-        "upload_limit": "JPEG, PNG, GIF up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
+        "upload_limit": "JPEG, PNG up to 3 images", "back": "Back", "comments": "Comments", "no_comments": "No comments yet.",
         "write_comment": "Write a comment...", "send": "Send", "edit_profile": "Edit Profile", "display_name": "Display Name",
         "avatar": "Avatar", "save": "Save", "username": "Username", "password": "Password", "login_hint": "If user doesn't exist, Display Name is required",
         "save_post": "Save post", "copy_link": "Copy link", "delete": "Delete", "no_posts": "No posts yet", "posts": "posts",
@@ -40,15 +33,13 @@ TRANSLATIONS = {
         "logout_confirm": "Are you sure you want to logout?", "delete_confirm": "Are you sure you want to delete this post?",
         "crop_avatar": "Crop Avatar", "zoom": "Zoom", "change_avatar": "Change Avatar", "cancel": "Cancel", "apply": "Apply",
         "language": "Language", "max_files": "Maximum 3 files!", "link_copied": "Link copied!", "delete_comment_confirm": "Delete this comment?",
-        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings", "notifications": "Notifications",
-        "notif_comments": "Comments", "notif_votes": "Votes", "no_notifications": "No new notifications", "just_now": "just now",
-        "min_ago": "min ago", "hr_ago": "hr ago", "yesterday": "yesterday at", "notif_voted": "voted on your post", "notif_commented": "commented on your post"
+        "confirm": "Confirm", "close": "Close", "profile_settings": "Profile Settings"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
         "new_post": "Новый пост", "search_placeholder": "Поиск...", "title": "Название", "description": "Описание", "publish": "Опубликовать",
         "visibility": "Кто увидит", "in_feed": "Все, в ленте", "by_link": "По ссылке", "upload_hint": "Перетащите файлы сюда или нажмите для загрузки",
-        "upload_limit": "JPEG, PNG, GIF до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
+        "upload_limit": "JPEG, PNG до 3 штук", "back": "Назад", "comments": "Комментарии", "no_comments": "Пока нет комментариев.",
         "write_comment": "Напишите комментарий...", "send": "Отправить", "edit_profile": "Редактировать профиль", "display_name": "Отображаемое имя",
         "avatar": "Аватарка", "save": "Сохранить", "username": "Логин", "password": "Пароль", "login_hint": "Если аккаунта нет, введите имя для регистрации",
         "save_post": "Сохранить пост", "copy_link": "Скопировать ссылку", "delete": "Удалить", "no_posts": "Пока нет постов", "posts": "постов",
@@ -60,9 +51,7 @@ TRANSLATIONS = {
         "logout_confirm": "Вы уверены, что хотите выйти?", "delete_confirm": "Вы уверены, что хотите удалить этот пост?",
         "crop_avatar": "Настройка аватарки", "zoom": "Приближение", "change_avatar": "Изменить аватарку", "cancel": "Отмена", "apply": "Применить",
         "language": "Язык", "max_files": "Максимум 3 файла!", "link_copied": "Ссылка скопирована!", "delete_comment_confirm": "Удалить этот комментарий?",
-        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля", "notifications": "Уведомления",
-        "notif_comments": "Комментарии", "notif_votes": "Оценки", "no_notifications": "Нет новых уведомлений", "just_now": "только что",
-        "min_ago": "мин. назад", "hr_ago": "ч. назад", "yesterday": "вчера в", "notif_voted": "оценил ваш пост", "notif_commented": "прокомментировал ваш пост"
+        "confirm": "Подтвердить", "close": "Закрыть", "profile_settings": "Настройки профиля"
     }
 }
 
@@ -94,32 +83,7 @@ SVG_SEARCH = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stro
 SVG_LANG = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>"""
 SVG_MENU = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>"""
 SVG_CAMERA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>"""
-SVG_BELL = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>"""
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
-
-    async def connect(self, websocket: WebSocket, username: str):
-        await websocket.accept()
-        if username not in self.active_connections:
-            self.active_connections[username] = []
-        self.active_connections[username].append(websocket)
-
-    def disconnect(self, websocket: WebSocket, username: str):
-        if username in self.active_connections:
-            if websocket in self.active_connections[username]:
-                self.active_connections[username].remove(websocket)
-
-    async def send_personal_message(self, message: dict, username: str):
-        if username in self.active_connections:
-            for connection in self.active_connections[username]:
-                try:
-                    await connection.send_json(message)
-                except:
-                    pass
-
-manager = ConnectionManager()
+SVG_CHECK = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>"""
 
 def get_current_user(request: Request):
     session_token = request.cookies.get("session_token")
@@ -127,26 +91,10 @@ def get_current_user(request: Request):
         return users_db.get(sessions[session_token])
     return None
 
-def process_image_sync(file_bytes: bytes, content_type: str):
-    if content_type == "image/gif":
-        return f"data:{content_type};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
-    try:
-        img = Image.open(io.BytesIO(file_bytes))
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        max_size = (1000, 1000)
-        img.thumbnail(max_size, Image.Resampling.LANCZOS)
-        buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=75)
-        return f"data:image/jpeg;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
-    except Exception:
-        return f"data:{content_type};base64,{base64.b64encode(file_bytes).decode('utf-8')}"
-
 async def image_to_base64(file: UploadFile):
     if not file or not file.filename: return None
     contents = await file.read()
-    import asyncio
-    return await asyncio.to_thread(process_image_sync, contents, file.content_type)
+    return f"data:{file.content_type};base64,{base64.b64encode(contents).decode('utf-8')}"
 
 @app.get("/manifest.json")
 async def get_manifest():
@@ -155,20 +103,6 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     return Response(content="self.addEventListener('install',e=>{self.skipWaiting()});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))});", media_type="application/javascript")
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    session_token = websocket.cookies.get("session_token")
-    username = sessions.get(session_token)
-    if not username:
-        await websocket.close(code=1008)
-        return
-    await manager.connect(websocket, username)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, username)
 
 CSS_STYLES = """
 <link rel="icon" type="image/svg+xml" href=\"""" + SVG_FAVICON + """\">
@@ -214,7 +148,7 @@ a{color:var(--accent-color);text-decoration:none;}
 .user-menu-btn:focus{outline:none;box-shadow:none;}
 .user-menu-btn:hover{background:var(--card-bg);}
 .user-avatar-small{width:36px;height:36px;border-radius:50%!important;object-fit:cover;background:#333;display:block;border:none;outline:none;}
-.dropdown-menu{display:none;position:absolute;right:0;top:50px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;width:280px;box-shadow:0 10px 30px rgba(0,0,0,.6);z-index:200;overflow:hidden;}
+.dropdown-menu{display:none;position:absolute;right:0;top:50px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;width:240px;box-shadow:0 10px 30px rgba(0,0,0,.6);z-index:200;overflow:hidden;}
 .dropdown-header{padding:15px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border-color);}
 .dropdown-header img{width:44px;height:44px;border-radius:50%!important;object-fit:cover;}
 .dropdown-header div{display:flex;flex-direction:column;}
@@ -297,7 +231,7 @@ input:checked+.slider:before{transform:translateX(22px);}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card-bg);color:#fff;padding:12px 24px;border-radius:30px;border:1px solid var(--accent-color);font-weight:500;z-index:10000;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-10px);}
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;width:100%;background:var(--bg-color);border-top:1px solid var(--border-color);justify-content:space-around;padding:16px 0 20px 0;z-index:100;padding-bottom:max(20px, env(safe-area-inset-bottom));}
-.bottom-nav a{display:flex;flex-direction:column;align-items:center;color:var(--text-muted);width:60px;text-decoration:none;position:relative;}
+.bottom-nav a{display:flex;flex-direction:column;align-items:center;color:var(--text-muted);width:60px;text-decoration:none;}
 .bottom-nav a.active{color:var(--accent-color);pointer-events:none;}
 .bottom-nav a svg{width:28px;height:28px;margin-bottom:4px;}
 .mobile-profile-menu{display:none;position:fixed;bottom:0;left:0;width:100%;background:var(--card-bg);z-index:1000;border-top-left-radius:20px;border-top-right-radius:20px;padding:20px;transform:translateY(100%);transition:transform .3s ease-in-out;flex-direction:column;gap:15px;padding-bottom:env(safe-area-inset-bottom,20px);box-shadow:0 -5px 20px rgba(0,0,0,.5);}
@@ -321,13 +255,6 @@ input:checked+.slider:before{transform:translateX(22px);}
 .tab-btn{background:none;border:none;color:var(--text-muted);font-size:16px;font-weight:500;cursor:pointer;padding:10px 15px;border-radius:8px;transition:all .2s;}
 .tab-btn:hover{color:#fff;background:var(--card-bg);}
 .tab-btn.active{color:var(--accent-color);background:var(--card-bg);}
-.notif-list{max-height:300px;overflow-y:auto;}
-.notif-item{display:flex;gap:12px;padding:12px;border-bottom:1px solid var(--border-color);font-size:14px;}
-.notif-item img{width:32px;height:32px;border-radius:50%;object-fit:cover;}
-.notif-item-content{flex:1;}
-.notif-item-title{font-weight:700;}
-.notif-item-text{color:var(--text-muted);margin-top:4px;font-size:13px;}
-.badge{position:absolute;top:-5px;right:-5px;background:var(--danger-color);color:#fff;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:10px;border:2px solid var(--bg-color);display:none;}
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}.main-content{padding:20px;}.feed-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));}}
 @media(max-width:900px){.app-layout{grid-template-columns:1fr;grid-template-rows:60px 1fr;}.sidebar{display:none;}.main-content{grid-column:1;padding:15px;padding-bottom:90px;}.bottom-nav{display:flex;}.topbar{padding:0 15px;gap:10px;height:60px;}.topbar-left{width:auto;}.logo span{display:none;}.menu-toggle{display:none!important;}.topbar-center{display:none;}.topbar-right .user-menu-container{display:none!important;}.topbar-right{width:auto;}.mobile-only{display:flex!important;}.desktop-only{display:none!important;}.mobile-search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 12px;border-radius:8px;color:#fff;font-size:14px;outline:none;}.post-view{flex-direction:column;padding:0;gap:15px;height:auto;max-height:none;overflow:visible;}.post-details{display:contents;}.post-author{order:1;margin-bottom:0;}.post-media{order:2;width:100%;max-height:50vh;min-height:200px;border-radius:12px;}.post-title{order:3;margin-bottom:0;}.post-desc{order:4;margin-bottom:0;max-height:none;}.actions-row{order:5;margin-bottom:0;padding:0 15px;}.comments-section{order:6;width:100%;border-top:1px solid var(--border-color);padding:15px;overflow:visible;}.create-layout{flex-direction:column;}.dropzone{padding:30px;min-height:250px;}.profile-header{flex-direction:column;text-align:center;gap:15px;}.profile-header .btn-primary{width:100%;margin-top:10px;}.profile-avatar{width:100px;height:100px;}}
 </style>
@@ -338,8 +265,6 @@ JS_SCRIPT = """
 var filesList=[];
 var currentImage=null;
 var currentZoom=1;
-var currentPostId=null;
-var ws=null;
 
 function applySidebarState(){
     if(localStorage.getItem('sidebar_collapsed')==='true'){
@@ -368,50 +293,14 @@ function toggleDropdown(){
     }else{
         var dropdown=document.getElementById("user-dropdown");
         if(dropdown)dropdown.style.display=dropdown.style.display==="block"?"none":"block";
-        document.getElementById('notifications-menu').style.display='none';
     }
-}
-
-function toggleNotifications(){
-    if(window.innerWidth<=900){
-        var menu=document.getElementById('mobileNotificationsMenu');
-        var overlay=document.getElementById('mobileMenuOverlay');
-        if(menu)menu.classList.add('open');
-        if(overlay)overlay.style.display='block';
-    }else{
-        var dropdown=document.getElementById("notifications-menu");
-        dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
-        document.getElementById('user-dropdown').style.display='none';
-    }
-    // Mark as read
-    fetch('/api/notifications/read', {method: 'POST'}).then(()=>{
-        document.querySelectorAll('.badge').forEach(b=>b.style.display='none');
-        var title = document.getElementById('notif-badge-title');
-        if(title) title.style.display = 'none';
-    });
 }
 
 function closeMobileMenu(){
     var menu=document.getElementById('mobileProfileMenu');
-    var nMenu=document.getElementById('mobileNotificationsMenu');
     var overlay=document.getElementById('mobileMenuOverlay');
     if(menu)menu.classList.remove('open');
-    if(nMenu)nMenu.classList.remove('open');
     if(overlay)overlay.style.display='none';
-}
-
-function switchTab(tabId, prefix=''){
-    document.querySelectorAll('.'+prefix+'tab-btn').forEach(btn=>btn.classList.remove('active'));
-    document.querySelectorAll('.'+prefix+'tab-content').forEach(el=>el.style.display='none');
-    document.querySelector('[data-tab="'+tabId+'"]').classList.add('active');
-    document.getElementById(prefix+tabId).style.display='block';
-}
-
-function switchNotifTab(tabId){
-    document.querySelectorAll('.notif-tab-btn').forEach(btn=>btn.classList.remove('active'));
-    document.querySelectorAll('.notif-tab-content').forEach(el=>el.style.display='none');
-    document.querySelector('[data-tab="'+tabId+'"]').classList.add('active');
-    document.getElementById('notif-'+tabId).style.display='block';
 }
 
 function togglePassword(el){
@@ -658,27 +547,22 @@ async function submitComment(e,postId){
     if(data.error)return showToast(data.error);
     if(data.comment){
         input.value='';
-        appendCommentToDOM(data.comment, postId, data.is_author);
-        var cCount=document.getElementById('comment-count');
-        if(cCount)cCount.innerText=data.total_comments;
         var noMsg=document.getElementById('no-comments-msg');
         if(noMsg)noMsg.style.display='none';
+        var list=document.getElementById('comments-list');
+        var ava=data.comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+data.comment.author;
+        var div=document.createElement('div');
+        div.id='comment-'+data.comment.id;
+        div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
+        var deleteBtn='';
+        if(data.is_author){
+            deleteBtn='<button onclick="confirmDeleteComment(\\''+postId+'\\', \\''+data.comment.id+'\\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">'+window.TRANSLATIONS.delete+'</button>';
+        }
+        div.innerHTML='<div style="display:flex;gap:10px;"><img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><div><div style="font-weight:700;font-size:14px;">'+data.comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+data.comment.author+'</span></div><div style="font-size:14px;margin-top:2px;">'+data.comment.text+'</div></div></div>'+deleteBtn;
+        if(list)list.appendChild(div);
+        var cCount=document.getElementById('comment-count');
+        if(cCount)cCount.innerText=data.total_comments;
     }
-}
-
-function appendCommentToDOM(comment, postId, isAuthor){
-    var list=document.getElementById('comments-list');
-    if(!list)return;
-    var ava=comment.avatar||'https://api.dicebear.com/7.x/avataaars/svg?seed='+comment.author;
-    var div=document.createElement('div');
-    div.id='comment-'+comment.id;
-    div.style.cssText='display:flex;gap:10px;margin-bottom:15px;justify-content:space-between;';
-    var deleteBtn='';
-    if(isAuthor){
-        deleteBtn='<button onclick="confirmDeleteComment(\\''+postId+'\\', \\''+comment.id+'\\')" style="background:none;border:none;color:var(--danger-color);cursor:pointer;font-size:12px;padding:5px;">'+window.TRANSLATIONS.delete+'</button>';
-    }
-    div.innerHTML='<div style="display:flex;gap:10px;"><img src="'+ava+'" style="width:32px;height:32px;border-radius:50%;object-fit:cover;"><div><div style="font-weight:700;font-size:14px;">'+comment.display_name+' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">@'+comment.author+'</span></div><div style="font-size:14px;margin-top:2px;">'+comment.text+'</div></div></div>'+deleteBtn;
-    list.appendChild(div);
 }
 
 function confirmDeleteComment(postId,commentId){
@@ -714,92 +598,15 @@ function confirmDeletePost(e, form){
     });
 }
 
-function updateDynamicDates(){
-    document.querySelectorAll('.dynamic-date').forEach(el=>{
-        var ts=parseInt(el.getAttribute('data-ts'))*1000;
-        if(isNaN(ts))return;
-        var diff=Math.floor((Date.now()-ts)/1000);
-        var lang=window.TRANSLATIONS.lang||'ru';
-        
-        if(lang==='ru'){
-            if(diff<60) el.innerText='только что';
-            else if(diff<3600) el.innerText=Math.floor(diff/60)+' мин. назад';
-            else if(diff<86400) el.innerText=Math.floor(diff/3600)+' ч. назад';
-            else if(diff<172800) el.innerText='вчера в '+new Date(ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-            else el.innerText=new Date(ts).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
-        }else{
-            if(diff<60) el.innerText='just now';
-            else if(diff<3600) el.innerText=Math.floor(diff/60)+' min ago';
-            else if(diff<86400) el.innerText=Math.floor(diff/3600)+' hr ago';
-            else if(diff<172800) el.innerText='yesterday at '+new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-            else el.innerText=new Date(ts).toLocaleDateString('en-US',{day:'numeric',month:'short'});
-        }
-    });
-}
-
-function addNotificationToDOM(notif){
-    var type = notif.type === 'comment' ? 'comments' : 'votes';
-    var list = document.getElementById('notif-list-'+type);
-    if(!list) return;
-    
-    var ava = notif.from_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed='+notif.from_user;
-    var text = notif.type === 'comment' ? window.TRANSLATIONS.notif_commented : window.TRANSLATIONS.notif_voted;
-    
-    var div = document.createElement('div');
-    div.className = 'notif-item';
-    div.innerHTML = `
-        <img src="${ava}">
-        <div class="notif-item-content">
-            <div class="notif-item-title">@${notif.from_user} ${text}</div>
-            <div class="notif-item-text">${notif.post_title}</div>
-        </div>
-    `;
-    if(list.firstChild) {
-        list.insertBefore(div, list.firstChild);
-    } else {
-        list.appendChild(div);
-    }
-    
-    // Show badge
-    document.querySelectorAll('.badge').forEach(b=>{
-        b.innerText = parseInt(b.innerText || 0) + 1;
-        b.style.display = 'block';
-    });
-    
-    showToast('Новое уведомление!');
-}
-
-function connectWS(){
-    ws = new WebSocket(`ws://${window.location.host}/ws`);
-    ws.onmessage = function(event) {
-        var data = JSON.parse(event.data);
-        if(data.action === 'new_notification') {
-            addNotificationToDOM(data.data);
-        } else if(data.action === 'new_comment') {
-            if (window.location.pathname === '/' + data.post_id) {
-                appendCommentToDOM(data.data.comment, data.post_id, false);
-                var cCount = document.getElementById('comment-count');
-                if(cCount) cCount.innerText = data.data.total_comments;
-                var noMsg = document.getElementById('no-comments-msg');
-                if(noMsg) noMsg.style.display = 'none';
-            }
-        } else if(data.action === 'vote_update') {
-            if (window.location.pathname === '/' + data.post_id) {
-                var count = document.getElementById('vote-count');
-                if(count) count.innerText = data.score;
-            }
-        }
-    };
-    ws.onclose = function() {
-        setTimeout(connectWS, 3000);
-    };
+function switchTab(tabId){
+    document.querySelectorAll('.tab-btn').forEach(btn=>btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(el=>el.style.display='none');
+    document.querySelector('[data-tab="'+tabId+'"]').classList.add('active');
+    document.getElementById('tab-'+tabId).style.display='block';
 }
 
 document.addEventListener('DOMContentLoaded',function(){
-    window.TRANSLATIONS.lang = document.documentElement.lang;
     applySidebarState();
-    updateDynamicDates();
-    connectWS();
     if('serviceWorker' in navigator){
         navigator.serviceWorker.register('/sw.js').catch(err=>console.log('SW failed'));
     }
@@ -818,46 +625,6 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 """
 
-def render_notifications_html(user, lang):
-    if not user: return ""
-    notifs = user.get('notifications', [])
-    comments_html = ""
-    votes_html = ""
-    for n in notifs:
-        ava = n.get('from_avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={n['from_user']}"
-        text = t('notif_commented', lang) if n['type'] == 'comment' else t('notif_voted', lang)
-        item = f"""
-        <a href="/{n['post_id']}" class="notif-item">
-            <img src="{ava}">
-            <div class="notif-item-content">
-                <div class="notif-item-title">@{html.escape(n['from_user'])} {text}</div>
-                <div class="notif-item-text">{html.escape(n['post_title'])}</div>
-            </div>
-        </a>
-        """
-        if n['type'] == 'comment': comments_html += item
-        else: votes_html += item
-    
-    if not comments_html: comments_html = f'<div style="padding:20px; text-align:center; color:var(--text-muted);">{t("no_notifications", lang)}</div>'
-    if not votes_html: votes_html = f'<div style="padding:20px; text-align:center; color:var(--text-muted);">{t("no_notifications", lang)}</div>'
-
-    return f"""
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; border-bottom:1px solid var(--border-color);">
-        <span style="font-weight:700;">{t('notifications', lang)}</span>
-        <button onclick="closeMobileMenu()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;" class="mobile-only">✕</button>
-    </div>
-    <div class="tabs" style="margin:0; padding:0 15px;">
-        <button class="notif-tab-btn tab-btn active" data-tab="comments" onclick="switchNotifTab('comments')">{t('notif_comments', lang)}</button>
-        <button class="notif-tab-btn tab-btn" data-tab="votes" onclick="switchNotifTab('votes')">{t('notif_votes', lang)}</button>
-    </div>
-    <div id="notif-comments" class="notif-tab-content notif-list" style="display:block;">
-        {comments_html}
-    </div>
-    <div id="notif-votes" class="notif-tab-content notif-list" style="display:none;">
-        {votes_html}
-    </div>
-    """
-
 def render_layout(content_html, user, request: Request, active_page="feed", title_text=""):
     lang = get_lang(request)
     avatar_url = user.get('avatar') if user and user.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={user['username'] if user else 'guest'}"
@@ -867,34 +634,9 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     
     page_title = f"sol-id | {title_text}" if title_text else "sol-id"
     translations_json = f"""<script>window.TRANSLATIONS = {TRANSLATIONS[lang]};</script>"""
-    
-    unread_count = user.get('unread_count', 0) if user else 0
-    notif_display = "block" if unread_count > 0 else "none"
-    
-    bell_icon = f"""
-    <div style="position:relative; display:flex; align-items:center; justify-content:center;">
-        {SVG_BELL}
-        <span class="badge" id="notif-badge" style="display:{notif_display};">{unread_count}</span>
-    </div>
-    """
 
     if user:
-        nav_right = f"""
-        <a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px; display: flex; gap:6px;">{SVG_PLUS} {t('new_post', lang)}</a>
-        <a href="#" class="action-btn desktop-only" onclick="toggleNotifications()" style="border:none; background:none; padding:5px;">{bell_icon}</a>
-        <div class="user-menu-container">
-            <div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div>
-            <div id="user-dropdown" class="dropdown-menu">
-                <div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div>
-                <a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a>
-                <a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a>
-                <a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a>
-            </div>
-        </div>
-        <div id="notifications-menu" class="dropdown-menu" style="width:320px;">
-            {render_notifications_html(user, lang)}
-        </div>
-        """
+        nav_right = f"""<a href="/write" class="btn-primary desktop-only" style="padding: 8px 16px; display: flex; gap:6px;">{SVG_PLUS} {t('new_post', lang)}</a><div class="user-menu-container"><div class="user-menu-btn" onclick="toggleDropdown()"><img src="{avatar_url}" class="user-avatar-small"></div><div id="user-dropdown" class="dropdown-menu"><div class="dropdown-header"><img src="{avatar_url}"><div><span class="name">{html.escape(user['display_name'])}</span><span class="login">@{html.escape(user['username'])}</span></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div></div>"""
     else:
         nav_right = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:none; padding:5px; color:var(--text-muted); font-weight:bold; display:flex; gap:5px;">{SVG_LANG} <span class="desktop-only">{current_lang_str}</span></a><a href="/login" class="btn-primary" style="padding:8px 16px;">{SVG_USER} <span class="desktop-only">{t('login', lang)}</span></a>"""
 
@@ -903,25 +645,11 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
         sidebar_html = f"""<div class="sidebar"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED} <span>{t('feed', lang)}</span></a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE} <span>{t('saved', lang)}</span></a><a href="/@{user['username']}" class="{'active' if active_page == 'profile' else ''}">{SVG_USER} <span>{t('profile', lang)}</span></a></div>"""
 
     if user:
-        bottom_nav = f"""
-        <div class="bottom-nav">
-            <a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a>
-            <a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a>
-            <a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a>
-            <a href="#" onclick="toggleNotifications()" style="position:relative;">{SVG_BELL}<span class="badge" id="notif-badge-mobile" style="display:{notif_display}; top:0; right:10px;">{unread_count}</span></a>
-            <a href="javascript:void(0)" onclick="toggleDropdown()" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a>
-        </div>
-        """
+        bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/saved" class="{'active' if active_page == 'saved' else ''}">{SVG_SAVE}</a><a href="/write" class="{'active' if active_page == 'write' else ''}">{SVG_PLUS}</a><a href="javascript:void(0)" onclick="toggleDropdown()" class="{'active' if active_page == 'profile' else ''}">{SVG_USER}</a></div>"""
     else:
         bottom_nav = f"""<div class="bottom-nav"><a href="/" class="{'active' if active_page == 'feed' else ''}">{SVG_FEED}</a><a href="/login" class="{'active' if active_page == 'login' else ''}">{SVG_USER}</a></div>"""
 
-    return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}{translations_json}</head><body><div class="app-layout"><div class="topbar"><div class="topbar-left">{f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}<a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a></div><div class="topbar-center"><div class="search-container"><span class="search-icon">{SVG_SEARCH}</span><input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off"><div id="searchDropdown" class="search-dropdown"></div></div></div><form action="/search" method="get" class="mobile-only" style="flex:1;"><input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}"></form><div class="topbar-right">{nav_right}</div></div>{sidebar_html}<div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">{content_html}</div></div>{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div><div id="mobileNotificationsMenu" class="mobile-profile-menu">{render_notifications_html(user, lang)}</div>''' if user else ''}<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div><div id="confirm-modal" class="overlay" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div><div id="toast" class="toast"></div>{bottom_nav}{JS_SCRIPT}</body></html>"""
-
-@app.get("/api/notifications/read", response_class=JSONResponse)
-async def read_notifications(request: Request):
-    user = get_current_user(request)
-    if user: user['unread_count'] = 0
-    return JSONResponse({"status": "ok"})
+    return f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}{translations_json}</head><body><div class="app-layout"><div class="topbar"><div class="topbar-left">{f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}<a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a></div><div class="topbar-center"><div class="search-container"><span class="search-icon">{SVG_SEARCH}</span><input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off"><div id="searchDropdown" class="search-dropdown"></div></div></div><form action="/search" method="get" class="mobile-only" style="flex:1;"><input type="text" name="q" placeholder="{t('search_placeholder', lang)}" class="mobile-search-input" value="{request.query_params.get('q', '')}"></form><div class="topbar-right">{nav_right}</div></div>{sidebar_html}<div class="main-content" style="{'grid-column: 1 / -1;' if not user else ''}">{content_html}</div></div>{f'''<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="closeMobileMenu()"></div><div id="mobileProfileMenu" class="mobile-profile-menu"><div class="mobile-profile-header"><img src="{avatar_url}"><div><div style="font-weight:700; font-size:16px;">{html.escape(user['display_name'])}</div><div style="color:var(--text-muted); font-size:14px;">@{html.escape(user['username'])}</div></div></div><a href="/@{user['username']}" class="dropdown-item">{SVG_USER} {t('profile', lang)}</a><a href="/settings" class="dropdown-item">{SVG_SETTINGS} {t('settings', lang)}</a><a href="#" onclick="confirmLogout(event)" class="dropdown-item danger">{SVG_LOGOUT} {t('logout', lang)}</a></div>''' if user else ''}<div id="panorama" class="overlay" onclick="closePanorama()"><button class="close-overlay">&times;</button><img id="panorama-img" src="" onclick="event.stopPropagation()"></div><div id="confirm-modal" class="overlay" onclick="this.style.display='none'"><div class="modal-box" onclick="event.stopPropagation()"><h3 id="confirm-title"></h3><p id="confirm-desc"></p><div class="modal-actions"><button class="btn-primary" onclick="document.getElementById('confirm-modal').style.display='none'" style="background:#333;">{t('cancel', lang)}</button><button class="btn-primary" id="confirm-btn" style="background:var(--danger-color);">{t('confirm', lang)}</button></div></div></div><div id="toast" class="toast"></div>{bottom_nav}{JS_SCRIPT}</body></html>"""
 
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
@@ -983,7 +711,7 @@ async def read_feed(request: Request):
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
             img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
             score = len(post['votes']['up']) - len(post['votes']['down'])
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}<span class="dynamic-date" data-ts="{post.get('timestamp', 0)}" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span><span style="margin-left:10px; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span></div></div></a>"""
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}<span style="margin-left:auto; display:flex; align-items:center; gap:4px;">{SVG_UP} {score}</span></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('feed', lang)))
 
@@ -1023,7 +751,7 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     else:
         if not display_name.strip():
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("need_name", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
-        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": display_name.strip(), "avatar": None, "saved_posts": [], "notifications": [], "unread_count": 0}
+        users_db[username] = {"username": username, "password": pwd_context.hash(password), "display_name": display_name.strip(), "avatar": None, "saved_posts": []}
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
@@ -1128,10 +856,7 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         for img in images[:3]:
             b64 = await image_to_base64(img)
             if b64: img_b64_list.append(b64)
-    
-    post_id = secrets.token_urlsafe(12) if visibility == 'link' else str(uuid.uuid4())[:6]
-    
-    new_post = {"id": post_id, "author": user["username"], "title": title, "content": content, "images": img_b64_list, "visibility": visibility, "votes": {"up": [], "down": []}, "comments": [], "allow_comments": allow_comments, "timestamp": time.time()}
+    new_post = {"id": str(uuid.uuid4())[:6], "author": user["username"], "title": title, "content": content, "images": img_b64_list, "visibility": visibility, "votes": {"up": [], "down": []}, "comments": [], "allow_comments": allow_comments}
     posts_db.insert(0, new_post)
     return RedirectResponse(url=f"/{new_post['id']}", status_code=status.HTTP_302_FOUND)
 
@@ -1160,18 +885,6 @@ async def vote_post(post_id: str, action: str, request: Request):
     post['votes']['up'] = up_votes
     post['votes']['down'] = down_votes
     score = len(up_votes) - len(down_votes)
-    
-    if user_vote != 0 and user['username'] != post['author']:
-        notif = {"type": "vote", "post_id": post_id, "post_title": post['title'], "from_user": user['username'], "from_display": user['display_name'], "from_avatar": user.get('avatar'), "timestamp": time.time()}
-        author_name = post['author']
-        if 'notifications' not in users_db[author_name]:
-            users_db[author_name]['notifications'] = []
-        users_db[author_name]['notifications'].insert(0, notif)
-        users_db[author_name]['unread_count'] = users_db[author_name].get('unread_count', 0) + 1
-        await manager.send_personal_message({"action": "new_notification", "data": notif}, author_name)
-    
-    await manager.send_personal_message({"action": "vote_update", "post_id": post_id, "score": score}, post['author'])
-    
     if username in post['votes']['up']: user_vote = 1
     elif username in post['votes']['down']: user_vote = -1
     else: user_vote = 0
@@ -1197,21 +910,8 @@ async def add_comment(post_id: str, request: Request, text: str = Form(...)):
     post = next((p for p in posts_db if p['id'] == post_id), None)
     if not post: return JSONResponse({"error": "Not found"}, status_code=404)
     if not post.get('allow_comments', True): return JSONResponse({"error": "Comments disabled"}, status_code=403)
-    
-    comment = {"id": str(uuid.uuid4())[:6], "author": user['username'], "display_name": html.escape(user['display_name']), "avatar": user.get('avatar'), "text": html.escape(text), "timestamp": time.time()}
+    comment = {"id": str(uuid.uuid4())[:6], "author": user['username'], "display_name": html.escape(user['display_name']), "avatar": user.get('avatar'), "text": html.escape(text)}
     post['comments'].append(comment)
-    
-    if user['username'] != post['author']:
-        notif = {"type": "comment", "post_id": post_id, "post_title": post['title'], "from_user": user['username'], "from_display": user['display_name'], "from_avatar": user.get('avatar'), "text": text, "timestamp": time.time()}
-        author_name = post['author']
-        if 'notifications' not in users_db[author_name]:
-            users_db[author_name]['notifications'] = []
-        users_db[author_name]['notifications'].insert(0, notif)
-        users_db[author_name]['unread_count'] = users_db[author_name].get('unread_count', 0) + 1
-        await manager.send_personal_message({"action": "new_notification", "data": notif}, author_name)
-        
-    await manager.send_personal_message({"action": "new_comment", "post_id": post_id, "data": {"comment": comment, "total_comments": len(post['comments'])}}, post['author'])
-    
     return JSONResponse({"comment": comment, "total_comments": len(post['comments']), "is_author": True})
 
 @app.delete("/api/comment/{post_id}/{comment_id}")
@@ -1250,7 +950,7 @@ async def view_profile(request: Request, username: str):
     posts_html = ""
     for post in user_posts:
         img_html = f'<img src="{post["images"][0]}">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
-        posts_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-author"><span class="dynamic-date" data-ts="{post.get('timestamp', 0)}" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span></div></div></a>"""
+        posts_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div></div></a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:20px;">{t("no_posts", lang)}</div>'
     edit_btn = f'<a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a>' if current_user and current_user['username'] == username else ''
     content = f"""<div class="profile-header"><img src="{ava}" class="profile-avatar"><div class="profile-details"><h1>{html.escape(profile_user['display_name'])}</h1><p>@{html.escape(username)}</p><p style="margin-top:8px; font-size:15px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p></div><div style="margin-left:auto;">{edit_btn}</div></div><div style="border-bottom: 1px solid var(--border-color); margin-bottom: 25px; display:flex; gap:25px;"><a href="#" style="color:#fff; padding-bottom:12px; border-bottom:3px solid var(--accent-color); font-size:18px; font-weight:700;">{t('posts', lang)}</a></div><div class="feed-grid">{posts_html}</div>"""
@@ -1288,12 +988,9 @@ async def view_post(request: Request, post_id: str):
     for c in post['comments']:
         c_ava = c.get('avatar') or f"https://api.dicebear.com/7.x/avataaars/svg?seed={c['author']}"
         del_btn = f'<button onclick="confirmDeleteComment(\'{post["id"]}\', \'{c["id"]}\')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; font-size:12px; padding:5px;">{t("delete_comment", lang)}</button>' if user and user['username'] == c['author'] else ''
-        comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div><div style="font-size:14px; margin-top:2px;">{c['text']}</div><div class="dynamic-date" data-ts="{c.get('timestamp', 0)}" style="font-size:12px; color:var(--text-muted); margin-top:4px;"></div></div></div>{del_btn}</div>"""
+        comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c.get('display_name', c['author'])} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['author']}</span></div><div style="font-size:14px; margin-top:2px;">{c['text']}</div></div></div>{del_btn}</div>"""
     no_comments_style = "display:block;" if len(post['comments']) == 0 else "display:none;"
-    
-    post_date = time.strftime('%d.%m.%Y %H:%M', time.localtime(post.get('timestamp', time.time())))
-    
-    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])} • {post_date}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div><script>currentPostId='{post['id']}';</script>"""
+    content = f"""<div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;"><a href="/" style="display:flex; align-items:center; gap:10px; color:var(--text-muted); font-weight:500; font-size:16px;">{SVG_BACK} {t('back', lang)}</a></div><div class="post-view"><div class="post-media">{media_html}</div><div class="post-details"><div class="post-top-info"><div class="post-author"><a href="/@{post['author']}"><img src="{ava}"></a><div><a href="/@{post['author']}" style="color:#fff; font-weight:700; font-size:18px;">{html.escape(author['display_name']) if author else html.escape(post['author'])}</a><div style="font-size:14px; color:var(--text-muted);">@{html.escape(post['author'])}</div></div></div><div class="post-title selectable">{html.escape(post['title'])}</div><div class="post-desc selectable">{html.escape(post['content'])}</div><div class="actions-row"><div class="vote-controls"><button onclick="vote('{post['id']}', 'up')" id="btn-up" class="vote-btn {'active-up' if user_vote == 1 else ''}">{SVG_UP}</button><span class="vote-count" id="vote-count">{score}</span><button onclick="vote('{post['id']}', 'down')" id="btn-down" class="vote-btn {'active-down' if user_vote == -1 else ''}">{SVG_DOWN}</button></div><button onclick="toggleSave('{post['id']}')" id="btn-save" class="action-btn" style="{save_btn_style}" title="{t('save_post', lang)}">{save_icon_html}</button><button class="action-btn" onclick="copyLink()" title="{t('copy_link', lang)}">{SVG_LINK}</button>{delete_btn}</div></div><div class="comments-section"><h3 style="margin-bottom:15px; font-weight:700; font-size:18px;">{t('comments', lang)} (<span id="comment-count">{len(post['comments'])}</span>)</h3>{comments_input_html}<div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div><div id="comments-list">{comments_list_html}</div></div></div></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "feed", html.escape(post['title'])))
 
 if __name__ == "__main__":
