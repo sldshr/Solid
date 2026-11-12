@@ -11,7 +11,6 @@ from datetime import datetime
 app = FastAPI(title="sol-id")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-# Убрал дефолтного админа
 users_db = {} 
 sessions = {} 
 posts_db = [] 
@@ -64,8 +63,10 @@ def get_lang(request: Request):
 def t(key, lang):
     return TRANSLATIONS[lang].get(key, key)
 
-SVG_LOGO = """<svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20ZM15.5 11H8.5V13H15.5V11Z" fill="#3b82f6"/></svg>"""
-SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><path d=%22M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM15.5 11H8.5V13H15.5V11Z%22 fill=%22%233b82f6%22/></svg>"
+# Новый логотип и фавикон (кастомный, 21x19 пикселей, не растягивается)
+SVG_LOGO = """<svg width="21" height="19" viewBox="0 0 21 19" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 0L13.5 7H21L15 11.5L17.5 19L10.5 14.5L3.5 19L6 11.5L0 7H7.5L10.5 0Z" fill="#3b82f6"/></svg>"""
+SVG_FAVICON = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 21 19%22><path d=%22M10.5 0L13.5 7H21L15 11.5L17.5 19L10.5 14.5L3.5 19L6 11.5L0 7H7.5L10.5 0Z%22 fill=%22%233b82f6%22/></svg>"
+
 SVG_UP = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
 SVG_DOWN = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
 SVG_FEED = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>"""
@@ -161,19 +162,23 @@ a{color:var(--accent-color);text-decoration:none;}
 
 /* Верхняя панель */
 .topbar{grid-column:1/-1;position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:0 25px;border-bottom:1px solid var(--border-color);background:rgba(10,10,10,0.95);backdrop-filter:blur(10px);z-index:100;height:70px;}
-.topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;}
+.topbar-left{display:flex;align-items:center;gap:15px;flex-shrink:0;width:auto;}
 .logo{font-size:22px;font-weight:700;color:var(--text-main);display:flex;align-items:center;gap:10px;white-space:nowrap;}
+.logo svg{width:21px;height:19px;object-fit:contain;}
 .menu-toggle{cursor:pointer;padding:8px;color:var(--text-muted);border-radius:6px;transition:background .2s;flex-shrink:0;}
 .menu-toggle:hover{background:var(--card-bg);color:var(--text-main);}
-.topbar-center{position:absolute;left:50%;transform:translateX(-50%);width:100%;max-width:500px;display:flex;justify-content:center;z-index:10;}
-.search-container{width:100%;position:relative;}
-.search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:10px 15px 10px 40px;border-radius:8px;color:#fff;font-size:15px;outline:none;}
+
+.topbar-center{position:absolute;left:50%;transform:translateX(-50%);display:flex;justify-content:center;align-items:center;z-index:10;}
+.page-title{font-size:20px;font-weight:700;color:var(--text-main);letter-spacing:0.5px;}
+
+.topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:15px;flex-shrink:0;width:auto;}
+.search-container{width:250px;position:relative;}
+.search-input{width:100%;background:var(--card-bg);border:1px solid var(--border-color);padding:8px 15px 8px 36px;border-radius:8px;color:#fff;font-size:14px;outline:none;}
 .search-input:focus{border-color:var(--accent-color);}
-.search-icon{position:absolute;left:12px;top:10px;color:var(--text-muted);}
-.search-dropdown{display:none;position:absolute;top:50px;left:0;width:100%;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.6);z-index:150;max-height:300px;overflow-y:auto;}
+.search-icon{position:absolute;left:10px;top:8px;color:var(--text-muted);}
+.search-dropdown{display:none;position:absolute;top:40px;left:0;width:100%;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.6);z-index:150;max-height:300px;overflow-y:auto;}
 .search-dropdown-item{display:flex;align-items:center;gap:10px;padding:10px 15px;color:var(--text-main);border-bottom:1px solid var(--border-color);}
 .search-dropdown-item:hover{background:#2a2a2a;}
-.topbar-right{display:flex;align-items:center;justify-content:flex-end;gap:15px;flex-shrink:0;}
 
 .btn-primary{background-color:var(--accent-color);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:15px;transition:opacity .2s;}
 .btn-primary:hover{opacity:.9;}
@@ -219,8 +224,8 @@ a{color:var(--accent-color);text-decoration:none;}
 .profile-details p{color:var(--text-muted);font-size:16px;}
 
 /* Пост */
-.post-view{display:flex;gap:25px;overflow:hidden;background:transparent;align-items:flex-start;width:100%;}
-.post-media{flex:2;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
+.post-view{display:flex;gap:30px;width:100%;max-width:1400px;margin:0 auto;padding:0 20px;align-items:flex-start;}
+.post-media{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
 .post-media img{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}
 .carousel-nav-btn{position:absolute;top:40%;transform:translateY(-50%);background:rgba(0,0,0,0.6);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
 .carousel-nav-btn:hover{background:rgba(0,0,0,0.9);}
@@ -248,8 +253,10 @@ form .action-btn{height:100%;width:100%;}
 /* Комментарии */
 .comments-section{flex:1;min-height:0;border-top:1px solid var(--border-color);padding-top:20px;}
 
-/* Лента */
-.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;width:100%;}
+/* Лента (4 колонки на ПК) */
+.feed-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:20px;width:100%;}
+@media (max-width:1600px){.feed-grid{grid-template-columns:repeat(3, 1fr);}}
+@media (max-width:1200px){.feed-grid{grid-template-columns:repeat(2, 1fr);}}
 .feed-card{background:var(--card-bg);border-radius:12px;overflow:hidden;border:1px solid var(--border-color);display:flex;flex-direction:column;position:relative;transition:border-color .2s;width:100%;}
 .feed-card:hover{border-color:#444;}
 .feed-card-img-container{width:100%;height:240px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
@@ -322,11 +329,11 @@ input:checked+.slider:before{transform:translateX(22px);}
     .app-layout{display:flex;flex-direction:column;width:100%;min-height:100vh;overflow-x:hidden;}
     .topbar{position:fixed;top:0;left:0;width:100%;height:60px;padding:0 15px;gap:10px;z-index:100;}
     .topbar-left{width:auto;}
-    .topbar-center{position:relative;left:auto;transform:none;max-width:100%;flex:1;margin-left:10px;}
+    .topbar-center{display:none;} /* Скрываем заголовок на телефоне, чтобы не мешал */
     .topbar-right{width:auto;}
     .logo span{display:none;}
     .menu-toggle{display:none!important;}
-    .search-container{max-width:100%;}
+    .search-container{max-width:100%; width: 100%;}
     .topbar-right .user-menu-container{display:none!important;}
     .sidebar{display:none;}
     
@@ -507,7 +514,7 @@ function updateInputAndRender(){
     }
 }
 
-// ИСПРАВЛЕННАЯ ВСТАВКА ИЗ БУФЕРА
+// ВСТАВКА ИЗ БУФЕРА
 document.addEventListener('paste', async function(e) {
     if (!document.getElementById('file-input')) return; 
 
@@ -703,7 +710,9 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     next_lang = "ru" if lang == "en" else "en"
     switch_lang_url = f"/set_lang/{next_lang}?next={request.url.path}"
     
-    page_title = f"sol-id | {title_text}" if title_text else "sol-id"
+    # Заголовок по умолчанию - название текущей страницы
+    display_title = title_text if title_text else t('feed', lang)
+    page_title = f"sol-id | {display_title}"
     
     translations_json = f"""<script>window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang])}; window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`;</script>"""
 
@@ -712,7 +721,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     else:
         nav_right = f"""<a href="/login" class="btn-primary desktop-only" style="padding:8px 16px;">{SVG_USER} <span>{t('login', lang)}</span></a>"""
         
-    lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold; margin-right:10px;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
+    lang_switch_html = f"""<a href="{switch_lang_url}" class="action-btn" style="border:none; background:var(--card-bg); padding:0 10px; color:var(--text-main); font-weight:bold;">{SVG_LANG} <span class="desktop-only" style="margin-left:5px;">{current_lang_str}</span></a>"""
 
     sidebar_html = ""
     if user:
@@ -733,13 +742,14 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
             <a href="/" class="logo">{SVG_LOGO} <span>sol-id</span></a>
         </div>
         <div class="topbar-center">
-            <div class="search-container">
+            <span class="page-title">{display_title}</span>
+        </div>
+        <div class="topbar-right">
+            <div class="search-container desktop-only">
                 <span class="search-icon">{SVG_SEARCH}</span>
                 <input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" autocomplete="off">
                 <div id="searchDropdown" class="search-dropdown"></div>
             </div>
-        </div>
-        <div class="topbar-right">
             {lang_switch_html}
             {nav_right}
         </div>
