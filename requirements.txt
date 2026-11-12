@@ -5,3 +5,4 @@ supabase
 bcrypt 
 httpx
 passlib
+pillow
