@@ -10,7 +10,7 @@ import re
 import asyncio
 import secrets
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 
 app = FastAPI(title="sol-id")
 
@@ -234,6 +234,15 @@ def generate_post_id(visibility):
         return secrets.token_urlsafe(24)
     return str(uuid.uuid4())[:6]
 
+def render_card_media(post):
+    """Render post media for feed/profile cards. If no images — show text description."""
+    if post.get('images'):
+        return f'<img src="{post["images"][0]}" loading="lazy">'
+    desc = (post.get('content') or '').strip()
+    if desc:
+        return f'<div class="feed-card-no-image">{html.escape(desc)}</div>'
+    return f'<div class="feed-card-no-image empty">{SVG_IMAGE}</div>'
+
 @app.get("/manifest.json")
 async def get_manifest():
     return JSONResponse({
@@ -245,7 +254,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v8';
+    const CACHE_NAME = 'solid-cache-v9';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -369,6 +378,9 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .profile-tab-content{display:none;}
 .profile-tab-content.active{display:block;}
 .post-view{display:flex;gap:30px;width:100%;max-width:1400px;margin:0 auto;padding:0 20px;align-items:flex-start;}
+.post-view.no-media{display:block;max-width:900px;padding:0 20px;}
+.post-view.no-media .post-details{min-width:0;width:100%;flex:none;}
+.post-view.no-media .post-desc{font-size:18px;line-height:1.7;color:#e2e8f0;}
 .post-media{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
 .post-media img{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}
 .carousel-nav-btn{position:absolute;top:40%;transform:translateY(-50%);background:rgba(0,0,0,0.6);color:#fff;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
@@ -401,6 +413,8 @@ form .action-btn{height:100%;width:100%;}
 .feed-card:hover{border-color:#444;}
 .feed-card-img-container{width:100%;height:240px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
 .feed-card-img-container img{width:100%;height:100%;object-fit:cover;}
+.feed-card-no-image{padding:20px;width:100%;height:100%;color:#ccc;font-size:15px;line-height:1.6;background:linear-gradient(135deg,#1a1a1a 0%,#0f0f0f 100%);white-space:pre-wrap;word-break:break-word;overflow:hidden;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;}
+.feed-card-no-image.empty{display:flex;align-items:center;justify-content:center;color:#444;padding:0;}
 .feed-card-info{padding:15px;flex:1;display:flex;flex-direction:column;gap:10px;}
 .feed-card-title{font-weight:700;font-size:18px;line-height:1.3;}
 .feed-card-meta{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--text-muted);margin-top:auto;}
@@ -415,6 +429,9 @@ form .action-btn{height:100%;width:100%;}
 .file-preview{display:flex;align-items:center;gap:15px;background:var(--bg-color);padding:10px;border-radius:8px;border:1px solid var(--border-color);margin-top:15px;width:100%;text-align:left;cursor:default;}
 .file-preview img{width:50px;height:50px;object-fit:cover;border-radius:6px;}
 .create-sidebar{flex:1;background:var(--card-bg);padding:30px;border-radius:16px;border:1px solid var(--border-color);display:flex;flex-direction:column;gap:15px;width:100%;}
+.char-counter{font-size:12px;color:var(--text-muted);text-align:right;margin-top:6px;}
+.char-counter.near{color:#f59e0b;}
+.char-counter.full{color:var(--danger-color);}
 .switch{position:relative;display:inline-block;width:50px;height:28px;}
 .switch input{opacity:0;width:0;height:0;}
 .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:var(--border-color);transition:.4s;border-radius:34px;}
@@ -504,6 +521,7 @@ input:checked+.slider:before{transform:translateX(22px);}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
     .post-view{display:flex;flex-direction:column;padding:0;gap:15px;height:auto;width:100%;}
+    .post-view.no-media{padding:0;}
     .post-header-actions{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}
     .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}
     .carousel-nav-btn{top:45%;width:36px;height:36px;z-index:10;}
@@ -569,30 +587,41 @@ setInterval(updateDates, 30000);
 
 // ============ IMAGE COMPRESSION ============
 async function compressImage(file) {
+    if (!file || !file.type) return null;
+
+    // GIFs: never compress (would turn into static image, destroying animation)
     if (file.type === 'image/gif') {
         if (file.size > 5 * 1024 * 1024) {
             showToast(window.TRANSLATIONS.gif_too_large || 'GIF too large');
             throw new Error('GIF too large');
         }
-        if (window.imageCompression) {
-            try {
-                var compressed = await imageCompression(file, {
-                    maxSizeMB: 2, maxWidthOrHeight: 800, useWebWorker: false, initialQuality: 0.8
-                });
-                return compressed;
-            } catch(e) { return file; }
-        }
         return file;
     }
+
     if (!file.type.startsWith('image/')) return file;
+
     if (window.imageCompression) {
         try {
-            return await imageCompression(file, {
+            var compressed = await imageCompression(file, {
                 maxSizeMB: 1.2, maxWidthOrHeight: 1920, useWebWorker: true, initialQuality: 0.85
             });
-        } catch(e) {}
+            // Ensure we always return a proper File (never a raw Blob) — DataTransfer requires File
+            if (compressed instanceof File) return compressed;
+            if (compressed instanceof Blob) {
+                return new File([compressed], file.name || 'image.jpg', { type: compressed.type || file.type || 'image/jpeg' });
+            }
+            return file;
+        } catch(e) {
+            console.warn('Compression failed:', e);
+        }
     }
     return file;
+}
+
+function ensureFile(blobOrFile, fallbackName) {
+    if (blobOrFile instanceof File) return blobOrFile;
+    return new File([blobOrFile], fallbackName || (blobOrFile && blobOrFile.name) || 'image.jpg',
+                    { type: (blobOrFile && blobOrFile.type) || 'image/jpeg' });
 }
 
 // ============ PHOTO VIEWER ============
@@ -740,12 +769,18 @@ async function handleFiles(input) {
     if (!input.files) return;
     var newFiles = Array.from(input.files);
     for (var i = 0; i < newFiles.length; i++) {
-        if (filesList.length < 3) {
-            try {
-                var compressed = await compressImage(newFiles[i]);
-                filesList.push(compressed);
-            } catch(e) { showToast(e.message || 'Error'); }
-        } else { showToast(window.TRANSLATIONS.max_files); break; }
+        if (filesList.length >= 3) {
+            showToast(window.TRANSLATIONS.max_files);
+            break;
+        }
+        try {
+            var compressed = await compressImage(newFiles[i]);
+            if (!compressed) continue;
+            // Final safety net — DataTransfer.items.add() requires File
+            filesList.push(ensureFile(compressed, newFiles[i].name));
+        } catch(e) {
+            showToast(e.message || 'Error');
+        }
     }
     input.value = '';
     updateInputAndRender();
@@ -759,7 +794,13 @@ function removeFile(index, event) {
 
 function updateInputAndRender() {
     var dt = new DataTransfer();
-    filesList.forEach(f => dt.items.add(f));
+    filesList.forEach(function(f, i) {
+        // Ensure everything in filesList is a File (defensive)
+        if (!(f instanceof File)) {
+            filesList[i] = ensureFile(f);
+        }
+        dt.items.add(filesList[i]);
+    });
     var fileInput = document.getElementById('file-input');
     if (fileInput) fileInput.files = dt.files;
     var previewContainer = document.getElementById('file-list');
@@ -775,7 +816,8 @@ function updateInputAndRender() {
                 var div = document.createElement('div');
                 div.className = 'file-preview';
                 div.onclick = (e) => e.stopPropagation();
-                div.innerHTML = '<img src="' + e.target.result + '"><div style="flex:1;overflow:hidden;"><div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">' + file.name + '</div><div style="font-size:12px;color:var(--text-muted);">' + (file.size/1024).toFixed(1) + ' KB</div></div><span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile(' + index + ', event)">×</span>';
+                var sizeLabel = file.type === 'image/gif' ? ' GIF • ' : ' ';
+                div.innerHTML = '<img src="' + e.target.result + '"><div style="flex:1;overflow:hidden;"><div style="font-size:14px;color:#fff;font-weight:500;text-overflow:ellipsis;white-space:nowrap;overflow:hidden;">' + file.name + '</div><div style="font-size:12px;color:var(--text-muted);">' + sizeLabel + (file.size/1024).toFixed(1) + ' KB</div></div><span style="cursor:pointer;color:var(--text-muted);font-size:24px;padding:0 10px;" onclick="removeFile(' + index + ', event)">×</span>';
                 previewContainer.appendChild(div);
             };
             reader.readAsDataURL(file);
@@ -793,10 +835,10 @@ document.addEventListener('paste', async function(e) {
     if (imageFile) {
         e.preventDefault();
         if (filesList.length < 3) {
-            var file = new File([imageFile], "pasted_" + Date.now() + ".png", { type: imageFile.type });
+            var file = new File([imageFile], "pasted_" + Date.now() + "." + (imageFile.type === 'image/gif' ? 'gif' : 'png'), { type: imageFile.type });
             try {
                 var compressed = await compressImage(file);
-                filesList.push(compressed);
+                if (compressed) filesList.push(ensureFile(compressed, file.name));
                 updateInputAndRender();
             } catch(e) {}
         } else { showToast(window.TRANSLATIONS.max_files); }
@@ -873,6 +915,15 @@ function applyCrop() {
     document.getElementById('avatar-base64').value = dataUrl;
     document.getElementById('avatar-preview').src = dataUrl;
     document.getElementById('crop-modal').style.display = 'none';
+}
+
+function updateCharCount(el) {
+    var counter = document.getElementById('char-count');
+    if (!counter) return;
+    var len = el.value.length;
+    counter.textContent = len + ' / 2500';
+    counter.classList.toggle('near', len >= 2000 && len < 2500);
+    counter.classList.toggle('full', len >= 2500);
 }
 
 async function vote(postId, action) {
@@ -1088,7 +1139,7 @@ function setupSSE() {
 
 function handleSSE(msg) {
     var postId = window.CURRENT_POST_ID;
-    
+
     if (msg.type === 'new_post') {
         if (window.location.pathname === '/' && !refreshBannerVisible) {
             var banner = document.getElementById('new-posts-banner');
@@ -1098,7 +1149,7 @@ function handleSSE(msg) {
             }
         }
     }
-    
+
     if (msg.type === 'new_comment' && postId && msg.post_id === postId) {
         if (!document.getElementById('comment-' + msg.comment.id)) {
             var list = document.getElementById('comments-list');
@@ -1109,12 +1160,12 @@ function handleSSE(msg) {
             if (cCount) cCount.innerText = msg.total_comments;
         }
     }
-    
+
     if (msg.type === 'vote_update' && postId && msg.post_id === postId) {
         var count = document.getElementById('vote-count');
         if (count) count.innerText = msg.score;
     }
-    
+
     if (msg.type === 'delete_comment' && postId && msg.post_id === postId) {
         var el = document.getElementById('comment-' + msg.comment_id);
         if (el) el.remove();
@@ -1125,7 +1176,7 @@ function handleSSE(msg) {
             if (noMsg) noMsg.style.display = 'block';
         }
     }
-    
+
     if (msg.type === 'delete_post' && window.location.pathname === '/' + msg.post_id) {
         window.location.href = '/';
     }
@@ -1142,6 +1193,9 @@ document.addEventListener('DOMContentLoaded', function() {
     scrollToCommentIfNeeded();
     updateDates();
     setupSSE();
+    // Initialize char counter if textarea exists and has a value
+    var ta = document.querySelector('textarea[name="content"]');
+    if (ta) updateCharCount(ta);
 });
 
 document.addEventListener('htmx:afterSwap', function(evt) {
@@ -1295,9 +1349,9 @@ async def search_posts(request: Request, q: str = ""):
         for post in results:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            media_html = render_card_media(post)
             date_iso = post.get('created_at', '')
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div></div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
 
@@ -1313,11 +1367,11 @@ async def read_feed(request: Request):
         for post in feed_posts:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            media_html = render_card_media(post)
             score = get_score(post['id'])
             arrow_icon = SVG_DOWN if score < 0 else SVG_UP
             date_iso = post.get('created_at', '')
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date" data-iso="{date_iso}"></div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div style="display:flex;align-items:center;gap:10px;"><div class="post-date" data-iso="{date_iso}"></div><div style="display:flex;align-items:center;gap:4px;">{arrow_icon} {score}</div></div></div></div></a>"""
         content = f'<div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('feed', lang)))
 
@@ -1335,9 +1389,9 @@ async def saved_posts(request: Request):
         for post in saved_posts_list:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            media_html = render_card_media(post)
             date_iso = post.get('created_at', '')
-            cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a></div>"""
+            cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a></div>"""
         content = f'<h2 style="margin-bottom:25px; padding:15px 15px 0 15px;">{t("saved", lang)}</h2><div class="feed-grid">{cards}</div>'
     return HTMLResponse(content=render_layout(content, user, request, "saved", t('saved', lang)))
 
@@ -1476,7 +1530,7 @@ async def create_post_page(request: Request):
     user = get_current_user(request)
     lang = get_lang(request)
     if not user: return RedirectResponse(url="/login")
-    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="500" style="min-height:120px; padding:14px;"></textarea></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
+    content = f"""<div style="max-width: 1100px; margin: 0 auto; width: 100%;"><h2 style="margin-bottom: 30px; font-weight: 700; font-size: 32px; padding: 15px 15px 0 15px;">{t('new_post', lang)}</h2><form action="/write" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" class="create-layout"><div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()"><div id="dropzone-text" style="display:flex; flex-direction:column; align-items:center;">{SVG_IMAGE}<div style="margin-top:20px; font-size:20px; font-weight:700; color:#fff;">{t('upload_hint', lang)}</div><div style="margin-top:10px; font-size:15px; color:var(--text-muted);">{t('upload_limit', lang)}</div><div style="margin-top:20px; background:#2a2a2a; padding:12px 24px; border-radius:8px; color:#fff; font-weight:500; border:1px solid var(--border-color); cursor:pointer;">{t('choose_files', lang)}</div></div><div id="file-list" style="width:100%; display:flex; flex-direction:column; gap:10px;"></div><input id="file-input" type="file" name="images" multiple accept="image/*,image/gif" style="display:none;" onchange="handleFiles(this)" onclick="event.stopPropagation()"></div><div class="create-sidebar"><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('title', lang)} *</label><input type="text" name="title" placeholder="{t('title', lang)}" required style="padding:14px;"></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('description', lang)} (Max 2500)</label><textarea name="content" placeholder="{t('description', lang)}" maxlength="2500" oninput="updateCharCount(this)" style="min-height:140px; padding:14px;"></textarea><div class="char-counter" id="char-count">0 / 2500</div></div><div class="input-group"><label style="font-size:15px; font-weight:700; color:#fff; margin-bottom:8px; display:block;">{t('visibility', lang)}</label><div style="display:flex; gap:10px;"><button type="button" id="btn-feed" onclick="setVisibility('feed')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--accent-color); color:var(--accent-color); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_EYE} {t('in_feed', lang)}</button><button type="button" id="btn-link" onclick="setVisibility('link')" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:var(--bg-color); padding:12px; border-radius:8px; border:1px solid var(--border-color); color:var(--text-muted); cursor:pointer; font-family:inherit; font-size:15px;">{SVG_LINK} {t('by_link', lang)}</button></div><input type="hidden" name="visibility" id="vis-input" value="feed"></div><div class="input-group" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><label style="font-size:15px; font-weight:700; color:#fff;">{t('allow_comments', lang)}</label><label class="switch"><input type="checkbox" name="allow_comments" checked><span class="slider"></span></label></div><button type="submit" class="btn-primary" style="width:100%; justify-content:center; padding:16px; font-size:16px;">{SVG_PLUS} {t('publish', lang)}</button></div></form></div>"""
     return HTMLResponse(content=render_layout(content, user, request, "write", t('new_post', lang)))
 
 @app.post("/write")
@@ -1491,10 +1545,11 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
     post_id = generate_post_id(visibility)
     new_post = {
         "id": post_id, "author": user["username"],
-        "title": html.escape(title), "content": html.escape(content),
+        "title": html.escape(title), "content": html.escape(content[:2500]),
         "images": img_b64_list, "visibility": visibility,
         "votes": {"up": [], "down": []}, "comments": [],
-        "allow_comments": allow_comments
+        "allow_comments": allow_comments,
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
     supabase.table("posts").insert(new_post).execute()
     posts_db[post_id] = new_post
@@ -1601,10 +1656,10 @@ async def view_profile(request: Request, username: str):
     else: user_posts = sorted([p for p in posts_db.values() if p['author'] == username and p.get('visibility') == 'feed'], key=lambda p: p.get('created_at', ''), reverse=True)
     posts_html = ""
     for post in user_posts:
-        img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+        media_html = render_card_media(post)
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
         date_iso = post.get('created_at', '')
-        posts_html += f"""<a href="/{post['id']}" class="feed-card">{badge}<div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
+        posts_html += f"""<a href="/{post['id']}" class="feed-card">{badge}<div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
     if not posts_html: posts_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_posts", lang)}</div>'
     saved_html = ""
     saved_ids = profile_user.get('saved_posts', [])
@@ -1613,9 +1668,9 @@ async def view_profile(request: Request, username: str):
         for post in saved_posts_list:
             author = users_db.get(post['author'])
             a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            img_html = f'<img src="{post["images"][0]}" loading="lazy">' if post['images'] else f'<div style="color:#555;">{SVG_IMAGE}</div>'
+            media_html = render_card_media(post)
             date_iso = post.get('created_at', '')
-            saved_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{img_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
+            saved_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}"></div></div></div></a>"""
     if not saved_html: saved_html = f'<div style="color:var(--text-muted); font-size:18px; text-align:center; padding:40px 20px; width:100%;">{t("no_saved", lang)}</div>'
     edit_btn = f'<div class="profile-edit-btn-wrapper"><a href="/settings" class="action-btn" style="border-radius:50%; width:44px; height:44px; padding:0; justify-content:center;" title="{t("edit_profile", lang)}">{SVG_SETTINGS}</a></div>' if is_own_profile else ''
     tabs_html = f"""<div class="profile-tabs"><button class="profile-tab-btn active" data-tab="posts" onclick="switchProfileTab('posts')">{t('posts', lang)}</button>{f'<button class="profile-tab-btn" data-tab="saved" onclick="switchProfileTab(\'saved\')">{t("saved", lang)}</button>' if is_own_profile else ''}</div>"""
@@ -1661,7 +1716,8 @@ async def _render_post_page(request: Request, post_id: str):
             show_back = True
     back_html = f'<a href="javascript:history.back()" id="back-btn" style="display:{"flex" if show_back else "none"}; align-items:center; color:var(--text-muted); padding:8px;">{SVG_BACK}</a>'
     delete_btn = f'''<button onclick="confirmDeletePost(event, '{post_id}')" style="background:none; border:none; color:var(--danger-color); cursor:pointer; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">{SVG_TRASH}</button>''' if user and user['username'] == post['author'] else ''
-    if post['images']:
+    has_media = bool(post.get('images'))
+    if has_media:
         imgs_html = ""
         for i, img in enumerate(post['images']):
             display = "" if i == 0 else "none"
@@ -1669,7 +1725,8 @@ async def _render_post_page(request: Request, post_id: str):
         nav_btns = f'<div class="carousel-nav-btn left" onclick="changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         safe_images_json = html.escape(json.dumps(post['images']))
         media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">{imgs_html}{nav_btns}</div>"""
-    else: media_html = f'<div class="post-media" style="display:flex; align-items:center; justify-content:center; color:#555; aspect-ratio:4/3;">{SVG_IMAGE}</div>'
+    else:
+        media_html = ''
     if user:
         save_icon_html = SVG_SAVED if is_saved else SVG_SAVE
         save_btn_style = "color:var(--accent-color); border-color:var(--accent-color);" if is_saved else ""
@@ -1692,10 +1749,7 @@ async def _render_post_page(request: Request, post_id: str):
         comments_list_html += f"""<div id="comment-{c['id']}" style="display:flex; gap:10px; margin-bottom:15px; justify-content:space-between;"><div style="display:flex; gap:10px;"><img src="{c_ava}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;"><div><div style="font-weight:700; font-size:14px;">{c_display} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">@{c['login']}</span></div><div style="font-size:14px; margin-top:2px;">{c_text}</div></div></div><div style="display:flex;gap:2px;align-items:flex-start;">{copy_btn}{del_btn}</div></div>"""
     no_comments_style = "display:block;" if len(post_comments) == 0 else "display:none;"
     date_iso = post.get('created_at', '')
-    content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">{back_html}</div>
-    <div class="post-view">
-        {media_html}
-        <div class="post-details">
+    details_html = f"""<div class="post-details">
             <div class="post-top-info">
                 <div class="post-author">
                     <a href="/@{post['author']}"><img src="{ava}"></a>
@@ -1714,8 +1768,13 @@ async def _render_post_page(request: Request, post_id: str):
                 <div id="no-comments-msg" style="{no_comments_style} font-size:15px; color:var(--text-muted); text-align:center; padding:20px;">{t('no_comments', lang)}</div>
                 <div id="comments-list">{comments_list_html}</div>
             </div>
-        </div>
-    </div>"""
+        </div>"""
+    if has_media:
+        post_view_html = f'<div class="post-view">{media_html}{details_html}</div>'
+    else:
+        post_view_html = f'<div class="post-view no-media">{details_html}</div>'
+    content = f"""<div class="post-header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">{back_html}</div>
+    {post_view_html}"""
     return HTMLResponse(content=render_layout(content, user, request, "feed", html.escape(post['title']), post_id_for_client=post_id))
 
 if __name__ == "__main__":
