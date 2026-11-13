@@ -151,7 +151,8 @@ TRANSLATIONS = {
         "login_to_interact": "Log in to vote, save, and comment", "reset": "Reset", "copy_comment_link": "Copy comment link",
         "new_posts_available": "New posts available. Refresh?", "refresh": "Refresh", "gif_too_large": "GIF is too large (max 5MB)",
         "just_now": "just now", "min_ago": "min ago", "hr_ago": "h ago", "yesterday": "yesterday", "days_ago": "d ago",
-        "account": "Account", "appearance": "Appearance", "published": "Published!", "publishing": "Publishing..."
+        "account": "Account", "appearance": "Appearance", "published": "Published!", "publishing": "Publishing...",
+        "disable_gifs": "Disable GIF animations", "settings_saved": "Settings saved!"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -180,7 +181,8 @@ TRANSLATIONS = {
         "login_to_interact": "Войдите, чтобы оценивать, сохранять и комментировать", "reset": "Сброс", "copy_comment_link": "Скопировать ссылку на комментарий",
         "new_posts_available": "Есть новые посты. Обновить?", "refresh": "Обновить", "gif_too_large": "GIF слишком большой (макс. 5MB)",
         "just_now": "только что", "min_ago": "мин назад", "hr_ago": "ч назад", "yesterday": "вчера", "days_ago": "дн назад",
-        "account": "Аккаунт", "appearance": "Оформление", "published": "Опубликовано!", "publishing": "Публикация..."
+        "account": "Аккаунт", "appearance": "Оформление", "published": "Опубликовано!", "publishing": "Публикация...",
+        "disable_gifs": "Отключить GIF анимации", "settings_saved": "Настройки сохранены!"
     }
 }
 
@@ -222,6 +224,13 @@ def format_date_absolute(iso_str, lang):
     if lang == "ru":
         return local.strftime("%d.%m.%Y, %H:%M")
     return local.strftime("%m/%d/%Y, %I:%M %p")
+
+def linkify_escaped(escaped_text):
+    if not escaped_text: return ""
+    # Matches http/https URLs
+    pattern = re.compile(r'(https?://[^\s<]+)')
+    # Replace with anchor tag
+    return pattern.sub(r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color); text-decoration:underline; word-break:break-all;">\1</a>', escaped_text)
 
 SVG_UP = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
 SVG_DOWN = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>"""
@@ -269,12 +278,18 @@ def generate_post_id(visibility):
         return secrets.token_urlsafe(24)
     return str(uuid.uuid4())[:6]
 
-def render_card_media(post):
+def render_media_src(src, user):
+    if user and user.get('disable_gifs') and src.startswith('data:image/gif'):
+        return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23151515"/><text x="50" y="50" fill="%2394a3b8" font-size="14" text-anchor="middle" dominant-baseline="middle">GIF disabled</text></svg>'
+    return src
+
+def render_card_media(post, user=None):
     if post.get('images'):
-        return f'<img src="{post["images"][0]}" loading="lazy">'
+        img_src = render_media_src(post["images"][0], user)
+        return f'<img src="{img_src}" loading="lazy">'
     desc = (post.get('content') or '').strip()
     if desc:
-        return f'<div class="feed-card-no-image">{html.escape(desc)}</div>'
+        return f'<div class="feed-card-no-image">{linkify_escaped(desc)}</div>'
     return f'<div class="feed-card-no-image empty">{SVG_IMAGE}</div>'
 
 @app.get("/manifest.json")
@@ -288,7 +303,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v11';
+    const CACHE_NAME = 'solid-cache-v12';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -429,6 +444,7 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .post-author img{width:48px;height:48px;border-radius:50%!important;}
 .post-title{font-size:26px;font-weight:700;margin-bottom:10px;}
 .post-desc{color:#ccc;font-size:16px;margin-bottom:15px;white-space:pre-wrap;line-height:1.5;}
+.post-desc a{color:var(--accent-color);text-decoration:underline;word-break:break-all;}
 .actions-row{display:flex;align-items:center;gap:10px;margin-top:10px;margin-bottom:25px;flex-wrap:wrap;flex-shrink:0;}
 .vote-controls{display:flex;align-items:center;gap:12px;background:var(--bg-color);padding:0 12px;border-radius:8px;border:1px solid var(--border-color);height:40px;position:relative;z-index:5;}
 .vote-btn{background:none;border:none;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:color .2s;height:100%;position:relative;z-index:6;}
@@ -450,6 +466,7 @@ form .action-btn{height:100%;width:100%;}
 .feed-card-img-container{width:100%;height:240px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
 .feed-card-img-container img{width:100%;height:100%;object-fit:cover;}
 .feed-card-no-image{padding:20px;width:100%;height:100%;color:#ccc;font-size:15px;line-height:1.6;background:linear-gradient(135deg,#1a1a1a 0%,#0f0f0f 100%);white-space:pre-wrap;word-break:break-word;overflow:hidden;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;}
+.feed-card-no-image a{color:var(--accent-color);text-decoration:underline;word-break:break-all;}
 .feed-card-no-image.empty{display:flex;align-items:center;justify-content:center;color:#444;padding:0;}
 .feed-card-info{padding:15px;flex:1;display:flex;flex-direction:column;gap:10px;}
 .feed-card-title{font-weight:700;font-size:18px;line-height:1.3;}
@@ -620,6 +637,23 @@ JS_SCRIPT = r"""
 var filesList = [];
 var currentImage = null;
 var currentZoom = 1;
+var carouselImages = [];
+var currentImgIndex = 0;
+
+// ============ CAROUSEL ============
+function showImg(idx) {
+    carouselImages.forEach((img, i) => img.style.display = i === idx ? 'block' : 'none');
+}
+function changeImg(dir) {
+    if (carouselImages.length <= 1) return;
+    currentImgIndex = (currentImgIndex + dir + carouselImages.length) % carouselImages.length;
+    showImg(currentImgIndex);
+}
+function initCarousel() {
+    carouselImages = document.querySelectorAll('.carousel-img');
+    currentImgIndex = 0;
+    if (carouselImages.length > 0) showImg(0);
+}
 
 // ============ DATE FORMATTER ============
 function formatRelativeDate(iso, lang) {
@@ -735,52 +769,47 @@ function photoNext() { pvState.index = (pvState.index + 1) % pvState.images.leng
 function photoPrev() { pvState.index = (pvState.index - 1 + pvState.images.length) % pvState.images.length; var img = document.getElementById('photo-viewer-img'); if (img) img.src = pvState.images[pvState.index]; photoReset(); }
 
 // Global wheel/mouse/keyboard handlers for the photo viewer
-document.addEventListener('DOMContentLoaded', function() {
-    // Wheel zoom (attached on document so survives any DOM changes)
-    document.addEventListener('wheel', function(e) {
-        if (!isViewerOpen()) return;
-        var pv = document.getElementById('photo-viewer');
-        if (!pv.contains(e.target)) return;
-        e.preventDefault();
-        photoZoom(e.deltaY > 0 ? -0.25 : 0.25);
-    }, { passive: false });
+document.addEventListener('wheel', function(e) {
+    if (!isViewerOpen()) return;
+    var pv = document.getElementById('photo-viewer');
+    if (!pv.contains(e.target)) return;
+    e.preventDefault();
+    photoZoom(e.deltaY > 0 ? -0.25 : 0.25);
+}, { passive: false });
 
-    // Mouse drag (any button)
-    document.addEventListener('mousedown', function(e) {
-        if (!isViewerOpen()) return;
+document.addEventListener('mousedown', function(e) {
+    if (!isViewerOpen()) return;
+    var img = document.getElementById('photo-viewer-img');
+    var pv = document.getElementById('photo-viewer');
+    if (!img || !pv.contains(e.target)) return;
+    if (e.target.tagName === 'BUTTON') return;
+    pvState.isDragging = true;
+    pvState.startX = e.clientX - pvState.tx;
+    pvState.startY = e.clientY - pvState.ty;
+    img.style.cursor = 'grabbing';
+    e.preventDefault();
+});
+document.addEventListener('mousemove', function(e) {
+    if (!pvState.isDragging) return;
+    pvState.tx = e.clientX - pvState.startX;
+    pvState.ty = e.clientY - pvState.startY;
+    updatePanoTransform();
+});
+document.addEventListener('mouseup', function() {
+    if (pvState.isDragging) {
+        pvState.isDragging = false;
         var img = document.getElementById('photo-viewer-img');
-        var pv = document.getElementById('photo-viewer');
-        if (!img || !pv.contains(e.target)) return;
-        if (e.target.tagName === 'BUTTON') return;
-        pvState.isDragging = true;
-        pvState.startX = e.clientX - pvState.tx;
-        pvState.startY = e.clientY - pvState.ty;
-        img.style.cursor = 'grabbing';
-        e.preventDefault();
-    });
-    document.addEventListener('mousemove', function(e) {
-        if (!pvState.isDragging) return;
-        pvState.tx = e.clientX - pvState.startX;
-        pvState.ty = e.clientY - pvState.startY;
-        updatePanoTransform();
-    });
-    document.addEventListener('mouseup', function() {
-        if (pvState.isDragging) {
-            pvState.isDragging = false;
-            var img = document.getElementById('photo-viewer-img');
-            if (img) img.style.cursor = 'grab';
-        }
-    });
+        if (img) img.style.cursor = 'grab';
+    }
+});
 
-    // Keyboard
-    document.addEventListener('keydown', function(e) {
-        if (!isViewerOpen()) return;
-        if (e.key === 'ArrowLeft') { e.preventDefault(); photoPrev(); }
-        else if (e.key === 'ArrowRight') { e.preventDefault(); photoNext(); }
-        else if (e.key === 'Escape') { e.preventDefault(); closePanorama(); }
-        else if (e.key === '+' || e.key === '=') { e.preventDefault(); photoZoom(0.25); }
-        else if (e.key === '-') { e.preventDefault(); photoZoom(-0.25); }
-    });
+document.addEventListener('keydown', function(e) {
+    if (!isViewerOpen()) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); photoPrev(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); photoNext(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePanorama(); }
+    else if (e.key === '+' || e.key === '=') { e.preventDefault(); photoZoom(0.25); }
+    else if (e.key === '-') { e.preventDefault(); photoZoom(-0.25); }
 });
 
 // Touch handlers (delegated on document)
@@ -1138,6 +1167,49 @@ function settingsBackToNav() {
     if (modal) modal.classList.remove('mobile-section-open');
 }
 
+async function submitSettingsForm(e) {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button[type="submit"]');
+    const originalHtml = btn.innerHTML;
+
+    btn.innerHTML = '<span class="btn-spinner"></span>';
+    btn.disabled = true;
+
+    const formData = new FormData(form);
+
+    try {
+        const res = await fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(window.TRANSLATIONS.settings_saved || 'Settings saved!');
+            // Update DOM elements
+            if (data.avatar) {
+                window.CURRENT_AVATAR = data.avatar;
+                document.querySelectorAll('.user-avatar-small, .mobile-profile-header img, #avatar-preview').forEach(el => el.src = data.avatar);
+            }
+            if (data.display_name) {
+                window.CURRENT_DISPLAY_NAME = data.display_name;
+                document.querySelectorAll('.dropdown-header .name, .mobile-profile-header div div:first-child').forEach(el => el.innerText = data.display_name);
+                // Update profile header title if on profile page
+                var h1s = document.querySelectorAll('.profile-details h1');
+                if (h1s.length > 0) h1s[0].innerText = data.display_name;
+            }
+        } else {
+            showToast('Error saving profile');
+        }
+    } catch(err) {
+        showToast('Error saving profile');
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+}
+
 // ============ OPTIMISTIC VOTE ============
 async function vote(postId, action) {
     var upBtn = document.getElementById('btn-up');
@@ -1439,6 +1511,7 @@ document.addEventListener('DOMContentLoaded', function() {
     scrollToCommentIfNeeded();
     updateDates();
     setupSSE();
+    initCarousel();
     var ta = document.querySelector('textarea[name="content"]');
     if (ta) updateCharCount(ta);
     updatePublishState();
@@ -1455,11 +1528,6 @@ document.addEventListener('DOMContentLoaded', function() {
             var url = window.location.pathname;
             window.history.replaceState({}, document.title, url);
         } catch(e) {}
-    }
-
-    // Toast after settings updated
-    if (window.location.search.indexOf('updated=1') !== -1) {
-        setTimeout(function(){ showToast(window.TRANSLATIONS.profile_updated || 'Profile updated!'); }, 350);
     }
 });
 </script>
@@ -1485,7 +1553,7 @@ def render_settings_modal(user, lang, current_path):
         <div class="settings-content">
             <div id="settings-section-account" class="settings-section">
                 <div class="settings-section-title">{t('account', lang)}</div>
-                <form action="/settings/profile" method="post" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:16px;">
+                <form action="/settings/profile" method="post" enctype="multipart/form-data" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
                     <input type="hidden" name="next" value="{html.escape(current_path)}">
                     <div style="text-align:center;">
                         <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
@@ -1505,13 +1573,24 @@ def render_settings_modal(user, lang, current_path):
             </div>
             <div id="settings-section-appearance" class="settings-section" style="display:none;">
                 <div class="settings-section-title">{t('appearance', lang)}</div>
-                <div class="settings-field">
-                    <label>{t('language', lang)}</label>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <a href="/set_lang/en?next={html.escape(current_path)}" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
-                        <a href="/set_lang/ru?next={html.escape(current_path)}" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
+                <form action="/settings/profile" method="post" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
+                    <input type="hidden" name="display_name" value="{html.escape(user['display_name'])}">
+                    <div class="settings-field" style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+                        <label style="margin-bottom:0;">{t('disable_gifs', lang)}</label>
+                        <label class="switch">
+                            <input type="checkbox" name="disable_gifs" value="true" {'checked' if user.get('disable_gifs') else ''}>
+                            <span class="slider"></span>
+                        </label>
                     </div>
-                </div>
+                    <div class="settings-field" style="margin-top:20px;">
+                        <label>{t('language', lang)}</label>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <a href="/set_lang/en?next={html.escape(current_path)}" class="btn-primary" style="background:{'var(--accent-color)' if lang=='en' else '#333'};">English (EN)</a>
+                            <a href="/set_lang/ru?next={html.escape(current_path)}" class="btn-primary" style="background:{'var(--accent-color)' if lang=='ru' else '#333'};">Русский (RU)</a>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" style="justify-content:center; padding:13px; gap:8px; margin-top:10px;">{SVG_CHECK_SAVE} {t('save', lang)}</button>
+                </form>
             </div>
         </div>
     </div>
@@ -1685,7 +1764,7 @@ async def search_posts(request: Request, q: str = ""):
         for post in results:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            media_html = render_card_media(post)
+            media_html = render_card_media(post, user)
             date_iso = post.get('created_at', '')
             date_text = format_date_relative(date_iso, lang)
             cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
@@ -1704,7 +1783,7 @@ async def read_feed(request: Request):
         for post in feed_posts:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            media_html = render_card_media(post)
+            media_html = render_card_media(post, user)
             score = get_score(post['id'])
             arrow_icon = SVG_DOWN if score < 0 else SVG_UP
             date_iso = post.get('created_at', '')
@@ -1727,7 +1806,7 @@ async def saved_posts(request: Request):
         for post in saved_posts_list:
             author = users_db.get(post['author'])
             ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            media_html = render_card_media(post)
+            media_html = render_card_media(post, user)
             date_iso = post.get('created_at', '')
             date_text = format_date_relative(date_iso, lang)
             cards += f"""<div class="feed-card"><button onclick="toggleSave('{post['id']}', true)" class="feed-card-remove-btn" title="{t('remove_saved', lang)}">×</button><a href="/{post['id']}" style="display:flex; flex-direction:column; flex:1;"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a></div>"""
@@ -1772,7 +1851,7 @@ async def login_user(request: Request, username: str = Form(...), password: str 
         if not pwd_context.verify(password, user["password"]):
             return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
     else:
-        new_user_data = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": []}
+        new_user_data = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": [], "disable_gifs": False}
         supabase.table("users").insert(new_user_data).execute()
         users_db[username] = new_user_data
         is_new = True
@@ -1796,17 +1875,31 @@ async def settings_redirect(request: Request):
     return RedirectResponse(url="/?settings=1", status_code=status.HTTP_302_FOUND)
 
 @app.post("/settings/profile")
-async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None), next: str = Form("/")):
+async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None), disable_gifs: str = Form(None), next: str = Form("/")):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
     update_data = {"display_name": html.escape(display_name)}
+    if disable_gifs is not None:
+        update_data["disable_gifs"] = (disable_gifs == 'true' or disable_gifs == 'on')
+    else:
+        update_data["disable_gifs"] = False
+
     if avatar_base64: update_data["avatar"] = avatar_base64
     elif avatar and avatar.filename: update_data["avatar"] = await image_to_base64(avatar)
+
     supabase.table("users").update(update_data).eq("username", user['username']).execute()
     for k, v in update_data.items(): users_db[user['username']][k] = v
+
+    if request.headers.get("accept") == "application/json":
+        return JSONResponse({
+            "success": True,
+            "display_name": update_data["display_name"],
+            "avatar": update_data.get("avatar", user.get('avatar'))
+        })
+
     if not next or not next.startswith("/") or next.startswith("//"):
         next = "/"
-    return RedirectResponse(url=f"{next}?settings=1&updated=1", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=f"{next}?settings=1", status_code=status.HTTP_302_FOUND)
 
 @app.get("/write", response_class=HTMLResponse)
 async def create_post_page(request: Request):
@@ -1939,7 +2032,7 @@ async def view_profile(request: Request, username: str):
     else: user_posts = sorted([p for p in posts_db.values() if p['author'] == username and p.get('visibility') == 'feed'], key=lambda p: p.get('created_at', ''), reverse=True)
     posts_html = ""
     for post in user_posts:
-        media_html = render_card_media(post)
+        media_html = render_card_media(post, current_user)
         badge = f'<div class="post-badge" title="{t("link_only", lang)}">{SVG_LOCK}</div>' if post.get('visibility') == 'link' else ''
         date_iso = post.get('created_at', '')
         date_text = format_date_relative(date_iso, lang)
@@ -1952,7 +2045,7 @@ async def view_profile(request: Request, username: str):
         for post in saved_posts_list:
             author = users_db.get(post['author'])
             a_ava = author.get('avatar') if author and author.get('avatar') else f"https://api.dicebear.com/7.x/avataaars/svg?seed={post['author']}"
-            media_html = render_card_media(post)
+            media_html = render_card_media(post, current_user)
             date_iso = post.get('created_at', '')
             date_text = format_date_relative(date_iso, lang)
             saved_html += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{a_ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
@@ -2006,7 +2099,10 @@ async def _render_post_page(request: Request, post_id: str):
         imgs_html = ""
         for i, img in enumerate(post['images']):
             display = "" if i == 0 else "none"
-            imgs_html += f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" onclick="openPanorama(this, {i})">'
+            is_gif_disabled = user and user.get('disable_gifs') and img.startswith('data:image/gif')
+            onclick_attr = f'onclick="openPanorama(this, {i})"' if not is_gif_disabled else ''
+            display_src = render_media_src(img, user)
+            imgs_html += f'<img src="{display_src}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" {onclick_attr}>'
         nav_btns = f'<div class="carousel-nav-btn left" onclick="event.stopPropagation(); changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="event.stopPropagation(); changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         safe_images_json = html.escape(json.dumps(post['images']))
         media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">{imgs_html}{nav_btns}</div>"""
@@ -2046,7 +2142,7 @@ async def _render_post_page(request: Request, post_id: str):
                     </div>
                 </div>
                 <div class="post-title selectable">{html.escape(post['title'])}</div>
-                <div class="post-desc selectable">{html.escape(post['content'])}</div>
+                <div class="post-desc selectable">{linkify_escaped(post['content'])}</div>
                 {actions_html}
             </div>
             <div class="comments-section">
