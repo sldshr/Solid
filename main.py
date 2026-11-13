@@ -299,7 +299,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v16';
+    const CACHE_NAME = 'solid-cache-v17';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -579,9 +579,9 @@ input:checked+.slider:before{transform:translateX(22px);}
     .main-content{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;position:relative;z-index:1;}
     .post-page .main-content{margin-top:60px;padding-top:0;}
     .post-page .topbar{padding:0 10px;}
-    .post-page .topbar-center{display:none;}
-    .mobile-post-back{display:flex!important; align-items:center; color:var(--text-main); text-decoration:none;}
     .post-page .logo{display:none!important;}
+    .post-header-actions{display:none!important;}
+    .mobile-post-back{display:flex!important; align-items:center; color:var(--text-main); text-decoration:none;}
     .bottom-nav{display:flex;}
     .profile-header{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;box-sizing:border-box;gap:15px;}
     .profile-avatar{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 auto!important;display:block;flex-shrink:0;position:relative;z-index:1;}
@@ -643,6 +643,7 @@ var currentImage = null;
 var currentZoom = 1;
 var carouselImages = [];
 var currentImgIndex = 0;
+var voteLocks = {};
 
 // ============ FREEZE GIFS ============
 function freezeAllGifs() {
@@ -1316,37 +1317,49 @@ async function submitSettingsForm(e) {
     }
 }
 
-// ============ OPTIMISTIC VOTE ============
+// ============ OPTIMISTIC VOTE (DEBOUNCED) ============
 async function vote(postId, action) {
+    if (voteLocks[postId]) return;
+    voteLocks[postId] = true;
+    
     var upBtn = document.getElementById('btn-up');
     var downBtn = document.getElementById('btn-down');
     var count = document.getElementById('vote-count');
+    
     var currentVote = 0;
     if (upBtn && upBtn.classList.contains('active-up')) currentVote = 1;
     else if (downBtn && downBtn.classList.contains('active-down')) currentVote = -1;
-    var currentScore = parseInt(count ? count.innerText : '0') || 0;
+    
     var newVote = (action === 'up') ? (currentVote === 1 ? 0 : 1) : (currentVote === -1 ? 0 : -1);
-    var delta = newVote - currentVote;
-    // Optimistic update
-    if (count) count.innerText = currentScore + delta;
+    var currentScore = parseInt(count ? count.innerText : '0') || 0;
+    
+    // Optimistic UI
+    if (count) count.innerText = currentScore + (newVote - currentVote);
     if (upBtn) upBtn.className = 'vote-btn ' + (newVote === 1 ? 'active-up' : '');
     if (downBtn) downBtn.className = 'vote-btn ' + (newVote === -1 ? 'active-down' : '');
-    // Send
+    
     try {
-        var res = await fetch('/api/vote/' + postId + '/' + action, { method: 'POST' });
+        var res = await fetch('/api/vote/' + postId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vote: newVote })
+        });
         var data = await res.json();
         if (data.error) {
             showToast(data.error);
+            // revert
             if (count) count.innerText = currentScore;
             if (upBtn) upBtn.className = 'vote-btn ' + (currentVote === 1 ? 'active-up' : '');
             if (downBtn) downBtn.className = 'vote-btn ' + (currentVote === -1 ? 'active-down' : '');
-            return;
+        } else {
+            if (count) count.innerText = data.score;
+            if (upBtn) upBtn.className = 'vote-btn ' + (data.user_vote === 1 ? 'active-up' : '');
+            if (downBtn) downBtn.className = 'vote-btn ' + (data.user_vote === -1 ? 'active-down' : '');
         }
-        if (count) count.innerText = data.score;
-        if (upBtn) upBtn.className = 'vote-btn ' + (data.user_vote === 1 ? 'active-up' : '');
-        if (downBtn) downBtn.className = 'vote-btn ' + (data.user_vote === -1 ? 'active-down' : '');
     } catch(e) {
-        if (count) count.innerText = currentScore;
+        showToast('Network error');
+    } finally {
+        setTimeout(() => { voteLocks[postId] = false; }, 500);
     }
 }
 
@@ -1608,8 +1621,10 @@ function handleSSE(msg) {
         }
     }
     if (msg.type === 'vote_update' && postId && msg.post_id === postId) {
-        var count = document.getElementById('vote-count');
-        if (count) count.innerText = msg.score;
+        if (!voteLocks[postId]) {
+            var count = document.getElementById('vote-count');
+            if (count) count.innerText = msg.score;
+        }
     }
     if (msg.type === 'delete_comment' && postId && msg.post_id === postId) {
         var el = document.getElementById('comment-' + msg.comment_id);
@@ -2128,35 +2143,45 @@ async def create_post(request: Request, title: str = Form(...), content: str = F
         sse_send({"type": "new_post", "post_id": post_id})
     return RedirectResponse(url=f"/{post_id}?published=1", status_code=status.HTTP_302_FOUND)
 
-@app.post("/api/vote/{post_id}/{action}")
-async def vote_post(post_id: str, action: str, request: Request):
+@app.post("/api/vote/{post_id}")
+async def vote_post(post_id: str, request: Request):
     user = get_current_user(request)
     if not user: return JSONResponse({"error": "Unauthorized"}, status_code=401)
     if post_id not in posts_db: return JSONResponse({"error": "Not found"}, status_code=404)
+    
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+        
+    target_vote = body.get("vote", 0)
+    try:
+        target_vote = int(target_vote)
+    except:
+        target_vote = 0
+    if target_vote not in (-1, 0, 1):
+        return JSONResponse({"error": "Invalid vote"}, status_code=400)
+        
     username = user['username']
     old_vote = votes_db.get((post_id, username), 0)
-    delta = 0
-    new_vote = 0
-    if action == 'up':
-        if old_vote == 1:
-            votes_db.pop((post_id, username), None); delta = -1; new_vote = 0
-            supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
-        else:
-            delta = 1 - old_vote
-            votes_db[(post_id, username)] = 1; new_vote = 1
-            supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": 1}).execute()
-    elif action == 'down':
-        if old_vote == -1:
-            votes_db.pop((post_id, username), None); delta = 1; new_vote = 0
-            supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
-        else:
-            delta = -1 - old_vote
-            votes_db[(post_id, username)] = -1; new_vote = -1
-            supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": -1}).execute()
-    else: return JSONResponse({"error": "Invalid action"}, status_code=400)
+    
+    if target_vote == old_vote:
+        return JSONResponse({"score": get_score(post_id), "user_vote": old_vote})
+        
+    delta = target_vote - old_vote
+    votes_db[(post_id, username)] = target_vote
     scores_cache[post_id] = scores_cache.get(post_id, 0) + delta
+    
+    try:
+        if target_vote == 0:
+            supabase.table("users_vote").delete().eq("post_id", post_id).eq("username", username).execute()
+        else:
+            supabase.table("users_vote").upsert({"post_id": post_id, "username": username, "vote": target_vote}).execute()
+    except Exception as e:
+        print("Error saving vote:", e)
+        
     sse_send({"type": "vote_update", "post_id": post_id, "score": scores_cache[post_id]})
-    return JSONResponse({"score": scores_cache[post_id], "user_vote": new_vote})
+    return JSONResponse({"score": scores_cache[post_id], "user_vote": target_vote})
 
 @app.post("/api/save/{post_id}")
 async def save_post(post_id: str, request: Request):
