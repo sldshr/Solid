@@ -159,7 +159,8 @@ TRANSLATIONS = {
         "just_now": "just now", "min_ago": "min ago", "hr_ago": "h ago", "yesterday": "yesterday", "days_ago": "d ago",
         "account": "Account", "appearance": "Appearance", "published": "Published!", "publishing": "Publishing...",
         "disable_gifs": "Disable GIF animations", "settings_saved": "Settings saved!", "search_history": "Recent searches",
-        "gif_crop_warning": "Note: cropping a GIF will make it a static image.", "bio": "Bio (Max 500)", "links": "Links", "add_link": "+ Add Link"
+        "gif_crop_warning": "Note: cropping a GIF will make it a static image.", "bio": "Bio (Max 500)", "links": "Links", "add_link": "+ Add Link",
+        "error": "Error"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -190,7 +191,8 @@ TRANSLATIONS = {
         "just_now": "только что", "min_ago": "мин назад", "hr_ago": "ч назад", "yesterday": "вчера", "days_ago": "дн назад",
         "account": "Аккаунт", "appearance": "Оформление", "published": "Опубликовано!", "publishing": "Публикация...",
         "disable_gifs": "Отключить GIF анимации", "settings_saved": "Настройки сохранены!", "search_history": "Недавние запросы",
-        "gif_crop_warning": "Внимание: при обрезке GIF анимация пропадет.", "bio": "О себе (Макс 500)", "links": "Ссылки", "add_link": "+ Добавить ссылку"
+        "gif_crop_warning": "Внимание: при обрезке GIF анимация пропадет.", "bio": "О себе (Макс 500)", "links": "Ссылки", "add_link": "+ Добавить ссылку",
+        "error": "Ошибка"
     }
 }
 
@@ -306,7 +308,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v20';
+    const CACHE_NAME = 'solid-cache-v21';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -581,6 +583,9 @@ input:checked+.slider:before{transform:translateX(22px);}
 .settings-field input[type="text"], .settings-field textarea{width:100%;padding:12px 14px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:8px;color:#fff;font-size:15px;outline:none;}
 .settings-field input[type="text"]:focus, .settings-field textarea:focus{border-color:var(--accent-color);}
 .settings-field textarea{resize:none;}
+.settings-top-row { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px; }
+.settings-avatar-wrapper { flex-shrink: 0; text-align: center; }
+.settings-fields-wrapper { flex: 1; display: flex; flex-direction: column; gap: 16px; }
 
 @media(max-width:1024px){.app-layout{grid-template-columns:220px 1fr;}.app-layout.sidebar-collapsed{grid-template-columns:80px 1fr;}}
 @media(max-width:900px){
@@ -675,6 +680,11 @@ input:checked+.slider:before{transform:translateX(22px);}
     .settings-modal.mobile-section-open .settings-content{display:block;}
     .settings-modal.mobile-section-open .settings-back-btn{display:flex;}
     .settings-close{top:10px;right:12px;}
+    
+    .settings-top-row { flex-direction: column; align-items: center; }
+    .settings-avatar-wrapper { margin-bottom: 10px; }
+    .settings-fields-wrapper { width: 100%; }
+
     .photo-nav-prev,.photo-nav-next{width:72px!important;height:72px!important;}
     .photo-nav-prev svg,.photo-nav-next svg{width:40px!important;height:40px!important;}
 }
@@ -1421,7 +1431,45 @@ async function submitSettingsForm(e) {
     }
 }
 
-// ============ OPTIMISTIC VOTE (DEBOUNCED) ============
+// ============ LOGIN AJAX ============
+async function handleLogin(e) {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button[type="submit"]');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="btn-spinner"></span>';
+    btn.disabled = true;
+
+    const formData = new FormData(form);
+    try {
+        const res = await fetch('/login', {
+            method: 'POST',
+            body: formData,
+            headers: { 'Accept': 'application/json' }
+        });
+        
+        if (res.redirected) {
+            window.location.href = res.url;
+            return;
+        }
+        
+        const data = await res.json();
+        if (data.error) {
+            document.getElementById('login-error-text').innerText = data.error;
+            document.getElementById('login-error-modal').style.display = 'flex';
+        } else if (data.success) {
+            window.location.href = data.redirect || '/';
+        }
+    } catch(err) {
+        document.getElementById('login-error-text').innerText = 'Network error';
+        document.getElementById('login-error-modal').style.display = 'flex';
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+}
+
+// ============ OPTIMISTIC VOTE ============
 async function vote(postId, action) {
     if (voteLocks[postId]) return;
     voteLocks[postId] = true;
@@ -1881,23 +1929,30 @@ def render_settings_modal(user, lang, current_path):
                 <div class="settings-section-title">{t('account', lang)}</div>
                 <form action="/settings/profile" method="post" enctype="multipart/form-data" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
                     <input type="hidden" name="next" value="{html.escape(current_path)}">
-                    <div style="text-align:center;">
-                        <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
-                            <img id="avatar-preview" src="{avatar_url}">
-                            <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
+                    
+                    <div class="settings-top-row">
+                        <div class="settings-avatar-wrapper">
+                            <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
+                                <img id="avatar-preview" src="{avatar_url}">
+                                <div class="avatar-edit-overlay">{SVG_CAMERA}</div>
+                            </div>
+                            <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
+                            <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
+                            <input type="hidden" name="avatar_base64" id="avatar-base64">
                         </div>
-                        <div style="font-size:13px; color:var(--text-muted); margin-top:10px;">{t('change_avatar', lang)}</div>
-                        <input type="file" id="avatar-file" name="avatar" accept="image/*,image/gif" onchange="loadAvatar(event)" style="display:none;">
-                        <input type="hidden" name="avatar_base64" id="avatar-base64">
+                        
+                        <div class="settings-fields-wrapper">
+                            <div class="settings-field">
+                                <label>{t('display_name', lang)}</label>
+                                <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required>
+                            </div>
+                            <div class="settings-field">
+                                <label>{t('bio', lang)}</label>
+                                <textarea name="bio" maxlength="500" rows="3">{bio_val}</textarea>
+                            </div>
+                        </div>
                     </div>
-                    <div class="settings-field">
-                        <label>{t('display_name', lang)}</label>
-                        <input type="text" name="display_name" value="{html.escape(user['display_name'])}" required>
-                    </div>
-                    <div class="settings-field">
-                        <label>{t('bio', lang)}</label>
-                        <textarea name="bio" maxlength="500" rows="3">{bio_val}</textarea>
-                    </div>
+
                     <div class="settings-field">
                         <label>{t('links', lang)}</label>
                         <div id="links-container" style="display:flex; flex-direction:column; gap:10px; margin-bottom:10px;"></div>
@@ -2069,6 +2124,15 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
         <button class="btn-primary" onclick="closeWelcomeModal()" style="width:100%; justify-content:center; padding:12px; margin-top:10px;">{t('got_it', lang)}</button>
     </div>
 </div>
+<div id="login-error-modal" class="overlay" style="z-index:11000;" onclick="this.style.display='none'">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <h3>{t('error', lang)}</h3>
+        <p id="login-error-text"></p>
+        <div class="modal-actions">
+            <button class="btn-primary" onclick="document.getElementById('login-error-modal').style.display='none'" style="background:#333;">{t('close', lang)}</button>
+        </div>
+    </div>
+</div>
 <div id="toast" class="toast"></div>
 {settings_modal_html}
 {bottom_nav}
@@ -2172,7 +2236,7 @@ async def login_page(request: Request):
     lang = get_lang(request)
     content = f"""
     <div class="auth-container">
-        <form class="auth-form" action="/login" method="post">
+        <form class="auth-form" onsubmit="handleLogin(event)">
             <h2>{t('login', lang)}</h2>
             <div class="input-group">
                 <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off" oninput="validateUsername(this.value)">
@@ -2198,21 +2262,24 @@ async def login_user(request: Request, username: str = Form(...), password: str 
     lang = get_lang(request)
     username = username.strip()
     if len(password) < 6 or not re.match(r"^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]+$", password):
-        return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("invalid_pass_format", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
+        return JSONResponse({"error": t("invalid_pass_format", lang)}, status_code=400)
+    
     user = users_db.get(username)
     is_new = False
     if user:
         if not pwd_context.verify(password, user["password"]):
-            return HTMLResponse(content=render_layout(f'<div class="auth-container"><div class="auth-form"><div class="error">{t("wrong_pass", lang)}</div><a href="/login" class="btn-primary">{t("back", lang)}</a></div></div>', None, request, "login", t('login', lang)))
+            return JSONResponse({"error": t("wrong_pass", lang)}, status_code=401)
     else:
         new_user_data = {"username": username, "password": pwd_context.hash(password), "display_name": username, "avatar": None, "saved_posts": [], "disable_gifs": False, "bio": "", "links": []}
         supabase.table("users").insert(new_user_data).execute()
         users_db[username] = new_user_data
         is_new = True
+        
     session_token = str(uuid.uuid4())
     sessions[session_token] = username
     redirect_url = "/?welcome=1" if is_new else "/"
-    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
+    
+    response = JSONResponse({"success": True, "redirect": redirect_url})
     response.set_cookie(key="session_token", value=session_token, httponly=True, samesite="lax")
     return response
 
