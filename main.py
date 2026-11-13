@@ -115,7 +115,10 @@ async def startup_event():
     load_all_from_supabase()
 
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
+async def handle_head_and_security_headers(request: Request, call_next):
+    # Fix 405 for HEAD requests (used by uptime monitors/bots)
+    if request.method == "HEAD":
+        return Response(status_code=200)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -227,9 +230,7 @@ def format_date_absolute(iso_str, lang):
 
 def linkify_escaped(escaped_text):
     if not escaped_text: return ""
-    # Matches http/https URLs
     pattern = re.compile(r'(https?://[^\s<]+)')
-    # Replace with anchor tag
     return pattern.sub(r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color); text-decoration:underline; word-break:break-all;">\1</a>', escaped_text)
 
 SVG_UP = """<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>"""
@@ -303,7 +304,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v12';
+    const CACHE_NAME = 'solid-cache-v13';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -1195,7 +1196,6 @@ async function submitSettingsForm(e) {
             if (data.display_name) {
                 window.CURRENT_DISPLAY_NAME = data.display_name;
                 document.querySelectorAll('.dropdown-header .name, .mobile-profile-header div div:first-child').forEach(el => el.innerText = data.display_name);
-                // Update profile header title if on profile page
                 var h1s = document.querySelectorAll('.profile-details h1');
                 if (h1s.length > 0) h1s[0].innerText = data.display_name;
             }
@@ -1554,6 +1554,7 @@ def render_settings_modal(user, lang, current_path):
             <div id="settings-section-account" class="settings-section">
                 <div class="settings-section-title">{t('account', lang)}</div>
                 <form action="/settings/profile" method="post" enctype="multipart/form-data" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
+                    <input type="hidden" name="is_ajax" value="1">
                     <input type="hidden" name="next" value="{html.escape(current_path)}">
                     <div style="text-align:center;">
                         <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
@@ -1574,6 +1575,7 @@ def render_settings_modal(user, lang, current_path):
             <div id="settings-section-appearance" class="settings-section" style="display:none;">
                 <div class="settings-section-title">{t('appearance', lang)}</div>
                 <form action="/settings/profile" method="post" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
+                    <input type="hidden" name="is_ajax" value="1">
                     <input type="hidden" name="display_name" value="{html.escape(user['display_name'])}">
                     <div class="settings-field" style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
                         <label style="margin-bottom:0;">{t('disable_gifs', lang)}</label>
@@ -1875,7 +1877,15 @@ async def settings_redirect(request: Request):
     return RedirectResponse(url="/?settings=1", status_code=status.HTTP_302_FOUND)
 
 @app.post("/settings/profile")
-async def update_profile(request: Request, display_name: str = Form(...), avatar_base64: str = Form(None), avatar: UploadFile = File(None), disable_gifs: str = Form(None), next: str = Form("/")):
+async def update_profile(
+    request: Request, 
+    display_name: str = Form(...), 
+    avatar_base64: str = Form(None), 
+    avatar: UploadFile = File(None), 
+    disable_gifs: str = Form(None),
+    is_ajax: str = Form(None),
+    next: str = Form("/")
+):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
     update_data = {"display_name": html.escape(display_name)}
@@ -1890,7 +1900,7 @@ async def update_profile(request: Request, display_name: str = Form(...), avatar
     supabase.table("users").update(update_data).eq("username", user['username']).execute()
     for k, v in update_data.items(): users_db[user['username']][k] = v
 
-    if request.headers.get("accept") == "application/json":
+    if is_ajax == "1" or "application/json" in request.headers.get("accept", ""):
         return JSONResponse({
             "success": True,
             "display_name": update_data["display_name"],
