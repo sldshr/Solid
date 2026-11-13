@@ -154,7 +154,8 @@ TRANSLATIONS = {
         "new_posts_available": "New posts available. Refresh?", "refresh": "Refresh", "gif_too_large": "GIF is too large (max 5MB)",
         "just_now": "just now", "min_ago": "min ago", "hr_ago": "h ago", "yesterday": "yesterday", "days_ago": "d ago",
         "account": "Account", "appearance": "Appearance", "published": "Published!", "publishing": "Publishing...",
-        "disable_gifs": "Disable GIF animations", "settings_saved": "Settings saved!", "search_history": "Recent searches"
+        "disable_gifs": "Disable GIF animations", "settings_saved": "Settings saved!", "search_history": "Recent searches",
+        "gif_crop_warning": "Note: cropping a GIF will make it a static image."
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -184,7 +185,8 @@ TRANSLATIONS = {
         "new_posts_available": "Есть новые посты. Обновить?", "refresh": "Обновить", "gif_too_large": "GIF слишком большой (макс. 5MB)",
         "just_now": "только что", "min_ago": "мин назад", "hr_ago": "ч назад", "yesterday": "вчера", "days_ago": "дн назад",
         "account": "Аккаунт", "appearance": "Оформление", "published": "Опубликовано!", "publishing": "Публикация...",
-        "disable_gifs": "Отключить GIF анимации", "settings_saved": "Настройки сохранены!", "search_history": "Недавние запросы"
+        "disable_gifs": "Отключить GIF анимации", "settings_saved": "Настройки сохранены!", "search_history": "Недавние запросы",
+        "gif_crop_warning": "Внимание: при обрезке GIF анимация пропадет."
     }
 }
 
@@ -297,7 +299,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v15';
+    const CACHE_NAME = 'solid-cache-v16';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -425,8 +427,10 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .post-view.no-media{display:block;max-width:900px;padding:0 20px;}
 .post-view.no-media .post-details{min-width:0;width:100%;flex:none;}
 .post-view.no-media .post-desc{font-size:18px;line-height:1.7;color:#e2e8f0;}
-.post-media{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
-.post-media img{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}
+.post-media{flex:1.5;background:#000;border-radius:12px;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;}
+.carousel-slide {position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.carousel-slide .blur-bg {position:absolute;top:-20px;left:-20px;right:-20px;bottom:-20px;width:calc(100% + 40px);height:calc(100% + 40px);object-fit:cover;filter:blur(25px);opacity:0.6;z-index:0;pointer-events:none;}
+.carousel-slide .main-img {max-width:100%;max-height:100%;object-fit:contain;position:relative;z-index:1;width:100%;height:100%;cursor:zoom-in;}
 .carousel-nav-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.65);color:#fff;width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
 .carousel-nav-btn svg{width:44px;height:44px;}
 .carousel-nav-btn:hover{background:rgba(0,0,0,0.9);}
@@ -530,6 +534,7 @@ input:checked+.slider:before{transform:translateX(22px);}
 .avatar-edit-container:hover .avatar-edit-overlay{opacity:1;}
 .mobile-only{display:none!important;}
 .desktop-only{display:flex!important;}
+.mobile-post-back{display:none!important;}
 .new-posts-banner{display:none;position:sticky;top:80px;z-index:50;background:var(--accent-color);color:#fff;padding:12px 20px;border-radius:8px;text-align:center;cursor:pointer;font-weight:700;margin-bottom:20px;box-shadow:0 4px 15px rgba(59,130,246,0.4);align-items:center;justify-content:center;gap:8px;}
 
 /* ============ SETTINGS MODAL ============ */
@@ -572,6 +577,11 @@ input:checked+.slider:before{transform:translateX(22px);}
     .topbar-right .user-menu-container{display:none!important;}
     .sidebar{display:none;}
     .main-content{margin-top:60px;width:100%;max-width:100vw;padding:0 0 80px 0;display:flex;flex-direction:column;position:relative;z-index:1;}
+    .post-page .main-content{margin-top:60px;padding-top:0;}
+    .post-page .topbar{padding:0 10px;}
+    .post-page .topbar-center{display:none;}
+    .mobile-post-back{display:flex!important; align-items:center; color:var(--text-main); text-decoration:none;}
+    .post-page .logo{display:none!important;}
     .bottom-nav{display:flex;}
     .profile-header{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;box-sizing:border-box;gap:15px;}
     .profile-avatar{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 auto!important;display:block;flex-shrink:0;position:relative;z-index:1;}
@@ -589,9 +599,9 @@ input:checked+.slider:before{transform:translateX(22px);}
     .create-layout{flex-direction:column;width:100%!important;padding:15px;gap:15px;}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
-    .post-view{display:flex;flex-direction:column;padding:0;gap:15px;height:auto;width:100%;}
-    .post-view.no-media{padding:0;}
-    .post-header-actions{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}
+    .post-view{display:flex;flex-direction:column;padding:0;gap:0;height:auto;width:100%;}
+    .post-view.no-media{padding:0; gap:15px;}
+    .post-header-actions{padding:5px 15px!important;background:transparent!important;}
     .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}
     .carousel-nav-btn{top:50%;width:56px;height:56px;z-index:10;}
     .carousel-nav-btn svg{width:30px;height:30px;}
@@ -658,7 +668,8 @@ function freezeAllGifs() {
 
 // ============ CAROUSEL ============
 function showImg(idx) {
-    carouselImages.forEach((img, i) => img.style.display = i === idx ? 'block' : 'none');
+    var slides = document.querySelectorAll('.carousel-slide');
+    slides.forEach((slide, i) => slide.style.display = i === idx ? 'flex' : 'none');
 }
 function changeImg(dir) {
     if (carouselImages.length <= 1) return;
@@ -666,10 +677,22 @@ function changeImg(dir) {
     showImg(currentImgIndex);
 }
 function initCarousel() {
-    carouselImages = document.querySelectorAll('.carousel-img');
+    carouselImages = document.querySelectorAll('.carousel-slide');
     currentImgIndex = 0;
     if (carouselImages.length > 0) showImg(0);
     freezeAllGifs();
+    
+    // Swipe support for carousel
+    var mediaContainer = document.getElementById('post-media-container');
+    if (mediaContainer && carouselImages.length > 1) {
+        var touchStartX = 0;
+        mediaContainer.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, {passive: true});
+        mediaContainer.addEventListener('touchend', e => {
+            var touchEndX = e.changedTouches[0].screenX;
+            if (touchEndX < touchStartX - 40) changeImg(1);
+            if (touchEndX > touchStartX + 40) changeImg(-1);
+        }, {passive: true});
+    }
 }
 
 // ============ SEARCH HISTORY ============
@@ -1139,24 +1162,23 @@ function copyCommentLink(postId, commentId) {
     showToast(window.TRANSLATIONS.link_copied);
 }
 
-// ============ AVATAR (GIF preserved) ============
+// ============ AVATAR (GIF Cropper) ============
 function loadAvatar(event) {
     var file = event.target.files[0];
     if (!file) return;
+    
+    var warningEl = document.getElementById('gif-warning');
     if (file.type === 'image/gif') {
         if (file.size > 5 * 1024 * 1024) {
             showToast(window.TRANSLATIONS.gif_too_large || 'GIF too large');
             event.target.value = '';
             return;
         }
-        var gifReader = new FileReader();
-        gifReader.onload = function(e) {
-            document.getElementById('avatar-base64').value = e.target.result;
-            document.getElementById('avatar-preview').src = e.target.result;
-        };
-        gifReader.readAsDataURL(file);
-        return;
+        if (warningEl) warningEl.style.display = 'block';
+    } else {
+        if (warningEl) warningEl.style.display = 'none';
     }
+
     var reader = new FileReader();
     reader.onload = function(e) {
         var img = new Image();
@@ -1187,6 +1209,7 @@ function drawCropCanvas() {
 function applyCrop() {
     var canvas = document.getElementById('crop-canvas');
     if (!canvas) return;
+    // Save as jpeg (static) if cropped. 
     var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     document.getElementById('avatar-base64').value = dataUrl;
     document.getElementById('avatar-preview').src = dataUrl;
@@ -1728,6 +1751,7 @@ def render_settings_modal(user, lang, current_path):
 <div id="crop-modal" class="overlay" style="z-index:12000;" onclick="this.style.display='none'">
     <div class="crop-container" onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:14px;align-items:center;max-width:340px;width:100%;">
         <h3 style="font-weight:700;">{t('crop_avatar', lang)}</h3>
+        <div id="gif-warning" style="display:none; color:#f59e0b; font-size:12px; text-align:center; margin-bottom:5px;">{t('gif_crop_warning', lang)}</div>
         <canvas id="crop-canvas" width="300" height="300" class="crop-canvas" style="border-radius:50%;border:2px solid var(--accent-color);background:#000;width:100%;max-width:250px;aspect-ratio:1;"></canvas>
         <div class="crop-controls" style="display:flex;flex-direction:column;width:100%;gap:10px;">
             <label style="font-size:14px; color:var(--text-muted);">{t('zoom', lang)}</label>
@@ -1785,14 +1809,23 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
 
     settings_modal_html = render_settings_modal(user, lang, current_path) if user else ""
 
+    is_post_page = bool(post_id_for_client)
+    topbar_left_html = f'<a href="/" class="logo"><img src="{LOGO_URL}" alt="Logo"> <span>sol-id</span></a>'
+    if is_post_page:
+        topbar_left_html = f'''
+        <a href="javascript:history.back()" class="mobile-post-back" style="color:var(--text-main); padding:8px;">{SVG_BACK}</a>
+        <a href="/" class="logo desktop-only"><img src="{LOGO_URL}" alt="Logo"> <span>sol-id</span></a>
+        '''
+
+    body_class = 'post-page' if is_post_page else ''
+
     html_content = f"""<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>{page_title}</title>{CSS_STYLES}</head>
-<body>
+<body class="{body_class}">
 {translations_json}
 <div class="app-layout">
     <div class="topbar">
         <div class="topbar-left">
-            {f'<div class="menu-toggle desktop-only" onclick="toggleSidebar()">{SVG_MENU}</div>' if user else ''}
-            <a href="/" class="logo"><img src="{LOGO_URL}" alt="Logo"> <span>sol-id</span></a>
+            {topbar_left_html}
         </div>
         <div class="topbar-center">
             <div class="search-container">
@@ -2260,8 +2293,11 @@ async def _render_post_page(request: Request, post_id: str):
     if has_media:
         imgs_html = ""
         for i, img in enumerate(post['images']):
-            display = "" if i == 0 else "none"
-            imgs_html += f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" onclick="openPanorama(this, {i})">'
+            display = "flex" if i == 0 else "none"
+            imgs_html += f'''<div class="carousel-slide" style="display:{display};">
+                <img src="{img}" class="blur-bg" aria-hidden="true">
+                <img src="{img}" class="main-img carousel-img" onclick="openPanorama(this, {i})">
+            </div>'''
         nav_btns = f'<div class="carousel-nav-btn left" onclick="event.stopPropagation(); changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="event.stopPropagation(); changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         safe_images_json = html.escape(json.dumps(post['images']))
         media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">{imgs_html}{nav_btns}</div>"""
