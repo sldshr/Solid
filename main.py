@@ -235,11 +235,8 @@ def format_date_absolute(iso_str, lang):
 
 def format_text(escaped_text):
     if not escaped_text: return ""
-    # URL Regex
     pattern = re.compile(r'(https?://[^\s<]+)')
     text = pattern.sub(r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:var(--accent-color); text-decoration:underline; word-break:break-all;">\1</a>', escaped_text)
-    
-    # Mention Regex (@username)
     mention_pattern = re.compile(r'(?<![\w@])@([a-zA-Z0-9_]+)\b')
     text = mention_pattern.sub(r'<a href="/@\1" style="color:var(--accent-color); font-weight:500; text-decoration:none;">@\1</a>', text)
     return text
@@ -309,7 +306,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v19';
+    const CACHE_NAME = 'solid-cache-v20';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -425,16 +422,18 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .val-item.valid .icon-check{display:block;}
 
 /* Profile Styles */
-.profile-header { display: flex; align-items: flex-start; gap: 25px; padding: 20px; position: relative; width: 100%; }
-.profile-main-row { display: flex; align-items: center; gap: 25px; }
-.profile-avatar { width: 140px; height: 140px; border-radius: 50%!important; object-fit: cover; background: #333; flex-shrink: 0; }
-.profile-name-block h1 { font-size: 32px; margin-bottom: 5px; font-weight: 700; line-height: 1.2; }
-.profile-name-block p { color: var(--text-muted); font-size: 16px; }
-.profile-details { flex: 1; display: flex; flex-direction: column; gap: 10px; }
-.profile-bio { color: #e2e8f0 !important; font-size: 15px; line-height: 1.4; white-space: pre-wrap; }
-.profile-links { display: flex; gap: 15px; flex-wrap: wrap; }
-.profile-links a { color: var(--accent-color); font-size: 14px; text-decoration: underline; }
-.profile-edit-btn-wrapper { margin-left: auto; }
+.profile-header { display: flex; align-items: flex-start; gap: 20px; padding: 20px 0; position: relative; width: 100%; }
+.profile-avatar { width: 120px; height: 120px; border-radius: 50%!important; object-fit: cover; background: #333; flex-shrink: 0; }
+.profile-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.profile-title-row { display: flex; align-items: baseline; gap: 15px; flex-wrap: wrap; }
+.profile-title-row h1 { font-size: 28px; font-weight: 700; margin: 0; line-height: 1.2; }
+.profile-post-count { font-size: 14px; color: var(--text-muted); font-weight: 500; }
+.profile-username { font-size: 16px; color: var(--text-muted); margin: 0; }
+.profile-bio { font-size: 15px; color: #e2e8f0; line-height: 1.4; white-space: pre-wrap; margin-top: 6px; }
+.profile-links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.profile-links a { font-size: 14px; color: var(--accent-color); text-decoration: none; }
+.profile-links a:hover { text-decoration: underline; }
+.profile-edit-btn-wrapper { position: absolute; top: 20px; right: 0; }
 .profile-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 25px; }
 .profile-tab-btn { background: none; border: none; color: var(--text-muted); font-size: 18px; font-weight: 700; padding: 10px 5px; cursor: pointer; border-bottom: 3px solid transparent; transition: all .2s; }
 .profile-tab-btn.active { color: #fff; border-bottom-color: var(--accent-color); }
@@ -604,17 +603,17 @@ input:checked+.slider:before{transform:translateX(22px);}
     .mobile-post-back{display:flex!important; align-items:center; color:var(--text-main); text-decoration:none;}
     .bottom-nav{display:flex;}
     
-    /* Mobile Profile Redesign */
-    .profile-header { flex-direction: column; align-items: stretch; padding: 20px 15px; gap: 15px; text-align: left; }
-    .profile-main-row { flex-direction: row; align-items: center; gap: 15px; }
-    .profile-avatar { width: 80px !important; height: 80px !important; margin: 0 !important; }
-    .profile-name-block h1 { font-size: 24px; margin-bottom: 2px; }
-    .profile-name-block p { font-size: 14px; margin: 0; }
-    .profile-details { padding: 0; margin-top: 5px; width: 100%; }
-    .profile-bio { text-align: left; word-break: break-word; }
-    .profile-links { flex-direction: column; align-items: flex-start; gap: 5px; margin-top: 5px; }
+    /* Mobile Profile Layout */
+    .profile-header { flex-direction: row; align-items: flex-start; padding: 20px 15px; gap: 15px; }
+    .profile-avatar { width: 80px; height: 80px; }
+    .profile-title-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .profile-title-row h1 { font-size: 20px; }
+    .profile-post-count { font-size: 12px; margin-top: 2px; }
+    .profile-username { font-size: 14px; }
+    .profile-edit-btn-wrapper { top: 15px; right: 15px; }
+    .profile-bio { font-size: 14px; }
+    .profile-links { flex-direction: column; gap: 5px; }
     .profile-links a { white-space: normal; word-break: break-all; }
-    .profile-edit-btn-wrapper { position: absolute; top: 15px; right: 15px; margin: 0 !important; }
     
     .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}
     .feed-grid{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}
@@ -624,7 +623,7 @@ input:checked+.slider:before{transform:translateX(22px);}
     .feed-card-info{padding:15px;width:100%;}
     .feed-card-meta{flex-wrap:wrap;gap:10px;}
     
-    /* Remove hover frame in mobile create post */
+    /* Create post mobile fix */
     .create-layout{flex-direction:column;width:100%!important;padding:15px;gap:15px;}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
     .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important; border: none; background: transparent;}
@@ -1276,6 +1275,7 @@ function handlePublishSubmit(form) {
     if (btn.disabled) return false;
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span> ' + (window.TRANSLATIONS.publishing || 'Publishing...');
+    clearDraft();
     return true;
 }
 
@@ -1405,7 +1405,6 @@ async function submitSettingsForm(e) {
                 var h1s = document.querySelectorAll('.profile-details h1');
                 if (h1s.length > 0) h1s[0].innerText = data.display_name;
             }
-            // Save links into window object so next time modal opens with fresh data
             const linksInput = form.querySelector('input[name="links_json"]');
             if (linksInput) {
                 window.CURRENT_LINKS = linksInput.value;
@@ -1438,7 +1437,6 @@ async function vote(postId, action) {
     var newVote = (action === 'up') ? (currentVote === 1 ? 0 : 1) : (currentVote === -1 ? 0 : -1);
     var currentScore = parseInt(count ? count.innerText : '0') || 0;
     
-    // Optimistic UI
     if (count) count.innerText = currentScore + (newVote - currentVote);
     if (upBtn) upBtn.className = 'vote-btn ' + (newVote === 1 ? 'active-up' : '');
     if (downBtn) downBtn.className = 'vote-btn ' + (newVote === -1 ? 'active-down' : '');
@@ -1691,6 +1689,47 @@ function scrollToCommentIfNeeded() {
     }
 }
 
+// ============ POST EDITOR LOCAL STORAGE ============
+function saveDraft() {
+    if (!document.getElementById('publish-btn')) return;
+    const titleEl = document.querySelector('input[name="title"]');
+    const contentEl = document.querySelector('textarea[name="content"]');
+    const visEl = document.getElementById('vis-input');
+    const commentsEl = document.querySelector('input[name="allow_comments"]');
+
+    if (titleEl) localStorage.setItem('sol_draft_title', titleEl.value);
+    if (contentEl) localStorage.setItem('sol_draft_content', contentEl.value);
+    if (visEl) localStorage.setItem('sol_draft_vis', visEl.value);
+    if (commentsEl) localStorage.setItem('sol_draft_comments', commentsEl.checked ? 'true' : 'false');
+}
+
+function loadDraft() {
+    if (!document.getElementById('publish-btn')) return;
+    const titleEl = document.querySelector('input[name="title"]');
+    const contentEl = document.querySelector('textarea[name="content"]');
+    const visEl = document.getElementById('vis-input');
+    const commentsEl = document.querySelector('input[name="allow_comments"]');
+
+    if (titleEl && localStorage.getItem('sol_draft_title')) titleEl.value = localStorage.getItem('sol_draft_title');
+    if (contentEl && localStorage.getItem('sol_draft_content')) contentEl.value = localStorage.getItem('sol_draft_content');
+    
+    const savedVis = localStorage.getItem('sol_draft_vis');
+    if (savedVis) setVisibility(savedVis);
+    
+    const savedComments = localStorage.getItem('sol_draft_comments');
+    if (savedComments === 'false' && commentsEl) commentsEl.checked = false;
+
+    updateCharCount(contentEl);
+    updatePublishState();
+}
+
+function clearDraft() {
+    localStorage.removeItem('sol_draft_title');
+    localStorage.removeItem('sol_draft_content');
+    localStorage.removeItem('sol_draft_vis');
+    localStorage.removeItem('sol_draft_comments');
+}
+
 // ============ SSE REALTIME ============
 var eventSource = null;
 var refreshBannerVisible = false;
@@ -1755,10 +1794,27 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDates();
     setupSSE();
     initCarousel();
+    
     var ta = document.querySelector('textarea[name="content"]');
     if (ta) updateCharCount(ta);
     updatePublishState();
     initLinksEditor();
+
+    // Init Post Editor Drafts
+    loadDraft();
+    var titleInput = document.querySelector('input[name="title"]');
+    if (titleInput) {
+        titleInput.addEventListener('input', saveDraft);
+        titleInput.addEventListener('change', saveDraft);
+    }
+    if (ta) {
+        ta.addEventListener('input', saveDraft);
+        ta.addEventListener('change', saveDraft);
+    }
+    var visInput = document.getElementById('vis-input');
+    if (visInput) visInput.addEventListener('change', saveDraft);
+    var commentsInput = document.querySelector('input[name="allow_comments"]');
+    if (commentsInput) commentsInput.addEventListener('change', saveDraft);
 
     if (window.location.search.indexOf('settings=1') !== -1) {
         setTimeout(openSettingsModal, 50);
@@ -2413,17 +2469,15 @@ async def view_profile(request: Request, username: str):
 
     content = f"""
     <div class="profile-header">
-        <div class="profile-main-row">
-            <img src="{ava}" class="profile-avatar">
-            <div class="profile-name-block">
+        <img src="{ava}" class="profile-avatar">
+        <div class="profile-info">
+            <div class="profile-title-row">
                 <h1>{html.escape(profile_user['display_name'])}</h1>
-                <p>@{html.escape(username)}</p>
+                <span class="profile-post-count">{len(user_posts)} {t('posts', lang)}</span>
             </div>
-        </div>
-        <div class="profile-details">
+            <p class="profile-username">@{html.escape(username)}</p>
             {bio_html}
             {links_html}
-            <p style="margin-top:10px; font-size:14px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p>
         </div>
         {edit_btn}
     </div>
