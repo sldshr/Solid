@@ -309,7 +309,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v18';
+    const CACHE_NAME = 'solid-cache-v19';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -423,20 +423,24 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .val-item.valid{color:#22c55e;}
 .val-item.valid .icon-cross{display:none;}
 .val-item.valid .icon-check{display:block;}
-.profile-header{margin-bottom:30px;display:flex;align-items:flex-start;gap:25px;position:relative;width:100%;}
-.profile-avatar{width:140px;height:140px;border-radius:50%!important;object-fit:cover;background:#333;flex-shrink:0;}
-.profile-details{flex:1;}
-.profile-details h1{font-size:32px;margin-bottom:5px;font-weight:700;line-height:1.2;}
-.profile-details p{color:var(--text-muted);font-size:16px;}
-.profile-bio{color:#e2e8f0 !important;margin-top:10px;font-size:15px;line-height:1.4;white-space:pre-wrap;}
-.profile-links{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
-.profile-links a{color:var(--accent-color);font-size:14px;text-decoration:underline;}
-.profile-edit-btn-wrapper{margin-left:auto;}
-.profile-tabs{display:flex;gap:20px;border-bottom:1px solid var(--border-color);margin-bottom:25px;}
-.profile-tab-btn{background:none;border:none;color:var(--text-muted);font-size:18px;font-weight:700;padding:10px 5px;cursor:pointer;border-bottom:3px solid transparent;transition:all .2s;}
-.profile-tab-btn.active{color:#fff;border-bottom-color:var(--accent-color);}
-.profile-tab-content{display:none;}
-.profile-tab-content.active{display:block;}
+
+/* Profile Styles */
+.profile-header { display: flex; align-items: flex-start; gap: 25px; padding: 20px; position: relative; width: 100%; }
+.profile-main-row { display: flex; align-items: center; gap: 25px; }
+.profile-avatar { width: 140px; height: 140px; border-radius: 50%!important; object-fit: cover; background: #333; flex-shrink: 0; }
+.profile-name-block h1 { font-size: 32px; margin-bottom: 5px; font-weight: 700; line-height: 1.2; }
+.profile-name-block p { color: var(--text-muted); font-size: 16px; }
+.profile-details { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.profile-bio { color: #e2e8f0 !important; font-size: 15px; line-height: 1.4; white-space: pre-wrap; }
+.profile-links { display: flex; gap: 15px; flex-wrap: wrap; }
+.profile-links a { color: var(--accent-color); font-size: 14px; text-decoration: underline; }
+.profile-edit-btn-wrapper { margin-left: auto; }
+.profile-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 25px; }
+.profile-tab-btn { background: none; border: none; color: var(--text-muted); font-size: 18px; font-weight: 700; padding: 10px 5px; cursor: pointer; border-bottom: 3px solid transparent; transition: all .2s; }
+.profile-tab-btn.active { color: #fff; border-bottom-color: var(--accent-color); }
+.profile-tab-content { display: none; }
+.profile-tab-content.active { display: block; }
+
 .post-view{display:flex;gap:30px;width:100%;max-width:1400px;margin:0 auto;padding:0 20px;align-items:flex-start;}
 .post-view.no-media{display:block;max-width:900px;padding:0 20px;}
 .post-view.no-media .post-details{min-width:0;width:100%;flex:none;}
@@ -599,14 +603,19 @@ input:checked+.slider:before{transform:translateX(22px);}
     .post-header-actions{display:none!important;}
     .mobile-post-back{display:flex!important; align-items:center; color:var(--text-main); text-decoration:none;}
     .bottom-nav{display:flex;}
-    .profile-header{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 15px;margin:0;width:100%;position:relative;box-sizing:border-box;gap:15px;}
-    .profile-avatar{width:100px!important;height:100px!important;border-radius:50%!important;object-fit:cover;margin:0 auto!important;display:block;flex-shrink:0;position:relative;z-index:1;}
-    .profile-details{display:flex;flex-direction:column;align-items:center;width:100%;position:relative;z-index:1;}
-    .profile-details h1{font-size:24px;margin-bottom:5px;word-break:break-word;line-height:1.2;}
-    .profile-details p{font-size:14px;color:var(--text-muted);margin-bottom:4px;}
-    .profile-bio{text-align:center;}
-    .profile-links{justify-content:center;}
-    .profile-edit-btn-wrapper{position:absolute;top:15px;right:15px;margin:0!important;z-index:50;}
+    
+    /* Mobile Profile Redesign */
+    .profile-header { flex-direction: column; align-items: stretch; padding: 20px 15px; gap: 15px; text-align: left; }
+    .profile-main-row { flex-direction: row; align-items: center; gap: 15px; }
+    .profile-avatar { width: 80px !important; height: 80px !important; margin: 0 !important; }
+    .profile-name-block h1 { font-size: 24px; margin-bottom: 2px; }
+    .profile-name-block p { font-size: 14px; margin: 0; }
+    .profile-details { padding: 0; margin-top: 5px; width: 100%; }
+    .profile-bio { text-align: left; word-break: break-word; }
+    .profile-links { flex-direction: column; align-items: flex-start; gap: 5px; margin-top: 5px; }
+    .profile-links a { white-space: normal; word-break: break-all; }
+    .profile-edit-btn-wrapper { position: absolute; top: 15px; right: 15px; margin: 0 !important; }
+    
     .profile-tabs{padding:0 15px;width:100%;display:flex;border-bottom:1px solid var(--border-color);margin-bottom:0;}
     .feed-grid{display:flex;flex-direction:column;width:100%;gap:0;padding:0;margin:0;}
     .feed-card{width:100%;border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border-color);background:transparent;margin:0;}
@@ -614,9 +623,29 @@ input:checked+.slider:before{transform:translateX(22px);}
     .feed-card-img-container{width:100%;height:auto;aspect-ratio:4/3;}
     .feed-card-info{padding:15px;width:100%;}
     .feed-card-meta{flex-wrap:wrap;gap:10px;}
+    
+    /* Remove hover frame in mobile create post */
     .create-layout{flex-direction:column;width:100%!important;padding:15px;gap:15px;}
     .dropzone{width:100%!important;max-width:100%!important;flex:none!important;padding:30px 15px!important;min-height:200px!important;}
-    .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important;}
+    .create-sidebar{width:100%!important;max-width:100%!important;flex:none!important;padding:15px!important; border: none; background: transparent;}
+    .create-sidebar .input-group { margin-bottom: 25px; }
+    .create-sidebar .input-group input,
+    .create-sidebar .input-group textarea {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1px solid var(--border-color) !important;
+        border-radius: 0 !important;
+        padding: 10px 0 !important;
+        font-size: 16px;
+    }
+    .create-sidebar .input-group input:focus,
+    .create-sidebar .input-group textarea:focus {
+        border-bottom-color: var(--accent-color) !important;
+    }
+    .create-sidebar .input-group label {
+        margin-bottom: 5px !important;
+    }
+
     .post-view{display:flex;flex-direction:column;padding:0;gap:0;height:auto;width:100%;}
     .post-view.no-media{padding:0; gap:15px;}
     .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}
@@ -1252,10 +1281,16 @@ function handlePublishSubmit(form) {
 
 // ============ SETTINGS MODAL ============
 var currentLinks = [];
-function initLinksEditor() {
+function initLinksEditor(forceReload = false) {
+    if (!forceReload && document.getElementById('links_json') && document.getElementById('links_json').value) {
+        try { 
+            currentLinks = JSON.parse(document.getElementById('links_json').value); 
+            return renderLinksEditor(); 
+        } catch(e){}
+    }
     try {
-        currentLinks = JSON.parse(window.CURRENT_LINKS || '[]');
-        if (!Array.isArray(currentLinks)) currentLinks = [];
+        var parsed = typeof window.CURRENT_LINKS === 'string' ? JSON.parse(window.CURRENT_LINKS) : window.CURRENT_LINKS;
+        currentLinks = Array.isArray(parsed) ? parsed : [];
     } catch(e) { currentLinks = []; }
     renderLinksEditor();
 }
@@ -1307,7 +1342,7 @@ function openSettingsModal() {
     if (!b) return;
     b.style.display = 'flex';
     selectSettingsSection('account');
-    initLinksEditor();
+    initLinksEditor(true); // Force reload from window.CURRENT_LINKS on open
     var m = document.getElementById('settings-modal');
     if (m && window.innerWidth <= 900) m.classList.remove('mobile-section-open');
 }
@@ -1369,6 +1404,11 @@ async function submitSettingsForm(e) {
                 document.querySelectorAll('.dropdown-header .name, .mobile-profile-header div div:first-child').forEach(el => el.innerText = data.display_name);
                 var h1s = document.querySelectorAll('.profile-details h1');
                 if (h1s.length > 0) h1s[0].innerText = data.display_name;
+            }
+            // Save links into window object so next time modal opens with fresh data
+            const linksInput = form.querySelector('input[name="links_json"]');
+            if (linksInput) {
+                window.CURRENT_LINKS = linksInput.value;
             }
             freezeAllGifs();
         } else {
@@ -2025,7 +2065,7 @@ async def search_posts(request: Request, q: str = ""):
             media_html = render_card_media(post, user)
             date_iso = post.get('created_at', '')
             date_text = format_date_relative(date_iso, lang)
-            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{html.escape(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
+            cards += f"""<a href="/{post['id']}" class="feed-card"><div class="feed-card-img-container">{media_html}</div><div class="feed-card-info"><div class="feed-card-title">{format_text(post['title'])}</div><div class="feed-card-meta"><div class="feed-card-author"><img src="{ava}" style="width:24px;height:24px;border-radius:50%;"> @{html.escape(post['author'])}</div><div class="post-date" data-iso="{date_iso}">{date_text}</div></div></div></a>"""
         content = f'<div style="padding:15px;"><h2 style="margin-bottom:30px; font-size:24px;">{t("search_results", lang)}: "{html.escape(q)}"</h2><div class="feed-grid">{cards}</div></div>'
     return HTMLResponse(content=render_layout(content, user, request, "feed", t('search_results', lang)))
 
@@ -2362,7 +2402,7 @@ async def view_profile(request: Request, username: str):
 
     profile_bio = profile_user.get('bio', '')
     profile_links = profile_user.get('links', [])
-    bio_html = f'<p class="profile-bio">{html.escape(profile_bio)}</p>' if profile_bio else ''
+    bio_html = f'<p class="profile-bio selectable">{format_text(html.escape(profile_bio))}</p>' if profile_bio else ''
     links_html = ""
     if profile_links:
         links_html = '<div class="profile-links">'
@@ -2373,10 +2413,14 @@ async def view_profile(request: Request, username: str):
 
     content = f"""
     <div class="profile-header">
-        <img src="{ava}" class="profile-avatar">
+        <div class="profile-main-row">
+            <img src="{ava}" class="profile-avatar">
+            <div class="profile-name-block">
+                <h1>{html.escape(profile_user['display_name'])}</h1>
+                <p>@{html.escape(username)}</p>
+            </div>
+        </div>
         <div class="profile-details">
-            <h1>{html.escape(profile_user['display_name'])}</h1>
-            <p>@{html.escape(username)}</p>
             {bio_html}
             {links_html}
             <p style="margin-top:10px; font-size:14px; font-weight:500;">{len(user_posts)} {t('posts', lang)}</p>
