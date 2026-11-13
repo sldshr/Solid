@@ -116,7 +116,6 @@ async def startup_event():
 
 @app.middleware("http")
 async def handle_head_and_security_headers(request: Request, call_next):
-    # Fix 405 for HEAD requests (used by uptime monitors/bots)
     if request.method == "HEAD":
         return Response(status_code=200)
     response = await call_next(request)
@@ -155,7 +154,7 @@ TRANSLATIONS = {
         "new_posts_available": "New posts available. Refresh?", "refresh": "Refresh", "gif_too_large": "GIF is too large (max 5MB)",
         "just_now": "just now", "min_ago": "min ago", "hr_ago": "h ago", "yesterday": "yesterday", "days_ago": "d ago",
         "account": "Account", "appearance": "Appearance", "published": "Published!", "publishing": "Publishing...",
-        "disable_gifs": "Disable GIF animations", "settings_saved": "Settings saved!"
+        "disable_gifs": "Disable GIF animations", "settings_saved": "Settings saved!", "search_history": "Recent searches"
     },
     "ru": {
         "feed": "Лента", "saved": "Избранное", "profile": "Профиль", "settings": "Настройки", "logout": "Выйти", "login": "Вход",
@@ -185,7 +184,7 @@ TRANSLATIONS = {
         "new_posts_available": "Есть новые посты. Обновить?", "refresh": "Обновить", "gif_too_large": "GIF слишком большой (макс. 5MB)",
         "just_now": "только что", "min_ago": "мин назад", "hr_ago": "ч назад", "yesterday": "вчера", "days_ago": "дн назад",
         "account": "Аккаунт", "appearance": "Оформление", "published": "Опубликовано!", "publishing": "Публикация...",
-        "disable_gifs": "Отключить GIF анимации", "settings_saved": "Настройки сохранены!"
+        "disable_gifs": "Отключить GIF анимации", "settings_saved": "Настройки сохранены!", "search_history": "Недавние запросы"
     }
 }
 
@@ -304,7 +303,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v13';
+    const CACHE_NAME = 'solid-cache-v14';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -656,6 +655,62 @@ function initCarousel() {
     if (carouselImages.length > 0) showImg(0);
 }
 
+// ============ SEARCH HISTORY ============
+function getSearchHistory() {
+    try { return JSON.parse(localStorage.getItem('sol_search_history') || '[]'); } catch(e) { return []; }
+}
+function saveSearchHistory(arr) {
+    localStorage.setItem('sol_search_history', JSON.stringify(arr));
+}
+function addSearchHistory(q) {
+    if(!q || !q.trim()) return;
+    q = q.trim();
+    let h = getSearchHistory();
+    h = h.filter(x => x !== q);
+    h.unshift(q);
+    if (h.length > 6) h = h.slice(0, 6);
+    saveSearchHistory(h);
+}
+function renderSearchHistory() {
+    const h = getSearchHistory();
+    const drop = document.getElementById('searchHistoryDropdown');
+    if (!drop) return;
+    if (h.length === 0) { drop.style.display = 'none'; return; }
+    
+    drop.innerHTML = '';
+    h.forEach((q, i) => {
+        const item = document.createElement('div');
+        item.className = 'search-dropdown-item';
+        item.style.cssText = 'justify-content:space-between; cursor:pointer;';
+        item.onmousedown = (e) => {
+            e.preventDefault();
+            document.getElementById('searchInput').value = q;
+            handleSearch(q);
+            drop.style.display = 'none';
+        };
+        const text = document.createElement('div');
+        text.innerText = q;
+        text.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const btn = document.createElement('button');
+        btn.innerHTML = '&times;';
+        btn.style.cssText = 'background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;padding:0 5px;transition:color 0.2s;';
+        btn.onmouseover = () => btn.style.color = 'var(--text-main)';
+        btn.onmouseout = () => btn.style.color = 'var(--text-muted)';
+        btn.onmousedown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            let arr = getSearchHistory();
+            arr.splice(i, 1);
+            saveSearchHistory(arr);
+            renderSearchHistory();
+        };
+        item.appendChild(text);
+        item.appendChild(btn);
+        drop.appendChild(item);
+    });
+    drop.style.display = 'block';
+}
+
 // ============ DATE FORMATTER ============
 function formatRelativeDate(iso, lang) {
     if (!iso) return '';
@@ -918,6 +973,11 @@ function handleSearch(query) {
                 var a = document.createElement('a');
                 a.href = '/' + p.id;
                 a.className = 'search-dropdown-item';
+                a.onmousedown = (e) => {
+                    e.preventDefault();
+                    addSearchHistory(query);
+                    window.location.href = '/' + p.id;
+                };
                 var titleDiv = document.createElement('div');
                 titleDiv.style.cssText = 'font-weight:700;font-size:14px;';
                 titleDiv.innerText = p.title;
@@ -1178,6 +1238,7 @@ async function submitSettingsForm(e) {
     btn.disabled = true;
 
     const formData = new FormData(form);
+    formData.append('is_ajax', '1');
 
     try {
         const res = await fetch(form.action, {
@@ -1200,7 +1261,7 @@ async function submitSettingsForm(e) {
                 if (h1s.length > 0) h1s[0].innerText = data.display_name;
             }
         } else {
-            showToast('Error saving profile');
+            showToast(data.error || 'Error saving profile');
         }
     } catch(err) {
         showToast('Error saving profile');
@@ -1529,6 +1590,32 @@ document.addEventListener('DOMContentLoaded', function() {
             window.history.replaceState({}, document.title, url);
         } catch(e) {}
     }
+
+    // Search History Listeners
+    var searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('focus', function() {
+            var drop = document.getElementById('searchDropdown');
+            if (drop) drop.style.display = 'none'; // Hide live search results
+            if (!this.value.trim()) renderSearchHistory();
+        });
+        searchInput.addEventListener('blur', function() {
+            setTimeout(() => {
+                var h = document.getElementById('searchHistoryDropdown');
+                if (h) h.style.display = 'none';
+            }, 200);
+        });
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                addSearchHistory(this.value);
+                var h = document.getElementById('searchHistoryDropdown');
+                if (h) h.style.display = 'none';
+                // Hide live results dropdown too
+                var drop = document.getElementById('searchDropdown');
+                if (drop) drop.style.display = 'none';
+            }
+        });
+    }
 });
 </script>
 """
@@ -1554,7 +1641,6 @@ def render_settings_modal(user, lang, current_path):
             <div id="settings-section-account" class="settings-section">
                 <div class="settings-section-title">{t('account', lang)}</div>
                 <form action="/settings/profile" method="post" enctype="multipart/form-data" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
-                    <input type="hidden" name="is_ajax" value="1">
                     <input type="hidden" name="next" value="{html.escape(current_path)}">
                     <div style="text-align:center;">
                         <div class="avatar-edit-container" onclick="document.getElementById('avatar-file').click()">
@@ -1575,7 +1661,6 @@ def render_settings_modal(user, lang, current_path):
             <div id="settings-section-appearance" class="settings-section" style="display:none;">
                 <div class="settings-section-title">{t('appearance', lang)}</div>
                 <form action="/settings/profile" method="post" onsubmit="submitSettingsForm(event)" style="display:flex;flex-direction:column;gap:16px;">
-                    <input type="hidden" name="is_ajax" value="1">
                     <input type="hidden" name="display_name" value="{html.escape(user['display_name'])}">
                     <div class="settings-field" style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
                         <label style="margin-bottom:0;">{t('disable_gifs', lang)}</label>
@@ -1668,6 +1753,7 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
                 <span class="search-icon">{SVG_SEARCH}</span>
                 <input type="text" id="searchInput" class="search-input" placeholder="{t('search_placeholder', lang)}" oninput="handleSearch(this.value)" autocomplete="off">
                 <div id="searchDropdown" class="search-dropdown"></div>
+                <div id="searchHistoryDropdown" class="search-dropdown"></div>
             </div>
         </div>
         <div class="topbar-right">
@@ -1888,16 +1974,36 @@ async def update_profile(
 ):
     user = get_current_user(request)
     if not user: raise HTTPException(401)
+    
     update_data = {"display_name": html.escape(display_name)}
-    if disable_gifs is not None:
-        update_data["disable_gifs"] = (disable_gifs == 'true' or disable_gifs == 'on')
-    else:
-        update_data["disable_gifs"] = False
+    
+    if avatar_base64: 
+        update_data["avatar"] = avatar_base64
+    elif avatar and avatar.filename: 
+        update_data["avatar"] = await image_to_base64(avatar)
 
-    if avatar_base64: update_data["avatar"] = avatar_base64
-    elif avatar and avatar.filename: update_data["avatar"] = await image_to_base64(avatar)
+    # Handle 'disable_gifs' carefully in case the column doesn't exist in Supabase
+    requested_gifs = (disable_gifs == 'true' or disable_gifs == 'on') if disable_gifs else False
+    update_data["disable_gifs"] = requested_gifs
 
-    supabase.table("users").update(update_data).eq("username", user['username']).execute()
+    try:
+        supabase.table("users").update(update_data).eq("username", user['username']).execute()
+    except Exception as e:
+        # Catch PGRST204 specifically for 'disable_gifs' if the column is missing
+        error_msg = str(e)
+        if "disable_gifs" in error_msg and "PGRST204" in error_msg:
+            print("WARNING: 'disable_gifs' column missing in Supabase. Updating without it.")
+            update_data.pop("disable_gifs", None)
+            try:
+                supabase.table("users").update(update_data).eq("username", user['username']).execute()
+            except Exception as e2:
+                print("Error updating profile without disable_gifs:", e2)
+                raise HTTPException(500, "Database update failed")
+        else:
+            print("Error updating profile:", e)
+            raise HTTPException(500, "Database update failed")
+
+    # Update local cache
     for k, v in update_data.items(): users_db[user['username']][k] = v
 
     if is_ajax == "1" or "application/json" in request.headers.get("accept", ""):
