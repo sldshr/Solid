@@ -278,15 +278,9 @@ def generate_post_id(visibility):
         return secrets.token_urlsafe(24)
     return str(uuid.uuid4())[:6]
 
-def render_media_src(src, user):
-    if user and user.get('disable_gifs') and src.startswith('data:image/gif'):
-        return 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23151515"/><text x="50" y="50" fill="%2394a3b8" font-size="14" text-anchor="middle" dominant-baseline="middle">GIF disabled</text></svg>'
-    return src
-
 def render_card_media(post, user=None):
     if post.get('images'):
-        img_src = render_media_src(post["images"][0], user)
-        return f'<img src="{img_src}" loading="lazy">'
+        return f'<img src="{post["images"][0]}" loading="lazy">'
     desc = (post.get('content') or '').strip()
     if desc:
         return f'<div class="feed-card-no-image">{linkify_escaped(desc)}</div>'
@@ -303,7 +297,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_sw():
     sw_code = """
-    const CACHE_NAME = 'solid-cache-v14';
+    const CACHE_NAME = 'solid-cache-v15';
     const urlsToCache = ['/', '/manifest.json', '""" + LOGO_URL + """', '""" + SPRITE_URL + """'];
     self.addEventListener('install', event => {
         self.skipWaiting();
@@ -433,7 +427,7 @@ button,a,.action-btn,.btn-primary,.feed-card,.carousel-nav-btn{touch-action:mani
 .post-view.no-media .post-desc{font-size:18px;line-height:1.7;color:#e2e8f0;}
 .post-media{flex:1.5;background:#000;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;cursor:zoom-in;max-height:75vh;min-height:400px;aspect-ratio:16/9;}
 .post-media img{max-width:100%;max-height:100%;object-fit:contain;width:100%;height:100%;}
-.carousel-nav-btn{position:absolute;top:40%;transform:translateY(-50%);background:rgba(0,0,0,0.65);color:#fff;width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
+.carousel-nav-btn{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.65);color:#fff;width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:background 0.2s;border:none;}
 .carousel-nav-btn svg{width:44px;height:44px;}
 .carousel-nav-btn:hover{background:rgba(0,0,0,0.9);}
 .carousel-nav-btn.left{left:15px;}
@@ -599,7 +593,7 @@ input:checked+.slider:before{transform:translateX(22px);}
     .post-view.no-media{padding:0;}
     .post-header-actions{padding:15px!important;background:transparent!important;border-bottom:1px solid var(--border-color);}
     .post-media{flex:none;width:100%;height:auto;aspect-ratio:4/3;max-height:60vh;border-radius:0!important;margin-bottom:0;border-bottom:1px solid var(--border-color);position:relative;z-index:1;}
-    .carousel-nav-btn{top:45%;width:56px;height:56px;z-index:10;}
+    .carousel-nav-btn{top:50%;width:56px;height:56px;z-index:10;}
     .carousel-nav-btn svg{width:30px;height:30px;}
     .post-details{flex:none;width:100%;min-width:0;display:flex;flex-direction:column;padding:15px;position:relative;z-index:1;}
     .post-title{font-size:22px;}
@@ -640,6 +634,28 @@ var currentZoom = 1;
 var carouselImages = [];
 var currentImgIndex = 0;
 
+// ============ FREEZE GIFS ============
+function freezeAllGifs() {
+    if (!window.DISABLE_GIFS) return;
+    document.querySelectorAll('img').forEach(img => {
+        if (img.dataset.frozen) return;
+        var src = img.src || '';
+        if (src.startsWith('data:image/gif') || src.endsWith('.gif')) {
+            img.dataset.frozen = 'true';
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            var tempImg = new Image();
+            tempImg.onload = function() {
+                canvas.width = tempImg.width;
+                canvas.height = tempImg.height;
+                ctx.drawImage(tempImg, 0, 0);
+                img.src = canvas.toDataURL('image/jpeg');
+            };
+            tempImg.src = src;
+        }
+    });
+}
+
 // ============ CAROUSEL ============
 function showImg(idx) {
     carouselImages.forEach((img, i) => img.style.display = i === idx ? 'block' : 'none');
@@ -653,6 +669,7 @@ function initCarousel() {
     carouselImages = document.querySelectorAll('.carousel-img');
     currentImgIndex = 0;
     if (carouselImages.length > 0) showImg(0);
+    freezeAllGifs();
 }
 
 // ============ SEARCH HISTORY ============
@@ -1252,7 +1269,10 @@ async function submitSettingsForm(e) {
             // Update DOM elements
             if (data.avatar) {
                 window.CURRENT_AVATAR = data.avatar;
-                document.querySelectorAll('.user-avatar-small, .mobile-profile-header img, #avatar-preview').forEach(el => el.src = data.avatar);
+                document.querySelectorAll('.user-avatar-small, .mobile-profile-header img, #avatar-preview').forEach(el => {
+                    el.src = data.avatar;
+                    el.dataset.frozen = ''; // Reset freeze so it processes new avatar
+                });
             }
             if (data.display_name) {
                 window.CURRENT_DISPLAY_NAME = data.display_name;
@@ -1260,6 +1280,8 @@ async function submitSettingsForm(e) {
                 var h1s = document.querySelectorAll('.profile-details h1');
                 if (h1s.length > 0) h1s[0].innerText = data.display_name;
             }
+            // Re-apply GIF freezing if needed
+            freezeAllGifs();
         } else {
             showToast(data.error || 'Error saving profile');
         }
@@ -1416,6 +1438,7 @@ async function submitComment(e, postId) {
     }
     var cCount = document.getElementById('comment-count');
     if (cCount) cCount.innerText = data.total_comments;
+    freezeAllGifs();
 }
 
 function confirmDeleteComment(postId, commentId) {
@@ -1457,6 +1480,9 @@ function switchProfileTab(tabId) {
 }
 
 function validatePassword(val) {
+    var rulesEl = document.getElementById('password-rules');
+    if (rulesEl && rulesEl.style.display === 'none') return; // Skip validation if user exists
+    
     var itemLen = document.querySelector('[data-rule="p_len"]');
     var itemLatin = document.querySelector('[data-rule="p_latin"]');
     if (!itemLen) return;
@@ -1476,9 +1502,22 @@ function validateUsername(val) {
                 var res = await fetch('/api/check_username?q=' + encodeURIComponent(val));
                 var data = await res.json();
                 itemAvail.classList.toggle('valid', data.available);
+                
+                var rulesEl = document.getElementById('password-rules');
+                if (rulesEl) {
+                    if (!data.available) {
+                        rulesEl.style.display = 'none';
+                    } else {
+                        rulesEl.style.display = 'flex';
+                    }
+                }
             } catch(e) { console.error(e); }
         }, 500);
-    } else { itemAvail.classList.remove('valid'); }
+    } else { 
+        itemAvail.classList.remove('valid');
+        var rulesEl = document.getElementById('password-rules');
+        if (rulesEl) rulesEl.style.display = 'flex';
+    }
 }
 
 function closeWelcomeModal() {
@@ -1542,6 +1581,7 @@ function handleSSE(msg) {
             if (list) list.appendChild(buildCommentDOM(msg.comment, postId, false));
             var cCount = document.getElementById('comment-count');
             if (cCount) cCount.innerText = msg.total_comments;
+            freezeAllGifs();
         }
     }
     if (msg.type === 'vote_update' && postId && msg.post_id === postId) {
@@ -1616,6 +1656,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Apply GIF freezing to all images on load
+    freezeAllGifs();
 });
 </script>
 """
@@ -1709,10 +1752,13 @@ def render_layout(content_html, user, request: Request, active_page="feed", titl
     username_js = json.dumps(user['username']) if user else 'null'
     display_name_js = json.dumps(user['display_name']) if user else 'null'
     avatar_js = json.dumps(avatar_url) if user else 'null'
+    disable_gifs_js = json.dumps(user.get('disable_gifs', False)) if user else 'false'
+    
     translations_json = (
         f"<script>"
         f"window.TRANSLATIONS = {json.dumps(TRANSLATIONS[lang], ensure_ascii=False)}; "
         f"window.CURRENT_LANG = {json.dumps(lang)}; "
+        f"window.DISABLE_GIFS = {disable_gifs_js}; "
         f"window.SVG_SAVE = `{SVG_SAVE}`; window.SVG_SAVED = `{SVG_SAVED}`; "
         f"window.SVG_LINK = `{SVG_LINK}`; window.SVG_TRASH = `{SVG_TRASH}`; "
         f"window.CURRENT_POST_ID = {json.dumps(post_id_for_client)}; "
@@ -1910,12 +1956,12 @@ async def login_page(request: Request):
             <h2>{t('login', lang)}</h2>
             <div class="input-group">
                 <input type="text" name="username" id="usernameInput" placeholder="{t('username', lang)}" required autocomplete="off" oninput="validateUsername(this.value)">
-                <ul class="val-list"><li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li></ul>
+                <ul class="val-list" id="username-rules"><li class="val-item" data-rule="avail">{SVG_CROSS}{SVG_CHECK} {t('val_avail', lang)}</li></ul>
             </div>
             <div class="input-group" style="margin-top:15px;">
                 <input type="password" name="password" id="passwordInput" placeholder="{t('password', lang)}" required oninput="validatePassword(this.value)">
                 <span class="pass-toggle" onclick="togglePassword(this)">{SVG_EYE}{SVG_EYE_OFF}</span>
-                <ul class="val-list">
+                <ul class="val-list" id="password-rules">
                     <li class="val-item" data-rule="p_len">{SVG_CROSS}{SVG_CHECK} {t('val_p_len', lang)}</li>
                     <li class="val-item" data-rule="p_latin">{SVG_CROSS}{SVG_CHECK} {t('val_p_latin', lang)}</li>
                 </ul>
@@ -2215,10 +2261,7 @@ async def _render_post_page(request: Request, post_id: str):
         imgs_html = ""
         for i, img in enumerate(post['images']):
             display = "" if i == 0 else "none"
-            is_gif_disabled = user and user.get('disable_gifs') and img.startswith('data:image/gif')
-            onclick_attr = f'onclick="openPanorama(this, {i})"' if not is_gif_disabled else ''
-            display_src = render_media_src(img, user)
-            imgs_html += f'<img src="{display_src}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" {onclick_attr}>'
+            imgs_html += f'<img src="{img}" style="width:100%; height:100%; object-fit:contain; display:{display};" class="carousel-img" onclick="openPanorama(this, {i})">'
         nav_btns = f'<div class="carousel-nav-btn left" onclick="event.stopPropagation(); changeImg(-1)">{SVG_LEFT}</div><div class="carousel-nav-btn right" onclick="event.stopPropagation(); changeImg(1)">{SVG_RIGHT}</div>' if len(post['images']) > 1 else ''
         safe_images_json = html.escape(json.dumps(post['images']))
         media_html = f"""<div class="post-media" id="post-media-container" data-images="{safe_images_json}" style="position:relative;">{imgs_html}{nav_btns}</div>"""
